@@ -24,6 +24,7 @@ import {
   type PusherGameOver,
 } from "~/types/battle";
 import { GameMap } from "~/app/game/_components/GameMap";
+import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
@@ -479,9 +480,9 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
         <div className={`h-full transition-all ${timerColor}`} style={{ width: `${timerPct}%` }} />
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="grid flex-1 grid-cols-[minmax(400px,58%)_minmax(280px,42%)] overflow-hidden">
         {/* Left panel */}
-        <div className="flex w-80 flex-shrink-0 flex-col gap-3 overflow-y-auto border-r border-stone-700 p-3">
+        <div className="flex flex-col gap-3 overflow-y-auto border-r border-stone-700 p-4">
           {/* Timer + speed */}
           <div className="flex items-center justify-between rounded-lg bg-stone-800 px-4 py-2">
             <div>
@@ -507,16 +508,7 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
             )}
           </div>
 
-          {/* Event description */}
-          {currentEvent && (
-            <div className="rounded-xl bg-stone-800 p-3">
-              <span className="mb-1 block text-xs text-stone-400">
-                {currentEvent.category === "china" ? "🇨🇳 中国历史" : "🌍 世界历史"}
-              </span>
-              <h3 className="mb-1.5 font-bold text-amber-400">{currentEvent.title}</h3>
-              <p className="text-xs leading-relaxed text-stone-300">{currentEvent.description}</p>
-            </div>
-          )}
+          {currentEvent && <EventCard event={currentEvent} />}
 
           <TimelineSlider
             value={guessYear}
@@ -543,7 +535,7 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
         </div>
 
         {/* Map — pointer-events disabled after submit */}
-        <div className="relative flex-1">
+        <div className="relative min-h-0">
           <GameMap
             guessLat={guessLat}
             guessLng={guessLng}

@@ -2,6 +2,7 @@ export interface WikiSummary {
   title: string;
   extract: string;
   thumbnail?: { source: string };
+  originalimage?: { source: string };
 }
 
 export async function fetchWikiSummary(
