@@ -4,6 +4,7 @@ import { z } from "zod";
 export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
+    DATABASE_URL: z.string().min(1),
     PUSHER_APP_ID: z.string(),
     PUSHER_KEY: z.string(),
     PUSHER_SECRET: z.string(),
@@ -15,6 +16,7 @@ export const env = createEnv({
   },
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
+    DATABASE_URL: process.env.DATABASE_URL,
     PUSHER_APP_ID: process.env.PUSHER_APP_ID,
     PUSHER_KEY: process.env.PUSHER_KEY,
     PUSHER_SECRET: process.env.PUSHER_SECRET,

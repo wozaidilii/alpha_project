@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
-import { pickQuestions } from "~/data/questions";
-import { type HistoricalQuestion } from "~/types/question";
+import { type HistoricalEvent } from "~/types/event";
 import {
   haversineDistance,
   locationScore,
@@ -28,18 +27,15 @@ import { GameMap } from "~/app/game/_components/GameMap";
 import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
 import { type PlayerAvatar } from "~/types/player";
+import { api } from "~/trpc/react";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
 import { GameOverView } from "./GameOver";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function pickBattleEvents(count: number): HistoricalQuestion[] {
-  return pickQuestions({ count, type: "historical" }) as HistoricalQuestion[];
-}
-
 function calcGuess(
-  event: HistoricalQuestion,
+  event: HistoricalEvent,
   lat: number,
   lng: number,
   year: number,
@@ -98,6 +94,7 @@ export function BattleGame({
   playerAvatar,
   hostSettings,
 }: Props) {
+  const utils = api.useUtils();
   const channel = `game-${roomId}`;
   const myId = useRef(getOrCreatePlayerId());
 
@@ -116,7 +113,7 @@ export function BattleGame({
   const [settings, setSettings] = useState<BattleSettings>(
     hostSettings ?? { rounds: 5, timePerRound: 60, startingHp: 100 },
   );
-  const [events, setEvents] = useState<HistoricalQuestion[]>([]);
+  const [events, setEvents] = useState<HistoricalEvent[]>([]);
   const [currentRound, setCurrentRound] = useState(0);
   const [roundStartTime, setRoundStartTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -129,6 +126,7 @@ export function BattleGame({
   const [opponentSubmitted, setOpponentSubmitted] = useState(false);
 
   const [results, setResults] = useState<BattleRoundResult[]>([]);
+  const [lobbyError, setLobbyError] = useState("");
 
   // ─── Refs for always-fresh values inside Pusher callbacks ───────────────────
   // Pusher handlers are set up once (empty deps), so we need refs for anything
@@ -236,9 +234,7 @@ export function BattleGame({
 
     ch.bind("game-started", (data: PusherGameStarted) => {
       setSettings(data.settings);
-      setEvents(
-        data.events.filter((e): e is HistoricalQuestion => e.type === "historical"),
-      );
+      setEvents(data.events);
       setPlayers(data.players);
     });
 
@@ -331,24 +327,34 @@ export function BattleGame({
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
-  function handleStartGame() {
-    const gameEvents = pickBattleEvents(settings.rounds);
-    const initialPlayers: Record<string, BattlePlayer> = {};
-    for (const [pid, p] of Object.entries(players)) {
-      initialPlayers[pid] = { ...p, hp: settings.startingHp };
-    }
-    void sendPusherEvent(channel, "game-started", {
-      settings,
-      events: gameEvents,
-      players: initialPlayers,
-    } satisfies PusherGameStarted);
+  async function handleStartGame() {
+    try {
+      setLobbyError("");
+      const gameEvents = await utils.event.random.fetch({ count: settings.rounds });
+      if (gameEvents.length < settings.rounds) {
+        setLobbyError("题库题目不足，请先导入更多题目");
+        return;
+      }
 
-    setTimeout(() => {
-      void sendPusherEvent(channel, "round-started", {
-        roundIndex: 0,
-        startTime: Date.now(),
-      } satisfies PusherRoundStarted);
-    }, 300);
+      const initialPlayers: Record<string, BattlePlayer> = {};
+      for (const [pid, p] of Object.entries(players)) {
+        initialPlayers[pid] = { ...p, hp: settings.startingHp };
+      }
+      void sendPusherEvent(channel, "game-started", {
+        settings,
+        events: gameEvents,
+        players: initialPlayers,
+      } satisfies PusherGameStarted);
+
+      setTimeout(() => {
+        void sendPusherEvent(channel, "round-started", {
+          roundIndex: 0,
+          startTime: Date.now(),
+        } satisfies PusherRoundStarted);
+      }, 300);
+    } catch {
+      setLobbyError("题库加载失败，请检查数据库连接");
+    }
   }
 
   function handleSubmitGuess() {
@@ -454,6 +460,9 @@ export function BattleGame({
           ) : (
             <p className="text-center text-stone-400">等待房主开始游戏…</p>
           )}
+          {lobbyError && (
+            <p className="mt-3 text-center text-sm text-red-400">{lobbyError}</p>
+          )}
         </div>
       </div>
     );
@@ -539,7 +548,7 @@ export function BattleGame({
             )}
           </div>
 
-          {currentEvent && <EventCard question={currentEvent} />}
+          {currentEvent && <EventCard event={currentEvent} />}
 
           <TimelineSlider
             value={guessYear}

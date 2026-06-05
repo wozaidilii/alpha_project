@@ -1,4 +1,4 @@
-import { type GameQuestion } from "~/types/question";
+import { type HistoricalEvent } from "~/types/event";
 import { type PlayerAvatar } from "~/types/player";
 
 export type BattlePhase =
@@ -35,7 +35,7 @@ export interface PlayerGuess {
 
 export interface BattleRoundResult {
   roundIndex: number;
-  event: GameQuestion;
+  event: HistoricalEvent;
   guesses: Record<string, PlayerGuess>; // keyed by playerId
   hpAfter: Record<string, number>;
   damage: Record<string, number>; // hp lost this round per player
@@ -52,7 +52,7 @@ export interface PusherPlayerJoined {
 
 export interface PusherGameStarted {
   settings: BattleSettings;
-  events: GameQuestion[];
+  events: HistoricalEvent[];
   players: Record<string, BattlePlayer>;
 }
 

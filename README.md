@@ -2,6 +2,36 @@
 
 This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
 
+## Database
+
+This app uses PostgreSQL for player profiles, login sessions, battle history, and the question bank.
+
+Set `DATABASE_URL` in `.env.local` or your shell, then initialize the database:
+
+```bash
+npm run db:migrate
+npm run db:seed
+```
+
+`db:migrate` creates the tables in `db/schema.sql`.
+`db:seed` imports the historical-event question bank from `db/seed-events.sql`.
+
+For local development, the included Docker Compose config matches this URL:
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/histoguessr"
+```
+
+Start the local database with:
+
+```bash
+docker compose up -d postgres
+npm run db:migrate
+npm run db:seed
+```
+
+For production on Vercel, use a managed Postgres provider such as Neon or Supabase through the Vercel Marketplace, then set that provider's connection string as `DATABASE_URL`.
+
 ## What's next? How do I make an app with this?
 
 We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
