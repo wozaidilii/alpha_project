@@ -1,19 +1,12 @@
-export interface HistoricalEvent {
-  id: string;
-  title: string;
-  description: string;
-  year: number; // negative = BCE
-  lat: number;
-  lng: number;
-  location: string;
-  category: "world" | "china";
-  wikipediaTitle?: string; // for API enrichment
-  imageUrl?: string;
-}
+import { type HistoricalQuestion } from "~/types/question";
 
-export const historicalEvents: HistoricalEvent[] = [
+/** @deprecated 使用 HistoricalQuestion；保留别名以兼容旧引用 */
+export type HistoricalEvent = HistoricalQuestion;
+
+export const historicalEvents: HistoricalQuestion[] = [
   // World History
   {
+    type: "historical",
     id: "colosseum",
     title: "罗马竞技场建成",
     description:
@@ -26,6 +19,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Colosseum",
   },
   {
+    type: "historical",
     id: "magna_carta",
     title: "《大宪章》签署",
     description:
@@ -38,6 +32,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Magna_Carta",
   },
   {
+    type: "historical",
     id: "black_death",
     title: "黑死病席卷欧洲",
     description:
@@ -50,6 +45,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Black_Death",
   },
   {
+    type: "historical",
     id: "columbus",
     title: "哥伦布抵达美洲",
     description:
@@ -62,6 +58,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Christopher_Columbus",
   },
   {
+    type: "historical",
     id: "french_revolution",
     title: "法国大革命爆发",
     description:
@@ -74,6 +71,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "French_Revolution",
   },
   {
+    type: "historical",
     id: "waterloo",
     title: "滑铁卢战役",
     description:
@@ -86,6 +84,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Battle_of_Waterloo",
   },
   {
+    type: "historical",
     id: "hiroshima",
     title: "广岛原子弹爆炸",
     description:
@@ -98,6 +97,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Atomic_bombings_of_Hiroshima_and_Nagasaki",
   },
   {
+    type: "historical",
     id: "berlin_wall",
     title: "柏林墙倒塌",
     description:
@@ -110,6 +110,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Fall_of_the_Berlin_Wall",
   },
   {
+    type: "historical",
     id: "moon_landing",
     title: "阿波罗11号登月",
     description:
@@ -122,6 +123,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Apollo_11",
   },
   {
+    type: "historical",
     id: "titanic",
     title: "泰坦尼克号沉没",
     description:
@@ -135,6 +137,7 @@ export const historicalEvents: HistoricalEvent[] = [
   },
   // Chinese History
   {
+    type: "historical",
     id: "great_wall",
     title: "秦始皇修建长城",
     description:
@@ -147,6 +150,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Great_Wall_of_China",
   },
   {
+    type: "historical",
     id: "silk_road",
     title: "汉朝开辟丝绸之路",
     description:
@@ -159,6 +163,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Silk_Road",
   },
   {
+    type: "historical",
     id: "paper_invention",
     title: "蔡伦改进造纸术",
     description:
@@ -171,6 +176,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Cai_Lun",
   },
   {
+    type: "historical",
     id: "tang_dynasty",
     title: "唐朝建立",
     description:
@@ -183,6 +189,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Tang_dynasty",
   },
   {
+    type: "historical",
     id: "printing",
     title: "毕昇发明活字印刷术",
     description:
@@ -195,6 +202,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Bi_Sheng",
   },
   {
+    type: "historical",
     id: "forbidden_city",
     title: "紫禁城建成",
     description:
@@ -207,6 +215,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Forbidden_City",
   },
   {
+    type: "historical",
     id: "opium_war",
     title: "第一次鸦片战争",
     description:
@@ -219,6 +228,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "First_Opium_War",
   },
   {
+    type: "historical",
     id: "may_fourth",
     title: "五四运动",
     description:
@@ -231,6 +241,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "May_Fourth_Movement",
   },
   {
+    type: "historical",
     id: "prc_founded",
     title: "中华人民共和国成立",
     description:
@@ -243,6 +254,7 @@ export const historicalEvents: HistoricalEvent[] = [
     wikipediaTitle: "Proclamation_of_the_People%27s_Republic_of_China",
   },
   {
+    type: "historical",
     id: "nanjing_massacre",
     title: "南京大屠杀",
     description:

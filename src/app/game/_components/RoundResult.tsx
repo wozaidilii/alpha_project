@@ -3,31 +3,45 @@
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
-import { type RoundData } from "~/app/game/page";
-import { formatYear } from "~/lib/scoring";
+import { type RoundData } from "~/types/game";
+import { requiresMap, getQuestionYearEnd } from "~/types/question";
+import { type GameModeConfig } from "~/lib/game-mode";
+import { getQuestionResultSubtitle } from "~/lib/question-utils";
+import { formatYear, formatAnswerYear } from "~/lib/scoring";
 
 interface Props {
   data: RoundData;
   roundNumber: number;
   totalRounds: number;
+  gameMode: GameModeConfig;
   onNext: () => void;
 }
 
-export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
+export function RoundResult({
+  data,
+  roundNumber,
+  totalRounds,
+  gameMode,
+  onNext,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const isLastRound = roundNumber >= totalRounds;
+  const showMap =
+    requiresMap(data.question) &&
+    data.guessLat !== null &&
+    data.guessLng !== null &&
+    data.question.type === "historical";
+  const yearEnd = getQuestionYearEnd(data.question);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!showMap || !containerRef.current || mapRef.current) return;
 
     void import("leaflet").then((L) => {
-      if (!containerRef.current || mapRef.current) return;
+      if (!containerRef.current || mapRef.current || data.question.type !== "historical") return;
 
-      const actualPos: [number, number] = [data.event.lat, data.event.lng];
-      const guessPos: [number, number] = [data.guessLat, data.guessLng];
-
-      // Fit bounds to show both markers
+      const actualPos: [number, number] = [data.question.lat, data.question.lng];
+      const guessPos: [number, number] = [data.guessLat!, data.guessLng!];
       const bounds = L.latLngBounds([actualPos, guessPos]);
 
       const map = L.map(containerRef.current, {
@@ -41,7 +55,6 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
         maxZoom: 19,
       }).addTo(map);
 
-      // Actual location — green
       L.circleMarker(actualPos, {
         radius: 12,
         fillColor: "#22c55e",
@@ -52,7 +65,6 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
         .addTo(map)
         .bindTooltip("实际地点", { permanent: true, direction: "top" });
 
-      // Guess — amber
       L.circleMarker(guessPos, {
         radius: 10,
         fillColor: "#f59e0b",
@@ -63,7 +75,6 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
         .addTo(map)
         .bindTooltip("你的猜测", { permanent: true, direction: "top" });
 
-      // Line between them
       L.polyline([actualPos, guessPos], {
         color: "#f59e0b",
         weight: 2,
@@ -79,14 +90,15 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showMap]);
+
+  const actualYearLabel = formatAnswerYear(data.question.year, yearEnd);
 
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
-        <h1 className="text-xl font-bold tracking-wide text-amber-400">
-          HistoGuessr
+        <h1 className={`text-xl font-bold tracking-wide ${gameMode.accentClass}`}>
+          {gameMode.emoji} {gameMode.title}
         </h1>
         <span className="text-stone-400">
           第 {roundNumber} / {totalRounds} 轮结果
@@ -94,38 +106,42 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
       </div>
 
       <div className="flex flex-1 flex-col overflow-auto">
-        {/* Map */}
-        <div
-          ref={containerRef}
-          className="w-full border-b border-stone-700"
-          style={{ height: 360 }}
-        />
+        {showMap && (
+          <div
+            ref={containerRef}
+            className="w-full border-b border-stone-700"
+            style={{ height: 360 }}
+          />
+        )}
 
-        {/* Score breakdown */}
         <div className="mx-auto w-full max-w-2xl px-6 py-6">
           <h2 className="mb-1 text-2xl font-bold text-amber-400">
-            {data.event.title}
+            {data.question.title}
           </h2>
-          <p className="mb-6 text-sm text-stone-400">{data.event.location}</p>
+          <p className="mb-6 text-sm text-stone-400">
+            {getQuestionResultSubtitle(data.question)}
+          </p>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Location score */}
-            <div className="rounded-xl bg-stone-800 p-4">
-              <div className="mb-1 text-sm text-stone-400">📍 地点分</div>
-              <div className="text-3xl font-bold text-white">
-                {data.locationPts.toLocaleString()}
+          <div
+            className={`grid gap-4 ${showMap ? "grid-cols-2" : "grid-cols-1"}`}
+          >
+            {showMap && (
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="mb-1 text-sm text-stone-400">📍 地点分</div>
+                <div className="text-3xl font-bold text-white">
+                  {data.locationPts.toLocaleString()}
+                </div>
+                <div className="mt-1 text-sm text-stone-400">
+                  距实际地点{" "}
+                  <span className="text-white">
+                    {data.distanceKm !== null && data.distanceKm < 1
+                      ? `${Math.round(data.distanceKm * 1000)} 米`
+                      : `${Math.round(data.distanceKm ?? 0).toLocaleString()} 公里`}
+                  </span>
+                </div>
               </div>
-              <div className="mt-1 text-sm text-stone-400">
-                距实际地点{" "}
-                <span className="text-white">
-                  {data.distanceKm < 1
-                    ? `${Math.round(data.distanceKm * 1000)} 米`
-                    : `${Math.round(data.distanceKm).toLocaleString()} 公里`}
-                </span>
-              </div>
-            </div>
+            )}
 
-            {/* Year score */}
             <div className="rounded-xl bg-stone-800 p-4">
               <div className="mb-1 text-sm text-stone-400">📅 年份分</div>
               <div className="text-3xl font-bold text-white">
@@ -137,14 +153,11 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
                   {formatYear(data.guessYear)}
                 </span>
                 ，实际{" "}
-                <span className="text-green-400">
-                  {formatYear(data.event.year)}
-                </span>
+                <span className="text-green-400">{actualYearLabel}</span>
               </div>
             </div>
           </div>
 
-          {/* Total */}
           <div className="mt-4 rounded-xl bg-gradient-to-r from-amber-600/20 to-amber-500/10 p-5 text-center">
             <div className="text-sm text-stone-400">本轮总分</div>
             <div className="text-5xl font-extrabold text-amber-400">
@@ -153,16 +166,18 @@ export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
             <div className="text-sm text-stone-500">/ 10,000</div>
           </div>
 
-          <div className="mt-3 flex justify-center gap-4">
-            <div className="flex items-center gap-1.5 text-sm text-stone-400">
-              <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
-              实际地点
+          {showMap && (
+            <div className="mt-3 flex justify-center gap-4">
+              <div className="flex items-center gap-1.5 text-sm text-stone-400">
+                <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
+                实际地点
+              </div>
+              <div className="flex items-center gap-1.5 text-sm text-stone-400">
+                <span className="inline-block h-3 w-3 rounded-full bg-amber-400" />
+                你的猜测
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-stone-400">
-              <span className="inline-block h-3 w-3 rounded-full bg-amber-400" />
-              你的猜测
-            </div>
-          </div>
+          )}
 
           <button
             onClick={onNext}

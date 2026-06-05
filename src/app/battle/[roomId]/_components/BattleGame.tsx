@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
-import { historicalEvents, type HistoricalEvent } from "~/data/events";
+import { pickQuestions } from "~/data/questions";
+import { type HistoricalQuestion } from "~/types/question";
 import {
   haversineDistance,
   locationScore,
@@ -33,12 +34,12 @@ import { GameOverView } from "./GameOver";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function pickEvents(count: number): HistoricalEvent[] {
-  return [...historicalEvents].sort(() => Math.random() - 0.5).slice(0, count);
+function pickBattleEvents(count: number): HistoricalQuestion[] {
+  return pickQuestions({ count, type: "historical" }) as HistoricalQuestion[];
 }
 
 function calcGuess(
-  event: HistoricalEvent,
+  event: HistoricalQuestion,
   lat: number,
   lng: number,
   year: number,
@@ -115,7 +116,7 @@ export function BattleGame({
   const [settings, setSettings] = useState<BattleSettings>(
     hostSettings ?? { rounds: 5, timePerRound: 60, startingHp: 100 },
   );
-  const [events, setEvents] = useState<HistoricalEvent[]>([]);
+  const [events, setEvents] = useState<HistoricalQuestion[]>([]);
   const [currentRound, setCurrentRound] = useState(0);
   const [roundStartTime, setRoundStartTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -235,7 +236,9 @@ export function BattleGame({
 
     ch.bind("game-started", (data: PusherGameStarted) => {
       setSettings(data.settings);
-      setEvents(data.events);
+      setEvents(
+        data.events.filter((e): e is HistoricalQuestion => e.type === "historical"),
+      );
       setPlayers(data.players);
     });
 
@@ -329,7 +332,7 @@ export function BattleGame({
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
   function handleStartGame() {
-    const gameEvents = pickEvents(settings.rounds);
+    const gameEvents = pickBattleEvents(settings.rounds);
     const initialPlayers: Record<string, BattlePlayer> = {};
     for (const [pid, p] of Object.entries(players)) {
       initialPlayers[pid] = { ...p, hp: settings.startingHp };
@@ -536,7 +539,7 @@ export function BattleGame({
             )}
           </div>
 
-          {currentEvent && <EventCard event={currentEvent} />}
+          {currentEvent && <EventCard question={currentEvent} />}
 
           <TimelineSlider
             value={guessYear}

@@ -6,20 +6,51 @@ import {
   MIN_YEAR,
   MAX_YEAR,
   clampYear,
+  clampYearInRange,
   yearToPosition,
   yearToSlider,
+  yearToSliderInRange,
   sliderToYear,
+  sliderToYearInRange,
 } from "~/lib/timeline";
 
 interface Props {
   value: number;
   onChange: (year: number) => void;
+  /** 自定义下限，默认公元前 3000 */
+  minYear?: number;
+  /** 自定义上限，默认公元 2026 */
+  maxYear?: number;
 }
 
-export function TimelineSlider({ value, onChange }: Props) {
+export function TimelineSlider({
+  value,
+  onChange,
+  minYear = MIN_YEAR,
+  maxYear = MAX_YEAR,
+}: Props) {
+  const isModernRange = minYear >= 1900;
   const [inputText, setInputText] = useState(String(value));
   const [editing, setEditing] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
+
+  function clamp(y: number) {
+    return isModernRange
+      ? clampYearInRange(y, minYear, maxYear)
+      : clampYear(y);
+  }
+
+  function toSlider(y: number) {
+    return isModernRange
+      ? yearToSliderInRange(y, minYear, maxYear)
+      : yearToSlider(y);
+  }
+
+  function fromSlider(s: number) {
+    return isModernRange
+      ? sliderToYearInRange(s, minYear, maxYear)
+      : sliderToYear(s);
+  }
 
   useEffect(() => {
     if (!editing) setInputText(String(value));
@@ -32,19 +63,21 @@ export function TimelineSlider({ value, onChange }: Props) {
       e.preventDefault();
       const step = e.shiftKey ? 10 : 1;
       const delta = e.deltaY > 0 ? -step : step;
-      onChange(clampYear(value + delta));
+      onChange(clamp(value + delta));
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-  }, [value, onChange]);
+  }, [value, onChange, minYear, maxYear, isModernRange]);
 
-  const percent = yearToPosition(value) * 100;
+  const percent = isModernRange
+    ? ((clamp(value) - minYear) / (maxYear - minYear)) * 100
+    : yearToPosition(value) * 100;
   const eraDividerPercent = yearToPosition(0) * 100;
 
   function commitInput() {
     const parsed = parseInt(inputText, 10);
     if (!Number.isNaN(parsed)) {
-      onChange(clampYear(parsed));
+      onChange(clamp(parsed));
     } else {
       setInputText(String(value));
     }
@@ -58,8 +91,8 @@ export function TimelineSlider({ value, onChange }: Props) {
         <div className="flex items-center gap-2">
           <input
             type="number"
-            min={MIN_YEAR}
-            max={MAX_YEAR}
+            min={minYear}
+            max={maxYear}
             value={inputText}
             onFocus={() => setEditing(true)}
             onChange={(e) => setInputText(e.target.value)}
@@ -90,16 +123,25 @@ export function TimelineSlider({ value, onChange }: Props) {
           min={0}
           max={10000}
           step={1}
-          value={yearToSlider(value)}
-          onChange={(e) => onChange(sliderToYear(parseInt(e.target.value, 10)))}
+          value={toSlider(value)}
+          onChange={(e) => onChange(fromSlider(parseInt(e.target.value, 10)))}
           className="w-full accent-amber-500"
         />
       </div>
 
       <div className="mt-1 flex justify-between text-xs text-stone-500">
-        <span>公元前3000年</span>
-        <span>公元元年</span>
-        <span>公元2026年</span>
+        {isModernRange ? (
+          <>
+            <span>公元{minYear}年</span>
+            <span>公元{maxYear}年</span>
+          </>
+        ) : (
+          <>
+            <span>公元前3000年</span>
+            <span>公元元年</span>
+            <span>公元2026年</span>
+          </>
+        )}
       </div>
 
       <div className="relative mt-3 h-2 w-full overflow-hidden rounded-full bg-stone-700">
@@ -107,10 +149,12 @@ export function TimelineSlider({ value, onChange }: Props) {
           className="absolute left-0 h-full rounded-full bg-gradient-to-r from-blue-500 via-amber-400 to-amber-500 transition-all"
           style={{ width: `${percent}%` }}
         />
-        <div
-          className="absolute top-0 h-full w-0.5 bg-white/40"
-          style={{ left: `${eraDividerPercent}%` }}
-        />
+        {!isModernRange && (
+          <div
+            className="absolute top-0 h-full w-0.5 bg-white/40"
+            style={{ left: `${eraDividerPercent}%` }}
+          />
+        )}
       </div>
     </div>
   );

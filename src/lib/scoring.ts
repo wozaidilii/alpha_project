@@ -39,6 +39,100 @@ export function totalScore(locationPts: number, yearPts: number): number {
   return locationPts + yearPts;
 }
 
+/** 年份区间答案取均值作为计分基准 */
+export function getTargetYear(year: number, yearEnd?: number): number {
+  if (yearEnd === undefined) return year;
+  return (year + yearEnd) / 2;
+}
+
+/**
+ * 回忆杀 / 网络哏：仅年份作答，满分 10000。
+ * 若提供 yearEnd，以区间均值作为标准答案计分。
+ */
+export function yearOnlyScore(
+  actualYear: number,
+  guessedYear: number,
+  yearEnd?: number,
+): number {
+  const targetYear = getTargetYear(actualYear, yearEnd);
+  return Math.min(10000, yearScore(targetYear, guessedYear) * 2);
+}
+
+/** 结果页展示：单年或区间（附均值） */
+export function formatAnswerYear(year: number, yearEnd?: number): string {
+  if (yearEnd === undefined) return formatYear(year);
+  const meanYear = Math.round(getTargetYear(year, yearEnd));
+  return `${formatYear(year)} – ${formatYear(yearEnd)}（均值 ${formatYear(meanYear)}）`;
+}
+
+export interface RoundScoreInput {
+  questionType: "historical" | "nostalgia" | "meme";
+  actualYear: number;
+  guessedYear: number;
+  yearEnd?: number;
+  actualLat?: number;
+  actualLng?: number;
+  guessLat?: number;
+  guessLng?: number;
+}
+
+export interface RoundScoreResult {
+  locationPts: number;
+  yearPts: number;
+  total: number;
+  distanceKm: number | null;
+}
+
+/** 按题型统一计分 */
+export function scoreRound(input: RoundScoreInput): RoundScoreResult {
+  const yearPts = yearOnlyScore(
+    input.actualYear,
+    input.guessedYear,
+    input.yearEnd,
+  );
+
+  if (input.questionType !== "historical") {
+    return {
+      locationPts: 0,
+      yearPts,
+      total: yearPts,
+      distanceKm: null,
+    };
+  }
+
+  const {
+    actualLat,
+    actualLng,
+    guessLat,
+    guessLng,
+  } = input;
+
+  if (
+    actualLat === undefined ||
+    actualLng === undefined ||
+    guessLat === undefined ||
+    guessLng === undefined
+  ) {
+    throw new Error("历史题计分需要地点坐标");
+  }
+
+  const distanceKm = haversineDistance(
+    actualLat,
+    actualLng,
+    guessLat,
+    guessLng,
+  );
+  const locationPts = locationScore(distanceKm);
+  const historicalYearPts = yearScore(input.actualYear, input.guessedYear);
+
+  return {
+    locationPts,
+    yearPts: historicalYearPts,
+    total: totalScore(locationPts, historicalYearPts),
+    distanceKm,
+  };
+}
+
 /**
  * Speed multiplier: 2.0x if submitted instantly, 1.0x at time limit.
  * @param roundStartTime  Date.now() when round began

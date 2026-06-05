@@ -37,3 +37,30 @@ export function yearToSlider(year: number): number {
 export function sliderToYear(slider: number): number {
   return clampYear(positionToYear(slider / SLIDER_STEPS));
 }
+
+/** 线性时间轴（用于 1980–2022 等现代内容区间） */
+export function clampYearInRange(
+  year: number,
+  minYear: number,
+  maxYear: number,
+): number {
+  return Math.max(minYear, Math.min(maxYear, Math.round(year)));
+}
+
+export function yearToSliderInRange(
+  year: number,
+  minYear: number,
+  maxYear: number,
+): number {
+  const y = clampYearInRange(year, minYear, maxYear);
+  return Math.round(((y - minYear) / (maxYear - minYear)) * SLIDER_STEPS);
+}
+
+export function sliderToYearInRange(
+  slider: number,
+  minYear: number,
+  maxYear: number,
+): number {
+  const p = Math.max(0, Math.min(SLIDER_STEPS, slider)) / SLIDER_STEPS;
+  return clampYearInRange(minYear + p * (maxYear - minYear), minYear, maxYear);
+}
