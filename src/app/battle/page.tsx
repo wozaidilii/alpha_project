@@ -1,46 +1,90 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { DEFAULT_AVATAR, type PlayerSession } from "~/types/player";
+import {
+  getStoredPlayerSession,
+  savePlayerSession,
+} from "~/lib/player-session";
+import { api } from "~/trpc/react";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+const DEFAULT_PLAYER_NAME = "玩家";
+
 export default function BattleLobby() {
   const router = useRouter();
   const [tab, setTab] = useState<"create" | "join">("create");
-  const [name, setName] = useState("");
+  const [session, setSession] = useState<PlayerSession | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [rounds, setRounds] = useState(5);
   const [timePerRound, setTimePerRound] = useState(60);
   const [startingHp, setStartingHp] = useState(100);
+  const [message, setMessage] = useState("");
 
-  function handleCreate() {
-    if (!name.trim()) return;
-    const roomId = generateRoomId();
-    const params = new URLSearchParams({
-      host: "1",
-      name: name.trim(),
-      rounds: String(rounds),
-      time: String(timePerRound),
-      hp: String(startingHp),
+  const loginMutation = api.player.login.useMutation();
+
+  useEffect(() => {
+    setSession(getStoredPlayerSession());
+  }, []);
+
+  async function ensureSession(): Promise<PlayerSession> {
+    if (session) return session;
+
+    const next = await loginMutation.mutateAsync({
+      name: DEFAULT_PLAYER_NAME,
+      avatar: DEFAULT_AVATAR,
     });
-    void router.push(`/battle/${roomId}?${params.toString()}`);
+    savePlayerSession(next);
+    setSession(next);
+    return next;
   }
 
-  function handleJoin() {
-    if (!name.trim() || !joinCode.trim()) return;
-    const code = joinCode.trim().toUpperCase();
-    const params = new URLSearchParams({ name: name.trim() });
-    void router.push(`/battle/${code}?${params.toString()}`);
+  function appendProfileParams(params: URLSearchParams, activeSession: PlayerSession) {
+    params.set("userId", activeSession.user.id);
+    params.set("name", activeSession.user.name);
+    params.set("avatarIcon", activeSession.user.avatar.icon);
+    params.set("avatarColor", activeSession.user.avatar.color);
+  }
+
+  async function handleCreate() {
+    try {
+      const activeSession = await ensureSession();
+      const roomId = generateRoomId();
+      const params = new URLSearchParams({
+        host: "1",
+        rounds: String(rounds),
+        time: String(timePerRound),
+        hp: String(startingHp),
+      });
+      appendProfileParams(params, activeSession);
+      void router.push(`/battle/${roomId}?${params.toString()}`);
+    } catch {
+      setMessage("进入房间失败，请稍后再试");
+    }
+  }
+
+  async function handleJoin() {
+    if (!joinCode.trim()) return;
+
+    try {
+      const activeSession = await ensureSession();
+      const code = joinCode.trim().toUpperCase();
+      const params = new URLSearchParams();
+      appendProfileParams(params, activeSession);
+      void router.push(`/battle/${code}?${params.toString()}`);
+    } catch {
+      setMessage("加入房间失败，请稍后再试");
+    }
   }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
       <div className="w-full max-w-md px-4">
-        {/* Back */}
         <Link
           href="/"
           className="mb-6 inline-flex items-center gap-1 text-sm text-stone-400 hover:text-white"
@@ -53,7 +97,6 @@ export default function BattleLobby() {
         </h1>
         <p className="mb-6 text-stone-400">创建或加入房间，与朋友 PK</p>
 
-        {/* Tabs */}
         <div className="mb-6 flex rounded-xl bg-stone-800 p-1">
           {(["create", "join"] as const).map((t) => (
             <button
@@ -70,26 +113,11 @@ export default function BattleLobby() {
           ))}
         </div>
 
-        {/* Name (always shown) */}
-        <div className="mb-4">
-          <label className="mb-1 block text-sm text-stone-400">你的昵称</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={12}
-            placeholder="最多 12 个字"
-            className="w-full rounded-lg bg-stone-700 px-4 py-2.5 text-white placeholder-stone-500 outline-none focus:ring-2 focus:ring-red-500"
-          />
-        </div>
-
         {tab === "create" ? (
           <>
-            {/* Game Settings */}
             <div className="mb-4 space-y-4 rounded-xl bg-stone-800 p-4">
               <h3 className="font-semibold text-stone-300">游戏设置</h3>
 
-              {/* Rounds */}
               <div>
                 <label className="mb-1 block text-sm text-stone-400">
                   轮数：<span className="text-white">{rounds}</span>
@@ -103,11 +131,11 @@ export default function BattleLobby() {
                   className="w-full accent-red-500"
                 />
                 <div className="flex justify-between text-xs text-stone-500">
-                  <span>1</span><span>10</span>
+                  <span>1</span>
+                  <span>10</span>
                 </div>
               </div>
 
-              {/* Time per round */}
               <div>
                 <label className="mb-1 block text-sm text-stone-400">
                   每轮时间：<span className="text-white">{timePerRound} 秒</span>
@@ -122,11 +150,11 @@ export default function BattleLobby() {
                   className="w-full accent-red-500"
                 />
                 <div className="flex justify-between text-xs text-stone-500">
-                  <span>20s</span><span>180s</span>
+                  <span>20s</span>
+                  <span>180s</span>
                 </div>
               </div>
 
-              {/* Starting HP */}
               <div>
                 <label className="mb-1 block text-sm text-stone-400">
                   初始血量：<span className="text-white">{startingHp}</span>
@@ -151,7 +179,7 @@ export default function BattleLobby() {
 
             <button
               onClick={handleCreate}
-              disabled={!name.trim()}
+              disabled={loginMutation.isPending}
               className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               创建房间 →
@@ -175,13 +203,15 @@ export default function BattleLobby() {
 
             <button
               onClick={handleJoin}
-              disabled={!name.trim() || joinCode.trim().length < 6}
+              disabled={joinCode.trim().length < 6 || loginMutation.isPending}
               className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               加入房间 →
             </button>
           </>
         )}
+
+        {message && <p className="mt-3 text-center text-sm text-red-400">{message}</p>}
       </div>
     </div>
   );

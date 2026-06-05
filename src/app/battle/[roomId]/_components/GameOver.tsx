@@ -1,16 +1,23 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { type BattlePlayer, type BattleRoundResult } from "~/types/battle";
+import { type BattleOutcome } from "~/types/player";
 import { formatYear } from "~/lib/scoring";
+import { getStoredPlayerSession } from "~/lib/player-session";
+import { api } from "~/trpc/react";
 
 interface Props {
+  roomId: string;
   players: Record<string, BattlePlayer>;
   results: BattleRoundResult[];
   myId: string;
 }
 
-export function GameOverView({ players, results, myId }: Props) {
+export function GameOverView({ roomId, players, results, myId }: Props) {
+  const recordBattle = api.player.recordBattle.useMutation();
+  const recordedRef = useRef(false);
   const playerIds = Object.keys(players);
   const totalScores: Record<string, number> = {};
   for (const id of playerIds) totalScores[id] = 0;
@@ -28,6 +35,47 @@ export function GameOverView({ players, results, myId }: Props) {
 
   const winner = sortedPlayers[0]!;
   const iWon = winner.id === myId;
+  const me = players[myId];
+  const opponent = Object.values(players).find((p) => p.id !== myId);
+  const myScore = totalScores[myId] ?? 0;
+  const opponentScore = opponent ? (totalScores[opponent.id] ?? 0) : 0;
+  const myOutcome: BattleOutcome = (() => {
+    if (!me || !opponent) return "draw";
+    if (me.hp !== opponent.hp) return me.hp > opponent.hp ? "win" : "loss";
+    if (myScore !== opponentScore) return myScore > opponentScore ? "win" : "loss";
+    return "draw";
+  })();
+
+  useEffect(() => {
+    if (recordedRef.current || !me || !opponent || results.length === 0) return;
+
+    const session = getStoredPlayerSession();
+    if (!session) return;
+    if (me.userId && session.user.id !== me.userId) return;
+
+    recordedRef.current = true;
+    recordBattle.mutate({
+      token: session.token,
+      roomId,
+      outcome: myOutcome,
+      opponentName: opponent.name,
+      opponentAvatar: opponent.avatar,
+      totalScore: myScore,
+      opponentScore,
+      remainingHp: me.hp,
+      opponentHp: opponent.hp,
+      roundsPlayed: results.length,
+    });
+  }, [
+    me,
+    myOutcome,
+    myScore,
+    opponent,
+    opponentScore,
+    recordBattle,
+    results.length,
+    roomId,
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col bg-stone-900 text-white">
@@ -38,7 +86,12 @@ export function GameOverView({ players, results, myId }: Props) {
       <div className="mx-auto w-full max-w-lg px-6 py-8">
         {/* Winner banner */}
         <div className="mb-8 rounded-2xl bg-gradient-to-br from-red-900/40 to-stone-800 p-8 text-center">
-          <div className="mb-2 text-6xl">{iWon ? "🏆" : "💀"}</div>
+          <div
+            className="mx-auto mb-3 grid h-20 w-20 place-items-center rounded-full text-5xl"
+            style={{ backgroundColor: winner.avatar.color }}
+          >
+            {winner.avatar.icon}
+          </div>
           <div className="text-2xl font-extrabold text-amber-400">
             {iWon ? "你赢了！" : `${winner.name} 获胜！`}
           </div>
@@ -59,6 +112,12 @@ export function GameOverView({ players, results, myId }: Props) {
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{i === 0 ? "🥇" : "🥈"}</span>
+                <span
+                  className="grid h-10 w-10 place-items-center rounded-full"
+                  style={{ backgroundColor: p.avatar.color }}
+                >
+                  {p.avatar.icon}
+                </span>
                 <div>
                   <div className="font-bold">
                     {p.name}{p.id === myId && <span className="ml-1 text-xs text-amber-400">(你)</span>}
@@ -75,6 +134,15 @@ export function GameOverView({ players, results, myId }: Props) {
             </div>
           ))}
         </div>
+
+        {recordBattle.isSuccess && (
+          <p className="mb-6 text-center text-sm text-green-400">战绩已记录</p>
+        )}
+        {recordBattle.isError && (
+          <p className="mb-6 text-center text-sm text-red-400">
+            战绩记录失败，请返回大厅重新登录后再试
+          </p>
+        )}
 
         {/* Round-by-round */}
         {results.length > 0 && (

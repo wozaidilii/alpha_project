@@ -13,6 +13,18 @@ export default function Home() {
         </p>
 
         <div className="mt-2 flex w-full max-w-sm flex-col gap-4">
+          {/* Profile */}
+          <Link
+            href="/profile"
+            className="group flex flex-col items-center gap-2 rounded-2xl border border-stone-700 bg-stone-800 px-8 py-6 transition hover:border-emerald-500 hover:bg-stone-700"
+          >
+            <span className="text-4xl">🏛️</span>
+            <span className="text-xl font-bold text-emerald-400">个人档案</span>
+            <span className="text-sm text-stone-400">
+              编辑形象，查看历史战绩
+            </span>
+          </Link>
+
           {/* Solo */}
           <Link
             href="/game"

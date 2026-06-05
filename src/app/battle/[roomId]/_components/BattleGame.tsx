@@ -25,6 +25,7 @@ import {
 } from "~/types/battle";
 import { GameMap } from "~/app/game/_components/GameMap";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
+import { type PlayerAvatar } from "~/types/player";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
 import { GameOverView } from "./GameOver";
@@ -70,6 +71,8 @@ interface Props {
   roomId: string;
   isHost: boolean;
   playerName: string;
+  playerUserId?: string;
+  playerAvatar: PlayerAvatar;
   hostSettings: BattleSettings | null;
 }
 
@@ -85,7 +88,14 @@ function getOrCreatePlayerId(): string {
   return id;
 }
 
-export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) {
+export function BattleGame({
+  roomId,
+  isHost,
+  playerName,
+  playerUserId,
+  playerAvatar,
+  hostSettings,
+}: Props) {
   const channel = `game-${roomId}`;
   const myId = useRef(getOrCreatePlayerId());
 
@@ -94,7 +104,9 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
   const [players, setPlayers] = useState<Record<string, BattlePlayer>>(() => ({
     [myId.current]: {
       id: myId.current,
+      userId: playerUserId,
       name: playerName,
+      avatar: playerAvatar,
       hp: hostSettings?.startingHp ?? 100,
       isHost,
     },
@@ -211,7 +223,9 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
         ...prev,
         [data.playerId]: {
           id: data.playerId,
+          userId: data.userId,
           name: data.name,
+          avatar: data.avatar,
           hp: hostSettings?.startingHp ?? settingsRef.current.startingHp,
           isHost: false,
         },
@@ -288,7 +302,9 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
     if (isHost) return;
     void sendPusherEvent(channel, "player-joined", {
       playerId: myId.current,
+      userId: playerUserId,
       name: playerName,
+      avatar: playerAvatar,
     } satisfies PusherPlayerJoined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -398,7 +414,12 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
             <div className="text-sm text-stone-400">房间人数 ({playerList.length}/2)</div>
             {playerList.map((p) => (
               <div key={p.id} className="flex items-center gap-3 rounded-lg bg-stone-800 px-4 py-2.5">
-                <span className="text-lg">{p.isHost ? "👑" : "🎮"}</span>
+                <span
+                  className="grid h-9 w-9 place-items-center rounded-full text-lg"
+                  style={{ backgroundColor: p.avatar.color }}
+                >
+                  {p.avatar.icon}
+                </span>
                 <span className="font-medium">{p.name}</span>
                 {p.isHost && <span className="ml-auto text-xs text-stone-500">房主</span>}
               </div>
@@ -454,7 +475,14 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
 
   // ─── Game over ───────────────────────────────────────────────────────────────
   if (phase === "game-over") {
-    return <GameOverView players={players} results={results} myId={myId.current} />;
+    return (
+      <GameOverView
+        roomId={roomId}
+        players={players}
+        results={results}
+        myId={myId.current}
+      />
+    );
   }
 
   // ─── Playing ─────────────────────────────────────────────────────────────────

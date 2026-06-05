@@ -15,6 +15,12 @@ export function HPBar({ player, flipped }: Props) {
 
   return (
     <div className={`flex items-center gap-1.5 ${flipped ? "flex-row-reverse" : ""}`}>
+      <span
+        className="grid h-6 w-6 place-items-center rounded-full text-xs"
+        style={{ backgroundColor: player.avatar.color }}
+      >
+        {player.avatar.icon}
+      </span>
       <span className="max-w-[64px] truncate text-xs text-stone-300">
         {player.name}
       </span>
