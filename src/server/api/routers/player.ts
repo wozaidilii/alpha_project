@@ -4,6 +4,7 @@ import {
   getBattleHistory,
   getPlayerProfile,
   loginPlayer,
+  loginPlayerByEmail,
   recordBattleHistory,
   updatePlayerProfile,
   updateSoloHighScore,
@@ -34,6 +35,16 @@ async function withSessionError<T>(fn: () => Promise<T>) {
 }
 
 export const playerRouter = createTRPCRouter({
+  loginWithEmail: publicProcedure
+    .input(
+      z.object({
+        email: z.string().trim().email().max(254),
+      }),
+    )
+    .mutation(({ input }) => {
+      return loginPlayerByEmail(input.email);
+    }),
+
   login: publicProcedure
     .input(
       z.object({

@@ -1,17 +1,34 @@
+"use client";
+
 import Link from "next/link";
 import { GAME_MODE_LIST } from "~/lib/game-mode";
+import {
+  AuthLoading,
+  useCompletedPlayerSession,
+} from "~/lib/player-session-guard";
 
 export default function Home() {
+  const { ready, session } = useCompletedPlayerSession();
+
+  if (!ready || !session) return <AuthLoading />;
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
       <div className="flex flex-col items-center gap-8 px-4 text-center">
-        <div className="text-7xl">🗺️</div>
-        <h1 className="text-5xl font-extrabold tracking-tight text-amber-400">
-          HistoGuessr
-        </h1>
-        <p className="max-w-md text-stone-400">
-          历史地理、回忆杀、网络哏——三种模式任选，猜对年份唤起共鸣
-        </p>
+        <div>
+          <div
+            className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full text-5xl"
+            style={{ backgroundColor: session.user.avatar.color }}
+          >
+            {session.user.avatar.icon}
+          </div>
+          <h1 className="text-5xl font-extrabold tracking-tight text-amber-400">
+            HistoGuessr
+          </h1>
+          <p className="mt-3 max-w-md text-stone-400">
+            {session.user.name}，选择模式开始游戏
+          </p>
+        </div>
 
         <div className="mt-2 flex w-full max-w-sm flex-col gap-4">
           <Link

@@ -1,15 +1,26 @@
 create table if not exists players (
   id text primary key,
+  email text,
   name varchar(12) not null,
   avatar_icon text not null,
   avatar_color char(7) not null,
+  profile_completed boolean not null default false,
   solo_high_score integer not null default 0 check (solo_high_score >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table players
+  add column if not exists email text;
+
+alter table players
+  add column if not exists profile_completed boolean not null default false;
+
+alter table players
   add column if not exists solo_high_score integer not null default 0;
+
+create unique index if not exists players_email_idx
+  on players(email);
 
 create table if not exists player_sessions (
   token text primary key,

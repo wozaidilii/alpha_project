@@ -10,6 +10,10 @@ import { getTimelineBounds } from "~/lib/question-utils";
 import { scoreRound } from "~/lib/scoring";
 import { playCountdownTick } from "~/lib/countdown-audio";
 import {
+  AuthLoading,
+  useCompletedPlayerSession,
+} from "~/lib/player-session-guard";
+import {
   type GameQuestion,
   requiresMap,
   getQuestionYearEnd,
@@ -35,6 +39,7 @@ interface PageProps {
 export default function GamePlayPage({ params }: PageProps) {
   const { mode: modeSlug } = use(params);
   const gameMode = getGameMode(modeSlug);
+  const { ready: authReady } = useCompletedPlayerSession();
 
   const [questions, setQuestions] = useState<GameQuestion[]>([]);
   const [round, setRound] = useState(0);
@@ -59,7 +64,7 @@ export default function GamePlayPage({ params }: PageProps) {
   const eventsQuery = api.event.random.useQuery(
     { count: ROUNDS },
     {
-      enabled: isHistorical,
+      enabled: authReady && isHistorical,
       refetchOnWindowFocus: false,
     },
   );
@@ -98,6 +103,7 @@ export default function GamePlayPage({ params }: PageProps) {
   );
 
   useEffect(() => {
+    if (!authReady) return;
     if (!questionType) return;
     if (isHistorical) {
       if (eventsQuery.data) applyHistoricalEvents(eventsQuery.data);
@@ -105,6 +111,7 @@ export default function GamePlayPage({ params }: PageProps) {
     }
     loadStaticQuestions(questionType);
   }, [
+    authReady,
     questionType,
     isHistorical,
     eventsQuery.data,
@@ -270,6 +277,8 @@ export default function GamePlayPage({ params }: PageProps) {
     phase === "playing" &&
     questions.length === 0 &&
     (isHistorical ? eventsQuery.isLoading : false);
+
+  if (!authReady) return <AuthLoading />;
 
   if (!gameMode) {
     return (

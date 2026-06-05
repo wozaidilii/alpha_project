@@ -11,7 +11,6 @@ import {
   getStoredPlayerSession,
   savePlayerSession,
 } from "~/lib/player-session";
-import { DEFAULT_AVATAR } from "~/types/player";
 import { api } from "~/trpc/react";
 
 interface Props {
@@ -29,7 +28,6 @@ function getRank(total: number): { label: string; emoji: string } {
 }
 
 export function FinalScore({ rounds, gameMode, onRestart }: Props) {
-  const login = api.player.login.useMutation();
   const updateSoloHighScore = api.player.updateSoloHighScore.useMutation();
   const recordedRef = useRef(false);
   const grandTotal = rounds.reduce((sum, r) => sum + r.total, 0);
@@ -44,24 +42,18 @@ export function FinalScore({ rounds, gameMode, onRestart }: Props) {
     void (async () => {
       try {
         const stored = getStoredPlayerSession();
-        const session =
-          stored ??
-          (await login.mutateAsync({
-            name: "玩家",
-            avatar: DEFAULT_AVATAR,
-          }));
-        if (!stored) savePlayerSession(session);
+        if (!stored) return;
 
         const user = await updateSoloHighScore.mutateAsync({
-          token: session.token,
+          token: stored.token,
           score: grandTotal,
         });
-        savePlayerSession({ token: session.token, user });
+        savePlayerSession({ token: stored.token, user });
       } catch {
         // Keep the score screen usable even if the profile service is unavailable.
       }
     })();
-  }, [grandTotal, login, rounds.length, updateSoloHighScore]);
+  }, [grandTotal, rounds.length, updateSoloHighScore]);
 
   return (
     <div className="flex min-h-screen flex-col bg-stone-900 text-white">

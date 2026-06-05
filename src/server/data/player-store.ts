@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "crypto";
+import { type TransactionSql } from "postgres";
 import { sql } from "~/server/db/client";
 import {
   type BattleHistoryRecord,
@@ -13,9 +14,11 @@ import {
 
 interface PlayerRow {
   id: string;
+  email: string | null;
   name: string;
   avatar_icon: string;
   avatar_color: string;
+  profile_completed: boolean;
   solo_high_score: number;
   created_at: Date | string;
   updated_at: Date | string;
@@ -63,11 +66,13 @@ function toIso(value: Date | string) {
 function toPublicPlayer(row: PlayerRow): PlayerProfile {
   return {
     id: row.id,
+    email: row.email,
     name: row.name,
     avatar: normalizeAvatar({
       icon: row.avatar_icon,
       color: row.avatar_color,
     }),
+    profileCompleted: row.profile_completed,
     soloHighScore: row.solo_high_score,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
@@ -102,13 +107,19 @@ function normalizeName(name: string) {
   return name.trim().slice(0, 12) || "玩家";
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 async function getPlayerByToken(token: string): Promise<PlayerRow | null> {
   const [row] = await sql<PlayerRow[]>`
     select
       p.id,
+      p.email,
       p.name,
       p.avatar_icon,
       p.avatar_color,
+      p.profile_completed,
       p.solo_high_score,
       p.created_at,
       p.updated_at
@@ -129,6 +140,90 @@ async function requirePlayerByToken(token: string): Promise<PlayerRow> {
   return player;
 }
 
+async function createSessionForPlayer(
+  tx: TransactionSql,
+  playerId: string,
+  now: Date,
+) {
+  const token = randomUUID();
+
+  await tx`
+    insert into player_sessions (token, player_id, created_at)
+    values (${token}, ${playerId}, ${now})
+  `;
+
+  await tx`
+    delete from player_sessions
+    where player_id = ${playerId}
+      and token not in (
+        select token
+        from player_sessions
+        where player_id = ${playerId}
+        order by created_at desc
+        limit ${MAX_SESSIONS}
+      )
+  `;
+
+  return token;
+}
+
+export async function loginPlayerByEmail(
+  emailInput: string,
+): Promise<PlayerSession> {
+  const now = new Date();
+  const email = normalizeEmail(emailInput);
+  const id = randomUUID();
+  const avatar = normalizeAvatar();
+
+  const { token, user } = await sql.begin(async (tx) => {
+    const [player] = await tx<PlayerRow[]>`
+      insert into players (
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        created_at,
+        updated_at
+      )
+      values (
+        ${id},
+        ${email},
+        '',
+        ${avatar.icon},
+        ${avatar.color},
+        false,
+        0,
+        ${now},
+        ${now}
+      )
+      on conflict (email) do update
+      set updated_at = players.updated_at
+      returning
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        created_at,
+        updated_at
+    `;
+
+    const token = await createSessionForPlayer(tx, player!.id, now);
+
+    return {
+      token,
+      user: toPublicPlayer(player!),
+    };
+  });
+
+  return { token, user };
+}
+
 export async function loginPlayer(input: {
   userId?: string;
   name: string;
@@ -138,24 +233,27 @@ export async function loginPlayer(input: {
   const id = input.userId ?? randomUUID();
   const name = normalizeName(input.name);
   const avatar = normalizeAvatar(input.avatar);
-  const token = randomUUID();
 
-  const user = await sql.begin(async (tx) => {
+  const { token, user } = await sql.begin(async (tx) => {
     const [player] = await tx<PlayerRow[]>`
       insert into players (
         id,
+        email,
         name,
         avatar_icon,
         avatar_color,
+        profile_completed,
         solo_high_score,
         created_at,
         updated_at
       )
       values (
         ${id},
+        null,
         ${name},
         ${avatar.icon},
         ${avatar.color},
+        true,
         0,
         ${now},
         ${now}
@@ -165,35 +263,26 @@ export async function loginPlayer(input: {
         name = excluded.name,
         avatar_icon = excluded.avatar_icon,
         avatar_color = excluded.avatar_color,
+        profile_completed = true,
         updated_at = excluded.updated_at
       returning
         id,
+        email,
         name,
         avatar_icon,
         avatar_color,
+        profile_completed,
         solo_high_score,
         created_at,
         updated_at
     `;
 
-    await tx`
-      insert into player_sessions (token, player_id, created_at)
-      values (${token}, ${player!.id}, ${now})
-    `;
+    const token = await createSessionForPlayer(tx, player!.id, now);
 
-    await tx`
-      delete from player_sessions
-      where player_id = ${player!.id}
-        and token not in (
-          select token
-          from player_sessions
-          where player_id = ${player!.id}
-          order by created_at desc
-          limit ${MAX_SESSIONS}
-        )
-    `;
-
-    return toPublicPlayer(player!);
+    return {
+      token,
+      user: toPublicPlayer(player!),
+    };
   });
 
   return { token, user };
@@ -217,15 +306,18 @@ export async function updatePlayerProfile(input: {
       name = ${name},
       avatar_icon = ${avatar.icon},
       avatar_color = ${avatar.color},
+      profile_completed = true,
       updated_at = now()
     where id = (
       select player_id from player_sessions where token = ${input.token}
     )
     returning
       id,
+      email,
       name,
       avatar_icon,
       avatar_color,
+      profile_completed,
       solo_high_score,
       created_at,
       updated_at
@@ -256,9 +348,11 @@ export async function updateSoloHighScore(input: {
     )
     returning
       id,
+      email,
       name,
       avatar_icon,
       avatar_color,
+      profile_completed,
       solo_high_score,
       created_at,
       updated_at

@@ -3,21 +3,19 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { DEFAULT_AVATAR, type PlayerSession } from "~/types/player";
+import { type PlayerSession } from "~/types/player";
 import {
-  getStoredPlayerSession,
-  savePlayerSession,
-} from "~/lib/player-session";
-import { api } from "~/trpc/react";
+  AuthLoading,
+  useCompletedPlayerSession,
+} from "~/lib/player-session-guard";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-const DEFAULT_PLAYER_NAME = "玩家";
-
 export default function BattleLobby() {
   const router = useRouter();
+  const { ready, session: authSession } = useCompletedPlayerSession();
   const [tab, setTab] = useState<"create" | "join">("create");
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [joinCode, setJoinCode] = useState("");
@@ -26,25 +24,20 @@ export default function BattleLobby() {
   const [startingHp, setStartingHp] = useState(100);
   const [message, setMessage] = useState("");
 
-  const loginMutation = api.player.login.useMutation();
-
   useEffect(() => {
-    setSession(getStoredPlayerSession());
-  }, []);
+    if (!ready || !authSession) return;
+    setSession(authSession);
+  }, [authSession, ready]);
 
-  async function ensureSession(): Promise<PlayerSession> {
+  function ensureSession(): PlayerSession {
     if (session) return session;
-
-    const next = await loginMutation.mutateAsync({
-      name: DEFAULT_PLAYER_NAME,
-      avatar: DEFAULT_AVATAR,
-    });
-    savePlayerSession(next);
-    setSession(next);
-    return next;
+    throw new Error("Missing player session");
   }
 
-  function appendProfileParams(params: URLSearchParams, activeSession: PlayerSession) {
+  function appendProfileParams(
+    params: URLSearchParams,
+    activeSession: PlayerSession,
+  ) {
     params.set("userId", activeSession.user.id);
     params.set("name", activeSession.user.name);
     params.set("avatarIcon", activeSession.user.avatar.icon);
@@ -53,7 +46,7 @@ export default function BattleLobby() {
 
   async function handleCreate() {
     try {
-      const activeSession = await ensureSession();
+      const activeSession = ensureSession();
       const roomId = generateRoomId();
       const params = new URLSearchParams({
         host: "1",
@@ -72,7 +65,7 @@ export default function BattleLobby() {
     if (!joinCode.trim()) return;
 
     try {
-      const activeSession = await ensureSession();
+      const activeSession = ensureSession();
       const code = joinCode.trim().toUpperCase();
       const params = new URLSearchParams();
       appendProfileParams(params, activeSession);
@@ -81,6 +74,8 @@ export default function BattleLobby() {
       setMessage("加入房间失败，请稍后再试");
     }
   }
+
+  if (!ready || !session) return <AuthLoading />;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
@@ -138,7 +133,8 @@ export default function BattleLobby() {
 
               <div>
                 <label className="mb-1 block text-sm text-stone-400">
-                  每轮时间：<span className="text-white">{timePerRound} 秒</span>
+                  每轮时间：
+                  <span className="text-white">{timePerRound} 秒</span>
                 </label>
                 <input
                   type="range"
@@ -179,7 +175,6 @@ export default function BattleLobby() {
 
             <button
               onClick={handleCreate}
-              disabled={loginMutation.isPending}
               className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               创建房间 →
@@ -203,7 +198,7 @@ export default function BattleLobby() {
 
             <button
               onClick={handleJoin}
-              disabled={joinCode.trim().length < 6 || loginMutation.isPending}
+              disabled={joinCode.trim().length < 6}
               className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               加入房间 →
@@ -211,7 +206,9 @@ export default function BattleLobby() {
           </>
         )}
 
-        {message && <p className="mt-3 text-center text-sm text-red-400">{message}</p>}
+        {message && (
+          <p className="mt-3 text-center text-sm text-red-400">{message}</p>
+        )}
       </div>
     </div>
   );

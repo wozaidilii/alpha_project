@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AVATAR_COLORS,
   AVATAR_ICONS,
@@ -11,11 +12,11 @@ import {
   type PlayerSession,
   normalizeAvatar,
 } from "~/types/player";
+import { clearPlayerSession, savePlayerSession } from "~/lib/player-session";
 import {
-  clearPlayerSession,
-  getStoredPlayerSession,
-  savePlayerSession,
-} from "~/lib/player-session";
+  AuthLoading,
+  useCompletedPlayerSession,
+} from "~/lib/player-session-guard";
 import { api } from "~/trpc/react";
 
 function formatPlayedAt(value: string) {
@@ -34,6 +35,8 @@ function outcomeText(outcome: BattleOutcome) {
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
+  const { ready, session: authSession } = useCompletedPlayerSession();
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [name, setName] = useState("玩家");
   const [avatar, setAvatar] = useState<PlayerAvatar>(DEFAULT_AVATAR);
@@ -48,20 +51,17 @@ export default function ProfilePage() {
     { token },
     { enabled: Boolean(token), retry: false },
   );
-  const loginMutation = api.player.login.useMutation();
   const updateProfileMutation = api.player.updateProfile.useMutation();
-  const profileBusy =
-    loginMutation.isPending || updateProfileMutation.isPending;
+  const profileBusy = updateProfileMutation.isPending;
   const soloHighScore =
     meQuery.data?.soloHighScore ?? session?.user.soloHighScore ?? 0;
 
   useEffect(() => {
-    const stored = getStoredPlayerSession();
-    if (!stored) return;
-    setSession(stored);
-    setName(stored.user.name);
-    setAvatar(stored.user.avatar);
-  }, []);
+    if (!ready || !authSession) return;
+    setSession(authSession);
+    setName(authSession.user.name);
+    setAvatar(authSession.user.avatar);
+  }, [authSession, ready]);
 
   useEffect(() => {
     if (!meQuery.data || !session) return;
@@ -77,8 +77,8 @@ export default function ProfilePage() {
     if (!meQuery.error) return;
     clearPlayerSession();
     setSession(null);
-    setMessage("登录已失效，请重新登录");
-  }, [meQuery.error]);
+    router.replace("/login");
+  }, [meQuery.error, router]);
 
   async function handleSaveProfile() {
     const cleanName = name.trim();
@@ -87,13 +87,6 @@ export default function ProfilePage() {
     try {
       const cleanAvatar = normalizeAvatar(avatar);
       if (!session) {
-        const next = await loginMutation.mutateAsync({
-          name: cleanName,
-          avatar: cleanAvatar,
-        });
-        savePlayerSession(next);
-        setSession(next);
-        setMessage("已登录");
         return;
       }
 
@@ -116,8 +109,10 @@ export default function ProfilePage() {
     setSession(null);
     setName("玩家");
     setAvatar(DEFAULT_AVATAR);
-    setMessage("已退出登录");
+    router.replace("/login");
   }
+
+  if (!ready || !session) return <AuthLoading />;
 
   return (
     <main className="min-h-screen bg-stone-900 text-white">
@@ -136,6 +131,13 @@ export default function ProfilePage() {
           <p className="mb-6 text-stone-400">
             编辑形象，查看个人最高分和历史战绩
           </p>
+
+          <div className="mb-4 rounded-xl bg-stone-800 p-4">
+            <div className="text-sm text-stone-400">登录邮箱</div>
+            <div className="mt-1 truncate text-sm font-semibold text-stone-200">
+              {session.user.email}
+            </div>
+          </div>
 
           <div className="mb-4 rounded-xl bg-stone-800 p-4">
             <div className="text-sm text-stone-400">个人模式最高分</div>
@@ -211,16 +213,14 @@ export default function ProfilePage() {
                 disabled={!name.trim() || profileBusy}
                 className="flex-1 rounded-lg bg-amber-500 py-2 font-bold text-stone-900 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {session ? "保存档案" : "登录"}
+                保存档案
               </button>
-              {session && (
-                <button
-                  onClick={handleLogout}
-                  className="rounded-lg bg-stone-700 px-4 py-2 font-semibold text-stone-300 transition hover:bg-stone-600"
-                >
-                  退出
-                </button>
-              )}
+              <button
+                onClick={handleLogout}
+                className="rounded-lg bg-stone-700 px-4 py-2 font-semibold text-stone-300 transition hover:bg-stone-600"
+              >
+                退出
+              </button>
             </div>
             {message && (
               <p className="mt-2 text-sm text-stone-400">{message}</p>
@@ -236,9 +236,7 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {!session ? (
-            <p className="text-sm text-stone-500">登录后显示战绩</p>
-          ) : historyQuery.data && historyQuery.data.length > 0 ? (
+          {historyQuery.data && historyQuery.data.length > 0 ? (
             <div className="space-y-3">
               {historyQuery.data.map((record) => (
                 <div

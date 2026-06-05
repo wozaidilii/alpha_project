@@ -29,8 +29,10 @@ export interface PlayerAvatar {
 
 export interface PlayerProfile {
   id: string;
+  email: string | null;
   name: string;
   avatar: PlayerAvatar;
+  profileCompleted: boolean;
   soloHighScore: number;
   createdAt: string;
   updatedAt: string;
@@ -92,8 +94,10 @@ export function isPlayerProfile(value: unknown): value is PlayerProfile {
   if (!isRecord(value)) return false;
   return (
     typeof value.id === "string" &&
+    (typeof value.email === "string" || value.email === null) &&
     typeof value.name === "string" &&
     isPlayerAvatar(value.avatar) &&
+    typeof value.profileCompleted === "boolean" &&
     (value.soloHighScore === undefined ||
       typeof value.soloHighScore === "number") &&
     typeof value.createdAt === "string" &&
