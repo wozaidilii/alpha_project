@@ -1,4 +1,4 @@
-import { type HistoricalEvent } from "~/data/events";
+import { type HistoricalEvent } from "~/types/event";
 import { type PlayerAvatar } from "~/types/player";
 
 export type BattlePhase =

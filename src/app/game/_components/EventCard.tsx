@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type HistoricalEvent } from "~/data/events";
+import { type HistoricalEvent } from "~/types/event";
 import { fetchWikiSummary } from "~/lib/wikipedia";
 import { ImageLightbox } from "./ImageLightbox";
 

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { historicalEvents, type HistoricalEvent } from "~/data/events";
+import { type HistoricalEvent } from "~/types/event";
 import { GameMap } from "./_components/GameMap";
 import { TimelineSlider } from "./_components/TimelineSlider";
 import { EventCard } from "./_components/EventCard";
 import { RoundResult } from "./_components/RoundResult";
 import { FinalScore } from "./_components/FinalScore";
+import { api } from "~/trpc/react";
 import {
   haversineDistance,
   locationScore,
@@ -15,11 +16,6 @@ import {
 } from "~/lib/scoring";
 
 const ROUNDS = 5;
-
-function pickEvents(count: number): HistoricalEvent[] {
-  const shuffled = [...historicalEvents].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
-}
 
 export interface RoundData {
   event: HistoricalEvent;
@@ -35,6 +31,10 @@ export interface RoundData {
 type Phase = "playing" | "round-result" | "final";
 
 export default function GamePage() {
+  const eventsQuery = api.event.random.useQuery(
+    { count: ROUNDS },
+    { refetchOnWindowFocus: false },
+  );
   const [events, setEvents] = useState<HistoricalEvent[]>([]);
   const [round, setRound] = useState(0);
   const [phase, setPhase] = useState<Phase>("playing");
@@ -46,8 +46,8 @@ export default function GamePage() {
   const [guessYear, setGuessYear] = useState<number>(1900);
 
   useEffect(() => {
-    setEvents(pickEvents(ROUNDS));
-  }, []);
+    if (eventsQuery.data) setEvents(eventsQuery.data);
+  }, [eventsQuery.data]);
 
   const currentEvent = events[round];
 
@@ -90,8 +90,9 @@ export default function GamePage() {
     }
   }
 
-  function handleRestart() {
-    setEvents(pickEvents(ROUNDS));
+  async function handleRestart() {
+    const nextEvents = await eventsQuery.refetch();
+    setEvents(nextEvents.data ?? []);
     setRound(0);
     setPhase("playing");
     setRounds([]);
@@ -103,7 +104,11 @@ export default function GamePage() {
   if (!currentEvent && phase === "playing") {
     return (
       <div className="flex h-screen items-center justify-center bg-stone-900 text-white">
-        加载中...
+        {eventsQuery.isError
+          ? "题库加载失败，请检查数据库连接"
+          : eventsQuery.isLoading
+            ? "加载中..."
+            : "题库为空，请先导入题目"}
       </div>
     );
   }
