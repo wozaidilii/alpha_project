@@ -1,3 +1,5 @@
+import { MODERN_ANCHOR } from "~/lib/timeline";
+
 // Haversine formula — distance in km between two lat/lng points
 export function haversineDistance(
   lat1: number,
@@ -23,10 +25,14 @@ export function locationScore(distanceKm: number): number {
 }
 
 // Max year score: 5000. Score decays with year difference.
-// Full score at exact year, zero beyond ~500 years
+// Events closer to the modern anchor (2026) penalise year errors more heavily;
+// ancient events are more lenient.
 export function yearScore(actualYear: number, guessedYear: number): number {
   const diff = Math.abs(actualYear - guessedYear);
-  return Math.round(5000 * Math.exp(-diff / 100));
+  const distFromModern = Math.abs(actualYear - MODERN_ANCHOR);
+  const modernness = Math.exp(-distFromModern / 600);
+  const decayScale = 220 - modernness * (220 - 55);
+  return Math.round(5000 * Math.exp(-diff / decayScale));
 }
 
 export function totalScore(locationPts: number, yearPts: number): number {
