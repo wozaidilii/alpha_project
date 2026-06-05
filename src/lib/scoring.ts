@@ -33,6 +33,23 @@ export function totalScore(locationPts: number, yearPts: number): number {
   return locationPts + yearPts;
 }
 
+/**
+ * Speed multiplier: 2.0x if submitted instantly, 1.0x at time limit.
+ * @param roundStartTime  Date.now() when round began
+ * @param submittedAt     Date.now() when player submitted
+ * @param timePerRound    Seconds allowed per round
+ */
+export function calcSpeedMultiplier(
+  roundStartTime: number,
+  submittedAt: number,
+  timePerRound: number,
+): number {
+  const elapsedSec = Math.max(0, (submittedAt - roundStartTime) / 1000);
+  const ratio = Math.min(1, elapsedSec / timePerRound); // 0 = instant, 1 = deadline
+  // 2x instant → 1x deadline, never below 1
+  return Math.max(1, 2 - ratio);
+}
+
 export function formatYear(year: number): string {
   if (year < 0) return `公元前 ${Math.abs(year)} 年`;
   return `公元 ${year} 年`;
