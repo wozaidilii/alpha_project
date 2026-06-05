@@ -13,6 +13,7 @@ interface Props {
   isLastRound: boolean;
   isHost: boolean;
   onNext: () => void;
+  onViewResults: () => void;
 }
 
 export function BattleRoundResultView({
@@ -22,6 +23,7 @@ export function BattleRoundResultView({
   isLastRound,
   isHost,
   onNext,
+  onViewResults,
 }: Props) {
   const mapRef = useRef<LeafletMap | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -198,14 +200,16 @@ export function BattleRoundResultView({
           )}
           {isHost && isLastRound && (
             <button
-              onClick={onNext}
-              className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400"
+              onClick={onViewResults}
+              className="w-full rounded-xl bg-amber-500 py-3 font-bold text-stone-900 transition hover:bg-amber-400"
             >
-              查看最终结果 →
+              查看最终结果 🏆
             </button>
           )}
           {!isHost && (
-            <p className="text-center text-stone-400">等待房主进入下一轮…</p>
+            <p className="text-center text-stone-400">
+              {isLastRound ? "等待房主查看最终结果…" : "等待房主进入下一轮…"}
+            </p>
           )}
         </div>
       </div>

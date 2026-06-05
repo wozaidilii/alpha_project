@@ -345,10 +345,19 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
 
   function handleNextRound() {
     if (!isHost) return;
+    const next = currentRound + 1;
+    // Guard: don't start a round past the last one
+    if (next >= settings.rounds) return;
     void sendPusherEvent(channel, "round-started", {
-      roundIndex: currentRound + 1,
+      roundIndex: next,
       startTime: Date.now(),
     } satisfies PusherRoundStarted);
+  }
+
+  // Called by host on the last round — no Pusher needed, just transition locally.
+  // The guest transitions via the game-over Pusher event (already sent by resolveRound).
+  function handleViewResults() {
+    setPhase("game-over");
   }
 
   // ─── Derived ─────────────────────────────────────────────────────────────────
@@ -438,6 +447,7 @@ export function BattleGame({ roomId, isHost, playerName, hostSettings }: Props) 
         isLastRound={isLastRound}
         isHost={isHost}
         onNext={handleNextRound}
+        onViewResults={handleViewResults}
       />
     );
   }
