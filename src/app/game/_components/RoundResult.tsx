@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
+import type { Map as LeafletMap } from "leaflet";
 import { type RoundData } from "~/app/game/page";
 import { formatYear } from "~/lib/scoring";
 
@@ -14,7 +15,7 @@ interface Props {
 
 export function RoundResult({ data, roundNumber, totalRounds, onNext }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
   const isLastRound = roundNumber >= totalRounds;
 
   useEffect(() => {

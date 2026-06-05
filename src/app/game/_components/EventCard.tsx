@@ -17,7 +17,7 @@ export function EventCard({ event }: Props) {
   useEffect(() => {
     if (event.imageUrl || !event.wikipediaTitle) return;
     setLoading(true);
-    fetchWikiSummary(event.wikipediaTitle)
+    void fetchWikiSummary(event.wikipediaTitle)
       .then((wiki) => {
         if (wiki?.thumbnail?.source) setImageUrl(wiki.thumbnail.source);
       })
