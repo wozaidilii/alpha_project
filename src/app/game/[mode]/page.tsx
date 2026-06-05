@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { pickQuestions } from "~/data/questions";
 import { getGameMode } from "~/lib/game-mode";
+import { toHistoricalQuestions } from "~/lib/event-adapters";
+import { type HistoricalEvent } from "~/types/event";
 import { getTimelineBounds } from "~/lib/question-utils";
 import { scoreRound } from "~/lib/scoring";
 import {
@@ -13,6 +15,7 @@ import {
   type QuestionType,
 } from "~/types/question";
 import { type RoundData } from "~/types/game";
+import { api } from "~/trpc/react";
 import { GameMap } from "../_components/GameMap";
 import { TimelineSlider } from "../_components/TimelineSlider";
 import { EventCard } from "../_components/EventCard";
@@ -35,17 +38,70 @@ export default function GamePlayPage({ params }: PageProps) {
   const [round, setRound] = useState(0);
   const [phase, setPhase] = useState<Phase>("playing");
   const [rounds, setRounds] = useState<RoundData[]>([]);
+  const [loadError, setLoadError] = useState("");
 
   const [guessLat, setGuessLat] = useState<number | null>(null);
   const [guessLng, setGuessLng] = useState<number | null>(null);
   const [guessYear, setGuessYear] = useState<number>(1900);
 
   const questionType = gameMode?.type;
+  const isHistorical = questionType === "historical";
+
+  const eventsQuery = api.event.random.useQuery(
+    { count: ROUNDS },
+    {
+      enabled: isHistorical,
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  const applyHistoricalEvents = useCallback((events: HistoricalEvent[]) => {
+    if (events.length < ROUNDS) {
+      setLoadError("题库题目不足，请先导入更多历史题目");
+      setQuestions([]);
+      return;
+    }
+    setLoadError("");
+    setQuestions(toHistoricalQuestions(events));
+  }, []);
+
+  const loadStaticQuestions = useCallback((type: QuestionType) => {
+    const picked = pickQuestions({ count: ROUNDS, type });
+    if (picked.length < ROUNDS) {
+      setLoadError("静态题库题目不足");
+      setQuestions([]);
+      return;
+    }
+    setLoadError("");
+    setQuestions(picked);
+  }, []);
+
+  const loadQuestions = useCallback(
+    async (type: QuestionType) => {
+      if (type === "historical") {
+        const result = await eventsQuery.refetch();
+        applyHistoricalEvents(result.data ?? []);
+        return;
+      }
+      loadStaticQuestions(type);
+    },
+    [applyHistoricalEvents, eventsQuery, loadStaticQuestions],
+  );
 
   useEffect(() => {
     if (!questionType) return;
-    setQuestions(pickQuestions({ count: ROUNDS, type: questionType }));
-  }, [questionType]);
+    if (isHistorical) {
+      if (eventsQuery.data) applyHistoricalEvents(eventsQuery.data);
+      return;
+    }
+    loadStaticQuestions(questionType);
+  }, [
+    questionType,
+    isHistorical,
+    eventsQuery.data,
+    applyHistoricalEvents,
+    loadStaticQuestions,
+  ]);
 
   const currentQuestion = questions[round];
   const needsMap = currentQuestion ? requiresMap(currentQuestion) : false;
@@ -73,13 +129,6 @@ export default function GamePlayPage({ params }: PageProps) {
   }
 
   const mode = gameMode;
-
-  function startNewGame(type: QuestionType) {
-    setQuestions(pickQuestions({ count: ROUNDS, type }));
-    setRound(0);
-    setPhase("playing");
-    setRounds([]);
-  }
 
   function handleSubmit() {
     if (!currentQuestion) return;
@@ -123,15 +172,38 @@ export default function GamePlayPage({ params }: PageProps) {
   }
 
   function handleRestart() {
-    startNewGame(mode.type);
+    setRound(0);
+    setPhase("playing");
+    setRounds([]);
+    void loadQuestions(mode.type);
   }
 
   const canSubmit = needsMap ? guessLat !== null : true;
+  const isLoading =
+    phase === "playing" &&
+    questions.length === 0 &&
+    (isHistorical ? eventsQuery.isLoading : false);
 
-  if (!currentQuestion && phase === "playing") {
+  if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-stone-900 text-white">
         加载中...
+      </div>
+    );
+  }
+
+  if (!currentQuestion && phase === "playing") {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-stone-900 text-white">
+        <p className="text-stone-400">
+          {loadError ||
+            (isHistorical && eventsQuery.isError
+              ? "题库加载失败，请检查数据库连接"
+              : "题库为空，请先导入题目")}
+        </p>
+        <Link href="/game" className="text-amber-400 hover:underline">
+          返回选择页面
+        </Link>
       </div>
     );
   }

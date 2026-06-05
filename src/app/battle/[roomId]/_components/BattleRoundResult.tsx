@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
 import { type BattleRoundResult, type BattlePlayer } from "~/types/battle";
-import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear } from "~/lib/scoring";
 
 interface Props {
@@ -35,7 +34,6 @@ export function BattleRoundResultView({
     void import("leaflet").then((L) => {
       if (!containerRef.current || mapRef.current) return;
 
-      if (result.event.type !== "historical") return;
       const actualPos: [number, number] = [result.event.lat, result.event.lng];
       const points: [number, number][] = [actualPos];
 
@@ -116,7 +114,7 @@ export function BattleRoundResultView({
         <div className="mx-auto max-w-2xl px-5 py-5">
           <h2 className="mb-1 text-xl font-bold text-amber-400">{result.event.title}</h2>
           <p className="mb-5 text-sm text-stone-400">
-            {getQuestionResultSubtitle(result.event)} · {formatYear(result.event.year)}
+            {result.event.location} · {formatYear(result.event.year)}
           </p>
 
           {/* Per-player score + HP */}

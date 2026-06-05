@@ -1,25 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { allQuestions, pickQuestions, countByType } from "~/data/questions";
+import { staticQuestions, pickQuestions, countByType } from "~/data/questions";
 import { validateQuestion } from "~/lib/question-schema";
 import { nostalgiaQuestions } from "~/data/nostalgia";
 import { memeQuestions } from "~/data/memes";
-import { historicalEvents } from "~/data/events";
+import { toHistoricalQuestion } from "~/lib/event-adapters";
 import {
   MODERN_CONTENT_MIN_YEAR,
   MODERN_CONTENT_MAX_YEAR,
   requiresMap,
+  type HistoricalQuestion,
 } from "~/types/question";
 
-describe("allQuestions", () => {
-  it("包含三类题目", () => {
-    const counts = countByType(allQuestions);
-    expect(counts.historical).toBeGreaterThan(0);
+const sampleHistorical: HistoricalQuestion = toHistoricalQuestion({
+  id: "test_event",
+  title: "测试历史事件",
+  description: "用于单元测试",
+  year: 1789,
+  lat: 48.8533,
+  lng: 2.3692,
+  location: "巴黎，法国",
+  category: "world",
+});
+
+describe("staticQuestions", () => {
+  it("静态题库包含回忆杀与网络哏", () => {
+    const counts = countByType(staticQuestions);
     expect(counts.nostalgia).toBeGreaterThan(0);
     expect(counts.meme).toBeGreaterThan(0);
+    expect(counts.historical).toBe(0);
   });
 
-  it("每道题通过 Zod 校验", () => {
-    for (const q of allQuestions) {
+  it("每道静态题通过 Zod 校验", () => {
+    for (const q of staticQuestions) {
       const result = validateQuestion(q);
       expect(result.success, q.id).toBe(true);
     }
@@ -38,13 +50,9 @@ describe("allQuestions", () => {
     }
   });
 
-  it("历史题均有坐标", () => {
-    for (const q of historicalEvents) {
-      expect(q.type).toBe("historical");
-      expect(typeof q.lat).toBe("number");
-      expect(typeof q.lng).toBe("number");
-      expect(requiresMap(q)).toBe(true);
-    }
+  it("历史题适配器保留坐标字段", () => {
+    expect(sampleHistorical.type).toBe("historical");
+    expect(requiresMap(sampleHistorical)).toBe(true);
   });
 });
 
@@ -55,10 +63,14 @@ describe("pickQuestions", () => {
     expect(picked.every((q) => q.type === "nostalgia")).toBe(true);
   });
 
-  it("各类型独立抽取不超过对应题库上限", () => {
-    for (const type of ["historical", "nostalgia", "meme"] as const) {
+  it("历史题不从静态题库抽取", () => {
+    expect(pickQuestions({ count: 5, type: "historical" })).toHaveLength(0);
+  });
+
+  it("各静态类型独立抽取不超过对应题库上限", () => {
+    for (const type of ["nostalgia", "meme"] as const) {
       const picked = pickQuestions({ count: 100, type });
-      const poolSize = allQuestions.filter((q) => q.type === type).length;
+      const poolSize = staticQuestions.filter((q) => q.type === type).length;
       expect(picked.length).toBeLessThanOrEqual(poolSize);
       expect(picked.every((q) => q.type === type)).toBe(true);
     }

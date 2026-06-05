@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
 import { type HistoricalEvent } from "~/types/event";
+import { toHistoricalQuestion } from "~/lib/event-adapters";
 import {
   haversineDistance,
   locationScore,
@@ -548,7 +549,9 @@ export function BattleGame({
             )}
           </div>
 
-          {currentEvent && <EventCard event={currentEvent} />}
+          {currentEvent && (
+            <EventCard question={toHistoricalQuestion(currentEvent)} />
+          )}
 
           <TimelineSlider
             value={guessYear}

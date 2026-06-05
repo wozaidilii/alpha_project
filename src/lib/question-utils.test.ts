@@ -4,15 +4,25 @@ import {
   getTimelineBounds,
   getQuestionResultSubtitle,
 } from "~/lib/question-utils";
+import { toHistoricalQuestion } from "~/lib/event-adapters";
 import { nostalgiaQuestions } from "~/data/nostalgia";
 import { memeQuestions } from "~/data/memes";
-import { historicalEvents } from "~/data/events";
 import { MODERN_CONTENT_MIN_YEAR, MODERN_CONTENT_MAX_YEAR } from "~/types/question";
+
+const sampleHistorical = toHistoricalQuestion({
+  id: "test_event",
+  title: "测试历史事件",
+  description: "用于单元测试",
+  year: 80,
+  lat: 41.8902,
+  lng: 12.4922,
+  location: "罗马，意大利",
+  category: "world",
+});
 
 describe("getQuestionBadge", () => {
   it("历史题显示世界/中国标签", () => {
-    const world = historicalEvents.find((e) => e.category === "world")!;
-    expect(getQuestionBadge(world)).toContain("世界");
+    expect(getQuestionBadge(sampleHistorical)).toContain("世界");
   });
 
   it("回忆杀题显示子类", () => {
@@ -32,7 +42,7 @@ describe("getTimelineBounds", () => {
   });
 
   it("历史题使用全局时间轴", () => {
-    const bounds = getTimelineBounds(historicalEvents[0]!);
+    const bounds = getTimelineBounds(sampleHistorical);
     expect(bounds.minYear).toBe(-3000);
     expect(bounds.maxYear).toBe(2026);
   });
@@ -40,8 +50,9 @@ describe("getTimelineBounds", () => {
 
 describe("getQuestionResultSubtitle", () => {
   it("历史题显示地点", () => {
-    const event = historicalEvents[0]!;
-    expect(getQuestionResultSubtitle(event)).toBe(event.location);
+    expect(getQuestionResultSubtitle(sampleHistorical)).toBe(
+      sampleHistorical.location,
+    );
   });
 
   it("回忆杀题显示文化圈层", () => {
