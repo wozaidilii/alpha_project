@@ -16,6 +16,7 @@ interface PlayerRow {
   name: string;
   avatar_icon: string;
   avatar_color: string;
+  solo_high_score: number;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -54,7 +55,9 @@ const MAX_HISTORY = 50;
 const MAX_SESSIONS = 10;
 
 function toIso(value: Date | string) {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }
 
 function toPublicPlayer(row: PlayerRow): PlayerProfile {
@@ -65,6 +68,7 @@ function toPublicPlayer(row: PlayerRow): PlayerProfile {
       icon: row.avatar_icon,
       color: row.avatar_color,
     }),
+    soloHighScore: row.solo_high_score,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   };
@@ -100,7 +104,14 @@ function normalizeName(name: string) {
 
 async function getPlayerByToken(token: string): Promise<PlayerRow | null> {
   const [row] = await sql<PlayerRow[]>`
-    select p.id, p.name, p.avatar_icon, p.avatar_color, p.created_at, p.updated_at
+    select
+      p.id,
+      p.name,
+      p.avatar_icon,
+      p.avatar_color,
+      p.solo_high_score,
+      p.created_at,
+      p.updated_at
     from players p
     inner join player_sessions s on s.player_id = p.id
     where s.token = ${token}
@@ -136,6 +147,7 @@ export async function loginPlayer(input: {
         name,
         avatar_icon,
         avatar_color,
+        solo_high_score,
         created_at,
         updated_at
       )
@@ -144,6 +156,7 @@ export async function loginPlayer(input: {
         ${name},
         ${avatar.icon},
         ${avatar.color},
+        0,
         ${now},
         ${now}
       )
@@ -153,7 +166,14 @@ export async function loginPlayer(input: {
         avatar_icon = excluded.avatar_icon,
         avatar_color = excluded.avatar_color,
         updated_at = excluded.updated_at
-      returning id, name, avatar_icon, avatar_color, created_at, updated_at
+      returning
+        id,
+        name,
+        avatar_icon,
+        avatar_color,
+        solo_high_score,
+        created_at,
+        updated_at
     `;
 
     await tx`
@@ -201,7 +221,47 @@ export async function updatePlayerProfile(input: {
     where id = (
       select player_id from player_sessions where token = ${input.token}
     )
-    returning id, name, avatar_icon, avatar_color, created_at, updated_at
+    returning
+      id,
+      name,
+      avatar_icon,
+      avatar_color,
+      solo_high_score,
+      created_at,
+      updated_at
+  `;
+
+  if (!player) {
+    throw new Error("Invalid player session");
+  }
+
+  return toPublicPlayer(player);
+}
+
+export async function updateSoloHighScore(input: {
+  token: string;
+  score: number;
+}): Promise<PlayerProfile> {
+  const score = Math.max(0, Math.round(input.score));
+  const [player] = await sql<PlayerRow[]>`
+    update players
+    set
+      solo_high_score = greatest(solo_high_score, ${score}),
+      updated_at = case
+        when ${score} > solo_high_score then now()
+        else updated_at
+      end
+    where id = (
+      select player_id from player_sessions where token = ${input.token}
+    )
+    returning
+      id,
+      name,
+      avatar_icon,
+      avatar_color,
+      solo_high_score,
+      created_at,
+      updated_at
   `;
 
   if (!player) {

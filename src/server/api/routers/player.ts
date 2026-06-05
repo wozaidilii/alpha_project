@@ -6,6 +6,7 @@ import {
   loginPlayer,
   recordBattleHistory,
   updatePlayerProfile,
+  updateSoloHighScore,
 } from "~/server/data/player-store";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
@@ -58,6 +59,16 @@ export const playerRouter = createTRPCRouter({
     )
     .mutation(({ input }) => {
       return withSessionError(() => updatePlayerProfile(input));
+    }),
+
+  updateSoloHighScore: publicProcedure
+    .input(
+      tokenSchema.extend({
+        score: z.number().int().nonnegative().max(50000),
+      }),
+    )
+    .mutation(({ input }) => {
+      return withSessionError(() => updateSoloHighScore(input));
     }),
 
   history: publicProcedure.input(tokenSchema).query(({ input }) => {

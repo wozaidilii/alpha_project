@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  type PlayerSession,
-  isPlayerSession,
-} from "~/types/player";
+import { type PlayerSession, isPlayerSession } from "~/types/player";
 
 const PLAYER_SESSION_KEY = "histoguessr_player_session";
 
@@ -15,7 +12,14 @@ export function getStoredPlayerSession(): PlayerSession | null {
 
   try {
     const parsed: unknown = JSON.parse(raw);
-    return isPlayerSession(parsed) ? parsed : null;
+    if (!isPlayerSession(parsed)) return null;
+    return {
+      token: parsed.token,
+      user: {
+        ...parsed.user,
+        soloHighScore: parsed.user.soloHighScore ?? 0,
+      },
+    };
   } catch {
     return null;
   }

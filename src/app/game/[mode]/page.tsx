@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { pickQuestions } from "~/data/questions";
 import { getGameMode } from "~/lib/game-mode";
 import { toHistoricalQuestions } from "~/lib/event-adapters";
 import { type HistoricalEvent } from "~/types/event";
 import { getTimelineBounds } from "~/lib/question-utils";
 import { scoreRound } from "~/lib/scoring";
+import { playCountdownTick } from "~/lib/countdown-audio";
 import {
   type GameQuestion,
   requiresMap,
@@ -23,6 +24,7 @@ import { RoundResult } from "../_components/RoundResult";
 import { FinalScore } from "../_components/FinalScore";
 
 const ROUNDS = 5;
+const ROUND_TIME_SECONDS = 30;
 
 type Phase = "playing" | "round-result" | "final";
 
@@ -39,10 +41,17 @@ export default function GamePlayPage({ params }: PageProps) {
   const [phase, setPhase] = useState<Phase>("playing");
   const [rounds, setRounds] = useState<RoundData[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [timeLeft, setTimeLeft] = useState(ROUND_TIME_SECONDS);
 
   const [guessLat, setGuessLat] = useState<number | null>(null);
   const [guessLng, setGuessLng] = useState<number | null>(null);
   const [guessYear, setGuessYear] = useState<number>(1900);
+  const currentQuestionRef = useRef<GameQuestion | undefined>(undefined);
+  const guessLatRef = useRef<number | null>(null);
+  const guessLngRef = useRef<number | null>(null);
+  const guessYearRef = useRef<number>(1900);
+  const resolvedRoundRef = useRef(false);
+  const lastCountdownTickRef = useRef<number | null>(null);
 
   const questionType = gameMode?.type;
   const isHistorical = questionType === "historical";
@@ -110,12 +119,157 @@ export default function GamePlayPage({ params }: PageProps) {
     : { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
 
   useEffect(() => {
+    currentQuestionRef.current = currentQuestion;
+  }, [currentQuestion]);
+
+  useEffect(() => {
+    guessLatRef.current = guessLat;
+  }, [guessLat]);
+
+  useEffect(() => {
+    guessLngRef.current = guessLng;
+  }, [guessLng]);
+
+  useEffect(() => {
+    guessYearRef.current = guessYear;
+  }, [guessYear]);
+
+  useEffect(() => {
     if (currentQuestion) {
       setGuessYear(timelineBounds.defaultYear);
+      guessYearRef.current = timelineBounds.defaultYear;
       setGuessLat(null);
+      guessLatRef.current = null;
       setGuessLng(null);
+      guessLngRef.current = null;
+      setTimeLeft(ROUND_TIME_SECONDS);
+      resolvedRoundRef.current = false;
+      lastCountdownTickRef.current = null;
     }
-  }, [currentQuestion?.id, timelineBounds.defaultYear]);
+  }, [currentQuestion, timelineBounds.defaultYear]);
+
+  const settleRound = useCallback((timedOut: boolean) => {
+    const question = currentQuestionRef.current;
+    if (!question || resolvedRoundRef.current) return;
+
+    const roundNeedsMap = requiresMap(question);
+    const currentGuessLat = guessLatRef.current;
+    const currentGuessLng = guessLngRef.current;
+    const currentGuessYear = guessYearRef.current;
+
+    if (
+      roundNeedsMap &&
+      (currentGuessLat === null || currentGuessLng === null)
+    ) {
+      if (!timedOut) return;
+
+      resolvedRoundRef.current = true;
+      setRounds((prev) => [
+        ...prev,
+        {
+          question,
+          guessLat: null,
+          guessLng: null,
+          guessYear: currentGuessYear,
+          distanceKm: null,
+          locationPts: 0,
+          yearPts: 0,
+          total: 0,
+          timedOut: true,
+        },
+      ]);
+      setPhase("round-result");
+      return;
+    }
+
+    const score = scoreRound({
+      questionType: question.type,
+      actualYear: question.year,
+      guessedYear: currentGuessYear,
+      yearEnd: getQuestionYearEnd(question),
+      actualLat: question.type === "historical" ? question.lat : undefined,
+      actualLng: question.type === "historical" ? question.lng : undefined,
+      guessLat: currentGuessLat ?? undefined,
+      guessLng: currentGuessLng ?? undefined,
+    });
+
+    const data: RoundData = {
+      question,
+      guessLat: currentGuessLat,
+      guessLng: currentGuessLng,
+      guessYear: currentGuessYear,
+      distanceKm: score.distanceKm,
+      locationPts: score.locationPts,
+      yearPts: score.yearPts,
+      total: score.total,
+      timedOut,
+    };
+
+    resolvedRoundRef.current = true;
+    setRounds((prev) => [...prev, data]);
+    setPhase("round-result");
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "playing" || !currentQuestion) return;
+
+    const startedAt = Date.now();
+    setTimeLeft(ROUND_TIME_SECONDS);
+
+    const timerId = window.setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      const nextTimeLeft = Math.max(0, ROUND_TIME_SECONDS - elapsedSeconds);
+
+      setTimeLeft(nextTimeLeft);
+
+      if (nextTimeLeft <= 0) {
+        window.clearInterval(timerId);
+        settleRound(true);
+      }
+    }, 250);
+
+    return () => window.clearInterval(timerId);
+  }, [phase, round, currentQuestion, settleRound]);
+
+  useEffect(() => {
+    if (phase !== "playing" || timeLeft <= 0 || timeLeft > 10) return;
+    if (lastCountdownTickRef.current === timeLeft) return;
+
+    lastCountdownTickRef.current = timeLeft;
+    playCountdownTick(timeLeft);
+  }, [phase, timeLeft]);
+
+  function handleSubmit() {
+    settleRound(false);
+  }
+
+  function handleNextRound() {
+    if (round + 1 >= ROUNDS) {
+      setPhase("final");
+    } else {
+      setRound((r) => r + 1);
+      setTimeLeft(ROUND_TIME_SECONDS);
+      setPhase("playing");
+    }
+  }
+
+  function handleRestart() {
+    if (!gameMode) return;
+
+    setRound(0);
+    setPhase("playing");
+    setRounds([]);
+    setTimeLeft(ROUND_TIME_SECONDS);
+    resolvedRoundRef.current = false;
+    lastCountdownTickRef.current = null;
+    void loadQuestions(gameMode.type);
+  }
+
+  const canSubmit = needsMap ? guessLat !== null : true;
+  const isLoading =
+    phase === "playing" &&
+    questions.length === 0 &&
+    (isHistorical ? eventsQuery.isLoading : false);
 
   if (!gameMode) {
     return (
@@ -129,60 +283,6 @@ export default function GamePlayPage({ params }: PageProps) {
   }
 
   const mode = gameMode;
-
-  function handleSubmit() {
-    if (!currentQuestion) return;
-    if (needsMap && (guessLat === null || guessLng === null)) return;
-
-    const score = scoreRound({
-      questionType: currentQuestion.type,
-      actualYear: currentQuestion.year,
-      guessedYear: guessYear,
-      yearEnd: getQuestionYearEnd(currentQuestion),
-      actualLat:
-        currentQuestion.type === "historical" ? currentQuestion.lat : undefined,
-      actualLng:
-        currentQuestion.type === "historical" ? currentQuestion.lng : undefined,
-      guessLat: guessLat ?? undefined,
-      guessLng: guessLng ?? undefined,
-    });
-
-    const data: RoundData = {
-      question: currentQuestion,
-      guessLat,
-      guessLng,
-      guessYear,
-      distanceKm: score.distanceKm,
-      locationPts: score.locationPts,
-      yearPts: score.yearPts,
-      total: score.total,
-    };
-
-    setRounds((prev) => [...prev, data]);
-    setPhase("round-result");
-  }
-
-  function handleNextRound() {
-    if (round + 1 >= ROUNDS) {
-      setPhase("final");
-    } else {
-      setRound((r) => r + 1);
-      setPhase("playing");
-    }
-  }
-
-  function handleRestart() {
-    setRound(0);
-    setPhase("playing");
-    setRounds([]);
-    void loadQuestions(mode.type);
-  }
-
-  const canSubmit = needsMap ? guessLat !== null : true;
-  const isLoading =
-    phase === "playing" &&
-    questions.length === 0 &&
-    (isHistorical ? eventsQuery.isLoading : false);
 
   if (isLoading) {
     return (
@@ -210,11 +310,7 @@ export default function GamePlayPage({ params }: PageProps) {
 
   if (phase === "final") {
     return (
-      <FinalScore
-        rounds={rounds}
-        gameMode={mode}
-        onRestart={handleRestart}
-      />
+      <FinalScore rounds={rounds} gameMode={mode} onRestart={handleRestart} />
     );
   }
 
@@ -244,19 +340,52 @@ export default function GamePlayPage({ params }: PageProps) {
           >
             换类型
           </Link>
+          <Link
+            href="/"
+            className="text-xs text-stone-500 transition hover:text-stone-300"
+          >
+            退出
+          </Link>
         </div>
         <span className="text-stone-400">
           第 {round + 1} / {ROUNDS} 轮
         </span>
       </div>
+      <div className="h-1 bg-stone-800">
+        <div
+          className={`h-full transition-[width] duration-300 ${
+            timeLeft <= 10 ? "bg-red-500" : "bg-amber-500"
+          }`}
+          style={{ width: `${(timeLeft / ROUND_TIME_SECONDS) * 100}%` }}
+        />
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         <div
-          className={`flex flex-shrink-0 flex-col gap-4 overflow-y-auto border-r border-stone-700 p-4 ${
-            needsMap ? "w-96" : "mx-auto w-full max-w-2xl"
+          className={`flex flex-shrink-0 flex-col gap-3 overflow-y-auto border-r border-stone-700 p-3 ${
+            needsMap ? "w-80" : "mx-auto w-full max-w-2xl"
           }`}
         >
           {currentQuestion && <EventCard question={currentQuestion} />}
+
+          <div
+            className={`rounded-lg border px-3 py-2 ${
+              timeLeft <= 10
+                ? "border-red-500/50 bg-red-950/30"
+                : "border-stone-700 bg-stone-800"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-stone-400">倒计时</span>
+              <span
+                className={`text-2xl font-bold ${
+                  timeLeft <= 10 ? "text-red-300" : "text-amber-300"
+                }`}
+              >
+                {timeLeft}s
+              </span>
+            </div>
+          </div>
 
           <TimelineSlider
             value={guessYear}

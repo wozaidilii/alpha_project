@@ -50,7 +50,10 @@ export default function ProfilePage() {
   );
   const loginMutation = api.player.login.useMutation();
   const updateProfileMutation = api.player.updateProfile.useMutation();
-  const profileBusy = loginMutation.isPending || updateProfileMutation.isPending;
+  const profileBusy =
+    loginMutation.isPending || updateProfileMutation.isPending;
+  const soloHighScore =
+    meQuery.data?.soloHighScore ?? session?.user.soloHighScore ?? 0;
 
   useEffect(() => {
     const stored = getStoredPlayerSession();
@@ -130,7 +133,17 @@ export default function ProfilePage() {
           <h1 className="mb-2 text-3xl font-extrabold text-amber-400">
             个人档案
           </h1>
-          <p className="mb-6 text-stone-400">编辑对战形象，查看历史战绩</p>
+          <p className="mb-6 text-stone-400">
+            编辑形象，查看个人最高分和历史战绩
+          </p>
+
+          <div className="mb-4 rounded-xl bg-stone-800 p-4">
+            <div className="text-sm text-stone-400">个人模式最高分</div>
+            <div className="mt-1 text-4xl font-extrabold text-amber-400">
+              {soloHighScore.toLocaleString()}
+            </div>
+            <div className="mt-1 text-xs text-stone-500">/ 50,000</div>
+          </div>
 
           <div className="rounded-xl bg-stone-800 p-4">
             <div className="mb-4 flex items-center gap-3">
@@ -141,7 +154,9 @@ export default function ProfilePage() {
                 {avatar.icon}
               </div>
               <div className="min-w-0 flex-1">
-                <label className="mb-1 block text-sm text-stone-400">昵称</label>
+                <label className="mb-1 block text-sm text-stone-400">
+                  昵称
+                </label>
                 <input
                   type="text"
                   value={name}
@@ -207,7 +222,9 @@ export default function ProfilePage() {
                 </button>
               )}
             </div>
-            {message && <p className="mt-2 text-sm text-stone-400">{message}</p>}
+            {message && (
+              <p className="mt-2 text-sm text-stone-400">{message}</p>
+            )}
           </div>
         </section>
 
@@ -224,7 +241,10 @@ export default function ProfilePage() {
           ) : historyQuery.data && historyQuery.data.length > 0 ? (
             <div className="space-y-3">
               {historyQuery.data.map((record) => (
-                <div key={record.id} className="rounded-lg bg-stone-900/60 px-4 py-3">
+                <div
+                  key={record.id}
+                  className="rounded-lg bg-stone-900/60 px-4 py-3"
+                >
                   <div className="mb-2 flex items-center justify-between">
                     <span
                       className={`text-lg font-bold ${

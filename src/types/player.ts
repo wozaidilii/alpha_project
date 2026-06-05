@@ -31,6 +31,7 @@ export interface PlayerProfile {
   id: string;
   name: string;
   avatar: PlayerAvatar;
+  soloHighScore: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,6 +94,8 @@ export function isPlayerProfile(value: unknown): value is PlayerProfile {
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     isPlayerAvatar(value.avatar) &&
+    (value.soloHighScore === undefined ||
+      typeof value.soloHighScore === "number") &&
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string"
   );

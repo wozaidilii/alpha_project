@@ -50,7 +50,7 @@ export function EventCard({ question }: Props) {
           type="button"
           disabled={!imageUrl || loading}
           onClick={() => imageUrl && setLightboxOpen(true)}
-          className={`group relative block h-44 w-full overflow-hidden bg-stone-700 ${
+          className={`group relative block h-36 w-full overflow-hidden bg-stone-700 ${
             imageUrl && !loading ? "cursor-zoom-in" : "cursor-default"
           }`}
           aria-label={imageUrl ? `查看大图：${question.title}` : undefined}
@@ -82,18 +82,18 @@ export function EventCard({ question }: Props) {
             </div>
           )}
 
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-stone-900/80 to-transparent px-3 py-2">
+          <div className="pointer-events-none absolute right-0 bottom-0 left-0 bg-gradient-to-t from-stone-900/80 to-transparent px-3 py-2">
             <span className="text-xs font-medium text-stone-300">
               {getQuestionBadge(question)}
             </span>
           </div>
         </button>
 
-        <div className="p-4">
-          <h2 className="mb-2 text-xl font-bold text-amber-400">
+        <div className="p-3">
+          <h2 className="mb-2 text-lg font-bold text-amber-400">
             {question.title}
           </h2>
-          <p className="text-base leading-relaxed text-stone-300">
+          <p className="text-sm leading-relaxed text-stone-300">
             {question.description}
           </p>
         </div>

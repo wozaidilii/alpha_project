@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
 import { type RoundData } from "~/types/game";
@@ -38,9 +39,17 @@ export function RoundResult({
     if (!showMap || !containerRef.current || mapRef.current) return;
 
     void import("leaflet").then((L) => {
-      if (!containerRef.current || mapRef.current || data.question.type !== "historical") return;
+      if (
+        !containerRef.current ||
+        mapRef.current ||
+        data.question.type !== "historical"
+      )
+        return;
 
-      const actualPos: [number, number] = [data.question.lat, data.question.lng];
+      const actualPos: [number, number] = [
+        data.question.lat,
+        data.question.lng,
+      ];
       const guessPos: [number, number] = [data.guessLat!, data.guessLng!];
       const bounds = L.latLngBounds([actualPos, guessPos]);
 
@@ -97,12 +106,20 @@ export function RoundResult({
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
       <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
-        <h1 className={`text-xl font-bold tracking-wide ${gameMode.accentClass}`}>
+        <h1
+          className={`text-xl font-bold tracking-wide ${gameMode.accentClass}`}
+        >
           {gameMode.emoji} {gameMode.title}
         </h1>
         <span className="text-stone-400">
           第 {roundNumber} / {totalRounds} 轮结果
         </span>
+        <Link
+          href="/"
+          className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700"
+        >
+          退出
+        </Link>
       </div>
 
       <div className="flex flex-1 flex-col overflow-auto">
@@ -121,6 +138,11 @@ export function RoundResult({
           <p className="mb-6 text-sm text-stone-400">
             {getQuestionResultSubtitle(data.question)}
           </p>
+          {data.timedOut && (
+            <p className="mb-4 rounded-lg bg-red-950/40 px-4 py-2 text-sm text-red-300">
+              本轮超时，已按当前选择自动结算
+            </p>
+          )}
 
           <div
             className={`grid gap-4 ${showMap ? "grid-cols-2" : "grid-cols-1"}`}
@@ -152,8 +174,7 @@ export function RoundResult({
                 <span className="text-amber-400">
                   {formatYear(data.guessYear)}
                 </span>
-                ，实际{" "}
-                <span className="text-green-400">{actualYearLabel}</span>
+                ，实际 <span className="text-green-400">{actualYearLabel}</span>
               </div>
             </div>
           </div>

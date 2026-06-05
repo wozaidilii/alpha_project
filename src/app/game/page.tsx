@@ -13,7 +13,9 @@ export default function GameModePage() {
         </Link>
 
         <div className="text-center">
-          <h1 className="text-3xl font-extrabold text-amber-400">选择游戏类型</h1>
+          <h1 className="text-3xl font-extrabold text-amber-400">
+            选择游戏类型
+          </h1>
           <p className="mt-2 text-stone-400">
             三种模式独立进行，每局只包含同一类型的题目
           </p>
@@ -32,7 +34,9 @@ export default function GameModePage() {
                   {mode.title}
                 </div>
                 <div className="text-sm text-stone-300">{mode.description}</div>
-                <div className="mt-1 text-xs text-stone-500">{mode.tagline}</div>
+                <div className="mt-1 text-xs text-stone-500">
+                  {mode.tagline}
+                </div>
               </div>
             </Link>
           ))}

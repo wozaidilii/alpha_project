@@ -3,9 +3,13 @@ create table if not exists players (
   name varchar(12) not null,
   avatar_icon text not null,
   avatar_color char(7) not null,
+  solo_high_score integer not null default 0 check (solo_high_score >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table players
+  add column if not exists solo_high_score integer not null default 0;
 
 create table if not exists player_sessions (
   token text primary key,

@@ -29,6 +29,7 @@ import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
 import { type PlayerAvatar } from "~/types/player";
 import { api } from "~/trpc/react";
+import { playCountdownTick } from "~/lib/countdown-audio";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
 import { GameOverView } from "./GameOver";
@@ -47,7 +48,11 @@ function calcGuess(
   const distanceKm = haversineDistance(event.lat, event.lng, lat, lng);
   const locPts = locationScore(distanceKm);
   const yrPts = yearScore(event.year, year);
-  const speedMult = calcSpeedMultiplier(roundStartTime, submittedAt, timePerRound);
+  const speedMult = calcSpeedMultiplier(
+    roundStartTime,
+    submittedAt,
+    timePerRound,
+  );
   return {
     lat,
     lng,
@@ -133,25 +138,36 @@ export function BattleGame({
   // Pusher handlers are set up once (empty deps), so we need refs for anything
   // that changes after mount.
   const playersRef = useRef(players);
-  useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => {
+    playersRef.current = players;
+  }, [players]);
 
   const eventsRef = useRef(events);
-  useEffect(() => { eventsRef.current = events; }, [events]);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
 
   const currentRoundRef = useRef(currentRound);
-  useEffect(() => { currentRoundRef.current = currentRound; }, [currentRound]);
+  useEffect(() => {
+    currentRoundRef.current = currentRound;
+  }, [currentRound]);
 
   const roundStartTimeRef = useRef(roundStartTime);
-  useEffect(() => { roundStartTimeRef.current = roundStartTime; }, [roundStartTime]);
+  useEffect(() => {
+    roundStartTimeRef.current = roundStartTime;
+  }, [roundStartTime]);
 
   const settingsRef = useRef(settings);
-  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   // collected guesses this round (host resolves)
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
 
   // prevent resolveRound being called multiple times per round
   const resolvedRef = useRef(false);
+  const lastCountdownTickRef = useRef<number | null>(null);
 
   // ─── resolve round (host only) ───────────────────────────────────────────────
   function resolveRound() {
@@ -170,10 +186,26 @@ export function BattleGame({
     for (const pid of Object.keys(currentPlayers)) {
       const raw = collectedGuesses.current[pid];
       if (raw) {
-        guesses[pid] = calcGuess(event, raw.lat, raw.lng, raw.year, startTime, raw.submittedAt, tpr);
+        guesses[pid] = calcGuess(
+          event,
+          raw.lat,
+          raw.lng,
+          raw.year,
+          startTime,
+          raw.submittedAt,
+          tpr,
+        );
       } else {
         // didn't submit — 0 pts (submitted at deadline)
-        guesses[pid] = calcGuess(event, 0, 0, 1900, startTime, startTime + tpr * 1000, tpr);
+        guesses[pid] = calcGuess(
+          event,
+          0,
+          0,
+          1900,
+          startTime,
+          startTime + tpr * 1000,
+          tpr,
+        );
       }
     }
 
@@ -200,8 +232,16 @@ export function BattleGame({
       }
     }
 
-    const result: BattleRoundResult = { roundIndex: roundIdx, event, guesses, hpAfter, damage };
-    void sendPusherEvent(channel, "round-results", { result } satisfies PusherRoundResults);
+    const result: BattleRoundResult = {
+      roundIndex: roundIdx,
+      event,
+      guesses,
+      hpAfter,
+      damage,
+    };
+    void sendPusherEvent(channel, "round-results", {
+      result,
+    } satisfies PusherRoundResults);
 
     const someOneDead = Object.values(hpAfter).some((hp) => hp <= 0);
     const lastRound = roundIdx >= settingsRef.current.rounds - 1;
@@ -326,12 +366,29 @@ export function BattleGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, roundStartTime]);
 
+  useEffect(() => {
+    if (phase !== "playing") {
+      lastCountdownTickRef.current = null;
+      return;
+    }
+    if (timeLeft > 10 || timeLeft <= 0) {
+      if (timeLeft > 10) lastCountdownTickRef.current = null;
+      return;
+    }
+    if (lastCountdownTickRef.current === timeLeft) return;
+
+    lastCountdownTickRef.current = timeLeft;
+    playCountdownTick(timeLeft);
+  }, [phase, timeLeft]);
+
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
   async function handleStartGame() {
     try {
       setLobbyError("");
-      const gameEvents = await utils.event.random.fetch({ count: settings.rounds });
+      const gameEvents = await utils.event.random.fetch({
+        count: settings.rounds,
+      });
       if (gameEvents.length < settings.rounds) {
         setLobbyError("题库题目不足，请先导入更多题目");
         return;
@@ -397,7 +454,10 @@ export function BattleGame({
   // ─── Speed multiplier preview ─────────────────────────────────────────────────
   const speedPreview =
     roundStartTime && phase === "playing"
-      ? Math.max(1, 2 - (Date.now() - roundStartTime) / 1000 / settings.timePerRound)
+      ? Math.max(
+          1,
+          2 - (Date.now() - roundStartTime) / 1000 / settings.timePerRound,
+        )
       : null;
 
   // ─── Lobby ───────────────────────────────────────────────────────────────────
@@ -405,7 +465,10 @@ export function BattleGame({
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
         <div className="w-full max-w-sm px-4">
-          <Link href="/battle" className="mb-6 inline-block text-sm text-stone-400 hover:text-white">
+          <Link
+            href="/battle"
+            className="mb-6 inline-block text-sm text-stone-400 hover:text-white"
+          >
             ← 返回大厅
           </Link>
           <div className="mb-6 rounded-2xl bg-stone-800 p-6 text-center">
@@ -422,9 +485,14 @@ export function BattleGame({
           </div>
 
           <div className="mb-6 space-y-2">
-            <div className="text-sm text-stone-400">房间人数 ({playerList.length}/2)</div>
+            <div className="text-sm text-stone-400">
+              房间人数 ({playerList.length}/2)
+            </div>
             {playerList.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 rounded-lg bg-stone-800 px-4 py-2.5">
+              <div
+                key={p.id}
+                className="flex items-center gap-3 rounded-lg bg-stone-800 px-4 py-2.5"
+              >
                 <span
                   className="grid h-9 w-9 place-items-center rounded-full text-lg"
                   style={{ backgroundColor: p.avatar.color }}
@@ -432,7 +500,9 @@ export function BattleGame({
                   {p.avatar.icon}
                 </span>
                 <span className="font-medium">{p.name}</span>
-                {p.isHost && <span className="ml-auto text-xs text-stone-500">房主</span>}
+                {p.isHost && (
+                  <span className="ml-auto text-xs text-stone-500">房主</span>
+                )}
               </div>
             ))}
             {playerList.length < 2 && (
@@ -444,9 +514,18 @@ export function BattleGame({
 
           {isHost && (
             <div className="mb-4 space-y-1 rounded-xl bg-stone-800 p-4 text-sm text-stone-400">
-              <div className="flex justify-between"><span>轮数</span><span className="text-white">{settings.rounds}</span></div>
-              <div className="flex justify-between"><span>每轮时间</span><span className="text-white">{settings.timePerRound}s</span></div>
-              <div className="flex justify-between"><span>初始血量</span><span className="text-white">{settings.startingHp}</span></div>
+              <div className="flex justify-between">
+                <span>轮数</span>
+                <span className="text-white">{settings.rounds}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>每轮时间</span>
+                <span className="text-white">{settings.timePerRound}s</span>
+              </div>
+              <div className="flex justify-between">
+                <span>初始血量</span>
+                <span className="text-white">{settings.startingHp}</span>
+              </div>
             </div>
           )}
 
@@ -462,7 +541,9 @@ export function BattleGame({
             <p className="text-center text-stone-400">等待房主开始游戏…</p>
           )}
           {lobbyError && (
-            <p className="mt-3 text-center text-sm text-red-400">{lobbyError}</p>
+            <p className="mt-3 text-center text-sm text-red-400">
+              {lobbyError}
+            </p>
           )}
         </div>
       </div>
@@ -501,14 +582,21 @@ export function BattleGame({
 
   // ─── Playing ─────────────────────────────────────────────────────────────────
   const timerPct = (timeLeft / settings.timePerRound) * 100;
-  const timerColor = timerPct > 50 ? "bg-green-500" : timerPct > 20 ? "bg-amber-500" : "bg-red-500";
+  const timerColor =
+    timerPct > 50
+      ? "bg-green-500"
+      : timerPct > 20
+        ? "bg-amber-500"
+        : "bg-red-500";
 
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-stone-700 px-4 py-2">
         <span className="font-bold text-red-400">⚔️ 对战</span>
-        <span className="text-sm text-stone-400">第 {currentRound + 1} / {settings.rounds} 轮</span>
+        <span className="text-sm text-stone-400">
+          第 {currentRound + 1} / {settings.rounds} 轮
+        </span>
         <div className="flex items-center gap-3">
           {me && <HPBar player={me} flipped={false} />}
           <span className="text-stone-500">VS</span>
@@ -518,12 +606,15 @@ export function BattleGame({
 
       {/* Timer bar */}
       <div className="h-1.5 w-full bg-stone-700">
-        <div className={`h-full transition-all ${timerColor}`} style={{ width: `${timerPct}%` }} />
+        <div
+          className={`h-full transition-all ${timerColor}`}
+          style={{ width: `${timerPct}%` }}
+        />
       </div>
 
-      <div className="grid flex-1 grid-cols-[minmax(400px,58%)_minmax(280px,42%)] overflow-hidden">
+      <div className="grid flex-1 grid-cols-[minmax(280px,320px)_minmax(0,1fr)] overflow-hidden">
         {/* Left panel */}
-        <div className="flex flex-col gap-3 overflow-y-auto border-r border-stone-700 p-4">
+        <div className="flex flex-col gap-3 overflow-y-auto border-r border-stone-700 p-3">
           {/* Timer + speed */}
           <div className="flex items-center justify-between rounded-lg bg-stone-800 px-4 py-2">
             <div>
@@ -534,7 +625,9 @@ export function BattleGame({
                 </div>
               )}
             </div>
-            <span className={`text-2xl font-bold ${timeLeft <= 10 ? "text-red-400" : "text-white"}`}>
+            <span
+              className={`text-2xl font-bold ${timeLeft <= 10 ? "text-red-400" : "text-white"}`}
+            >
               {timeLeft}s
             </span>
           </div>
@@ -543,7 +636,9 @@ export function BattleGame({
           <div className="flex items-center gap-2 rounded-lg bg-stone-800 px-4 py-2">
             <span className="text-sm text-stone-400">对手：</span>
             {opponentSubmitted ? (
-              <span className="text-sm font-medium text-green-400">✓ 已提交</span>
+              <span className="text-sm font-medium text-green-400">
+                ✓ 已提交
+              </span>
             ) : (
               <span className="text-sm text-stone-500">思考中…</span>
             )}
@@ -555,7 +650,9 @@ export function BattleGame({
 
           <TimelineSlider
             value={guessYear}
-            onChange={(y) => { if (!submitted) setGuessYear(y); }}
+            onChange={(y) => {
+              if (!submitted) setGuessYear(y);
+            }}
           />
 
           <button
@@ -565,15 +662,15 @@ export function BattleGame({
               submitted
                 ? "bg-green-700 text-green-300"
                 : guessLat === null
-                ? "cursor-not-allowed bg-stone-700 text-stone-500"
-                : "bg-red-500 text-white hover:bg-red-400"
+                  ? "cursor-not-allowed bg-stone-700 text-stone-500"
+                  : "bg-red-500 text-white hover:bg-red-400"
             }`}
           >
             {submitted
               ? "✓ 已提交，等待结算…"
               : guessLat === null
-              ? "先在地图上选地点"
-              : "提交猜测"}
+                ? "先在地图上选地点"
+                : "提交猜测"}
           </button>
         </div>
 
@@ -593,7 +690,9 @@ export function BattleGame({
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
               <div className="rounded-xl bg-green-800/80 px-6 py-3 text-center backdrop-blur-sm">
                 <div className="text-lg font-bold text-green-300">✓ 已锁定</div>
-                <div className="text-sm text-green-400">等待对手或计时结束…</div>
+                <div className="text-sm text-green-400">
+                  等待对手或计时结束…
+                </div>
               </div>
             </div>
           )}

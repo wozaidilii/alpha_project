@@ -1,10 +1,18 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { type RoundData } from "~/types/game";
 import { requiresMap } from "~/types/question";
 import { type GameModeConfig } from "~/lib/game-mode";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear } from "~/lib/scoring";
+import {
+  getStoredPlayerSession,
+  savePlayerSession,
+} from "~/lib/player-session";
+import { DEFAULT_AVATAR } from "~/types/player";
+import { api } from "~/trpc/react";
 
 interface Props {
   rounds: RoundData[];
@@ -21,17 +29,52 @@ function getRank(total: number): { label: string; emoji: string } {
 }
 
 export function FinalScore({ rounds, gameMode, onRestart }: Props) {
+  const login = api.player.login.useMutation();
+  const updateSoloHighScore = api.player.updateSoloHighScore.useMutation();
+  const recordedRef = useRef(false);
   const grandTotal = rounds.reduce((sum, r) => sum + r.total, 0);
   const maxPossible = rounds.length * 10000;
   const pct = Math.round((grandTotal / maxPossible) * 100);
   const rank = getRank(grandTotal);
 
+  useEffect(() => {
+    if (recordedRef.current || rounds.length === 0) return;
+
+    recordedRef.current = true;
+    void (async () => {
+      try {
+        const stored = getStoredPlayerSession();
+        const session =
+          stored ??
+          (await login.mutateAsync({
+            name: "玩家",
+            avatar: DEFAULT_AVATAR,
+          }));
+        if (!stored) savePlayerSession(session);
+
+        const user = await updateSoloHighScore.mutateAsync({
+          token: session.token,
+          score: grandTotal,
+        });
+        savePlayerSession({ token: session.token, user });
+      } catch {
+        // Keep the score screen usable even if the profile service is unavailable.
+      }
+    })();
+  }, [grandTotal, login, rounds.length, updateSoloHighScore]);
+
   return (
     <div className="flex min-h-screen flex-col bg-stone-900 text-white">
-      <div className="border-b border-stone-700 px-6 py-3">
+      <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
         <h1 className={`text-xl font-bold ${gameMode.accentClass}`}>
           {gameMode.emoji} {gameMode.title}
         </h1>
+        <Link
+          href="/"
+          className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700"
+        >
+          退出
+        </Link>
       </div>
 
       <div className="mx-auto w-full max-w-2xl px-6 py-8">
@@ -78,12 +121,26 @@ export function FinalScore({ rounds, gameMode, onRestart }: Props) {
           ))}
         </div>
 
-        <button
-          onClick={onRestart}
-          className="mt-8 w-full rounded-xl bg-amber-500 py-3 font-bold text-stone-900 transition hover:bg-amber-400"
-        >
-          🔄 再来一局
-        </button>
+        {updateSoloHighScore.isSuccess && (
+          <p className="mt-6 text-center text-sm text-green-400">
+            个人最高分已更新
+          </p>
+        )}
+
+        <div className="mt-8 flex gap-3">
+          <button
+            onClick={onRestart}
+            className="flex-1 rounded-xl bg-amber-500 py-3 font-bold text-stone-900 transition hover:bg-amber-400"
+          >
+            🔄 再来一局
+          </button>
+          <Link
+            href="/"
+            className="flex-1 rounded-xl bg-stone-700 py-3 text-center font-bold text-stone-300 transition hover:bg-stone-600"
+          >
+            退出
+          </Link>
+        </div>
       </div>
     </div>
   );

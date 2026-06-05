@@ -9,4 +9,5 @@ export interface RoundData {
   locationPts: number;
   yearPts: number;
   total: number;
+  timedOut?: boolean;
 }
