@@ -1,0 +1,257 @@
+export interface HistoricalEvent {
+  id: string;
+  title: string;
+  description: string;
+  year: number; // negative = BCE
+  lat: number;
+  lng: number;
+  location: string;
+  category: "world" | "china";
+  wikipediaTitle?: string; // for API enrichment
+  imageUrl?: string;
+}
+
+export const historicalEvents: HistoricalEvent[] = [
+  // World History
+  {
+    id: "colosseum",
+    title: "罗马竞技场建成",
+    description:
+      "弗拉维安圆形剧场（Colosseum）在罗马皇帝提图斯统治期间正式开放，可容纳约5万至8万名观众，是古罗马最宏大的建筑之一。",
+    year: 80,
+    lat: 41.8902,
+    lng: 12.4922,
+    location: "罗马，意大利",
+    category: "world",
+    wikipediaTitle: "Colosseum",
+  },
+  {
+    id: "magna_carta",
+    title: "《大宪章》签署",
+    description:
+      "英格兰国王约翰在兰尼米德签署《大宪章》，限制了王权，奠定了法治与宪政政府的基础，被誉为现代民主的重要里程碑。",
+    year: 1215,
+    lat: 51.4415,
+    lng: -0.5615,
+    location: "兰尼米德，英格兰",
+    category: "world",
+    wikipediaTitle: "Magna_Carta",
+  },
+  {
+    id: "black_death",
+    title: "黑死病席卷欧洲",
+    description:
+      "鼠疫从中亚传入欧洲，在短短几年内夺去了欧洲三分之一人口的生命，是人类历史上最具破坏性的流行病之一。",
+    year: 1347,
+    lat: 37.5,
+    lng: 15.09,
+    location: "西西里岛，意大利",
+    category: "world",
+    wikipediaTitle: "Black_Death",
+  },
+  {
+    id: "columbus",
+    title: "哥伦布抵达美洲",
+    description:
+      "克里斯托弗·哥伦布率领的西班牙探险队在巴哈马群岛登陆，开启了欧洲对美洲的持续探索与殖民，改变了世界历史格局。",
+    year: 1492,
+    lat: 24.0,
+    lng: -74.5,
+    location: "巴哈马群岛，加勒比海",
+    category: "world",
+    wikipediaTitle: "Christopher_Columbus",
+  },
+  {
+    id: "french_revolution",
+    title: "法国大革命爆发",
+    description:
+      "巴士底狱的攻克标志着法国大革命的开始，推翻了波旁王朝的封建统治，自由、平等、博爱的口号影响了整个西方世界。",
+    year: 1789,
+    lat: 48.8533,
+    lng: 2.3692,
+    location: "巴黎，法国",
+    category: "world",
+    wikipediaTitle: "French_Revolution",
+  },
+  {
+    id: "waterloo",
+    title: "滑铁卢战役",
+    description:
+      "拿破仑·波拿巴在滑铁卢战役中被英普联军击败，结束了拿破仑战争和拿破仑对欧洲的统治，彻底改变了欧洲政治格局。",
+    year: 1815,
+    lat: 50.68,
+    lng: 4.41,
+    location: "滑铁卢，比利时",
+    category: "world",
+    wikipediaTitle: "Battle_of_Waterloo",
+  },
+  {
+    id: "hiroshima",
+    title: "广岛原子弹爆炸",
+    description:
+      "美国在日本广岛投下代号「小男孩」的原子弹，约14万人死亡，是人类历史上首次将核武器用于战争，促使日本宣布无条件投降。",
+    year: 1945,
+    lat: 34.3853,
+    lng: 132.4553,
+    location: "广岛，日本",
+    category: "world",
+    wikipediaTitle: "Atomic_bombings_of_Hiroshima_and_Nagasaki",
+  },
+  {
+    id: "berlin_wall",
+    title: "柏林墙倒塌",
+    description:
+      "分隔东西柏林长达28年的柏林墙于1989年11月9日倒塌，象征着冷战的终结和德国统一的开始，是二十世纪最重要的历史事件之一。",
+    year: 1989,
+    lat: 52.5163,
+    lng: 13.3777,
+    location: "柏林，德国",
+    category: "world",
+    wikipediaTitle: "Fall_of_the_Berlin_Wall",
+  },
+  {
+    id: "moon_landing",
+    title: "阿波罗11号登月",
+    description:
+      "美国宇航员尼尔·阿姆斯特朗成为第一个踏上月球的人类，实现了肯尼迪总统的承诺，标志着人类太空探索的历史性时刻。",
+    year: 1969,
+    lat: 0.67408,
+    lng: 23.47297,
+    location: "月球静海基地",
+    category: "world",
+    wikipediaTitle: "Apollo_11",
+  },
+  {
+    id: "titanic",
+    title: "泰坦尼克号沉没",
+    description:
+      "号称「永不沉没」的豪华邮轮泰坦尼克号在首航途中撞上冰山沉没，造成1500余人遇难，是航海史上最著名的海难事故。",
+    year: 1912,
+    lat: 41.7325,
+    lng: -49.9469,
+    location: "北大西洋",
+    category: "world",
+    wikipediaTitle: "Titanic",
+  },
+  // Chinese History
+  {
+    id: "great_wall",
+    title: "秦始皇修建长城",
+    description:
+      "秦始皇统一六国后，命令将原有各诸侯国的城墙连接并扩展，形成了绵延万里的长城，用以抵御北方游牧民族的入侵。",
+    year: -221,
+    lat: 40.4319,
+    lng: 116.5704,
+    location: "八达岭，中国",
+    category: "china",
+    wikipediaTitle: "Great_Wall_of_China",
+  },
+  {
+    id: "silk_road",
+    title: "汉朝开辟丝绸之路",
+    description:
+      "汉武帝派遣张骞出使西域，开辟了连接东西方的丝绸之路，促进了中国与中亚、西亚乃至欧洲的贸易与文化交流。",
+    year: -130,
+    lat: 39.9042,
+    lng: 116.4074,
+    location: "长安（今西安），中国",
+    category: "china",
+    wikipediaTitle: "Silk_Road",
+  },
+  {
+    id: "paper_invention",
+    title: "蔡伦改进造纸术",
+    description:
+      "东汉宦官蔡伦改进了造纸工艺，用树皮、麻头等廉价原料造纸，使纸张得以广泛普及，是人类文明史上最重要的发明之一。",
+    year: 105,
+    lat: 34.2658,
+    lng: 108.9541,
+    location: "洛阳，中国",
+    category: "china",
+    wikipediaTitle: "Cai_Lun",
+  },
+  {
+    id: "tang_dynasty",
+    title: "唐朝建立",
+    description:
+      "李渊在长安建立唐朝，开创了中国历史上最繁荣的朝代之一，唐太宗贞观之治更是中国封建社会的黄金时期，文化、经济、外交空前繁盛。",
+    year: 618,
+    lat: 34.3416,
+    lng: 108.9398,
+    location: "长安（今西安），中国",
+    category: "china",
+    wikipediaTitle: "Tang_dynasty",
+  },
+  {
+    id: "printing",
+    title: "毕昇发明活字印刷术",
+    description:
+      "北宋工匠毕昇发明了泥活字印刷术，比欧洲古腾堡活字印刷早约400年，极大推动了知识的传播与文化的普及。",
+    year: 1040,
+    lat: 30.5728,
+    lng: 104.0668,
+    location: "宋朝（今中国境内）",
+    category: "china",
+    wikipediaTitle: "Bi_Sheng",
+  },
+  {
+    id: "forbidden_city",
+    title: "紫禁城建成",
+    description:
+      "明成祖朱棣将都城从南京迁往北京，并历时14年建造了紫禁城。这座宫殿建筑群共有9000余间房屋，是世界上最大的宫殿建筑群。",
+    year: 1420,
+    lat: 39.9169,
+    lng: 116.3907,
+    location: "北京，中国",
+    category: "china",
+    wikipediaTitle: "Forbidden_City",
+  },
+  {
+    id: "opium_war",
+    title: "第一次鸦片战争",
+    description:
+      "英国以「林则徐虎门销烟」为由对清朝开战，清军战败后签署《南京条约》，香港岛被割让给英国，中国自此进入半殖民地时代。",
+    year: 1840,
+    lat: 22.3193,
+    lng: 114.1694,
+    location: "香港，中国",
+    category: "china",
+    wikipediaTitle: "First_Opium_War",
+  },
+  {
+    id: "may_fourth",
+    title: "五四运动",
+    description:
+      "北京学生因不满巴黎和会将德国在山东的权益转让给日本而爆发抗议，五四运动成为中国近代史上重要的爱国主义运动，推动了新文化运动的发展。",
+    year: 1919,
+    lat: 39.9042,
+    lng: 116.4074,
+    location: "北京，中国",
+    category: "china",
+    wikipediaTitle: "May_Fourth_Movement",
+  },
+  {
+    id: "prc_founded",
+    title: "中华人民共和国成立",
+    description:
+      "1949年10月1日，毛泽东在天安门城楼上宣布中华人民共和国成立，结束了中国近百年的半殖民地状态，开启了中国历史的新纪元。",
+    year: 1949,
+    lat: 39.9087,
+    lng: 116.3975,
+    location: "北京天安门，中国",
+    category: "china",
+    wikipediaTitle: "Proclamation_of_the_People%27s_Republic_of_China",
+  },
+  {
+    id: "nanjing_massacre",
+    title: "南京大屠杀",
+    description:
+      "1937年12月，日军攻陷南京后对平民和战俘进行大规模屠杀，遇难人数超过30万，是二战期间最骇人听闻的暴行之一。",
+    year: 1937,
+    lat: 32.0603,
+    lng: 118.7969,
+    location: "南京，中国",
+    category: "china",
+    wikipediaTitle: "Nanjing_massacre",
+  },
+];
