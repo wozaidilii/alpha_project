@@ -14,6 +14,15 @@ interface HistoricalEventRow {
   category: "world" | "china";
   wikipedia_title: string | null;
   image_url: string | null;
+  funfact: string[] | null;
+}
+
+function parseFunfact(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+  return items.length > 0 ? items : undefined;
 }
 
 function toHistoricalEvent(row: HistoricalEventRow): HistoricalEvent {
@@ -28,6 +37,7 @@ function toHistoricalEvent(row: HistoricalEventRow): HistoricalEvent {
     category: row.category,
     wikipediaTitle: row.wikipedia_title ?? undefined,
     imageUrl: row.image_url ?? undefined,
+    funfact: parseFunfact(row.funfact),
   };
 }
 
@@ -45,7 +55,8 @@ export async function getRandomHistoricalEvents(
       location,
       category,
       wikipedia_title,
-      image_url
+      image_url,
+      funfact
     from historical_events
     order by random()
     limit ${count}

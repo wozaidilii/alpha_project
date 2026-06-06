@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
 import { type BattleRoundResult, type BattlePlayer } from "~/types/battle";
 import { formatYear } from "~/lib/scoring";
+import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
 
 interface Props {
   result: BattleRoundResult;
@@ -165,6 +166,10 @@ export function BattleRoundResultView({
               );
             })}
           </div>
+
+          {result.event.funfact && (
+            <FunfactPanel funfacts={result.event.funfact} />
+          )}
 
           {/* Damage info */}
           {(() => {

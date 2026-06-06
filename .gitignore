@@ -18,6 +18,7 @@ db.sqlite
 /.next/
 /out/
 next-env.d.ts
+/public/event-images
 
 # production
 /build

@@ -9,6 +9,7 @@ import { requiresMap, getQuestionYearEnd } from "~/types/question";
 import { type GameModeConfig } from "~/lib/game-mode";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear, formatAnswerYear } from "~/lib/scoring";
+import { FunfactPanel } from "./FunfactPanel";
 
 interface Props {
   data: RoundData;
@@ -186,6 +187,10 @@ export function RoundResult({
             </div>
             <div className="text-sm text-stone-500">/ 10,000</div>
           </div>
+
+          {data.question.type === "historical" && data.question.funfact && (
+            <FunfactPanel funfacts={data.question.funfact} />
+          )}
 
           {showMap && (
             <div className="mt-3 flex justify-center gap-4">

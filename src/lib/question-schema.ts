@@ -16,6 +16,7 @@ export const historicalQuestionSchema = questionBaseSchema.extend({
   lng: z.number(),
   location: z.string().min(1),
   category: z.enum(["world", "china"]),
+  funfact: z.array(z.string().min(1)).max(3).optional(),
 });
 
 export const nostalgiaQuestionSchema = questionBaseSchema.extend({

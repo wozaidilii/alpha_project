@@ -9,4 +9,6 @@ export interface HistoricalEvent {
   category: "world" | "china";
   wikipediaTitle?: string;
   imageUrl?: string;
+  /** 答题后展示的冷知识，1–3 条 */
+  funfact?: string[];
 }

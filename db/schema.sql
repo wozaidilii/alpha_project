@@ -64,9 +64,13 @@ create table if not exists historical_events (
   category text not null check (category in ('world', 'china')),
   wikipedia_title text,
   image_url text,
+  funfact jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table historical_events
+  add column if not exists funfact jsonb not null default '[]'::jsonb;
 
 create index if not exists historical_events_category_idx
   on historical_events(category);

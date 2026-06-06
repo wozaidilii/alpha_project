@@ -69,6 +69,8 @@ export interface HistoricalQuestion extends QuestionBase {
   lng: number;
   location: string;
   category: HistoricalCategory;
+  /** 答题后展示的冷知识，1–3 条 */
+  funfact?: string[];
 }
 
 /**
