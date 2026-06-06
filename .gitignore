@@ -18,7 +18,7 @@ db.sqlite
 /.next/
 /out/
 next-env.d.ts
-/public/event-images
+# /public/event-images  # removed: images are committed to git for Vercel serving
 
 # production
 /build
