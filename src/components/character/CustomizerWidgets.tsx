@@ -122,7 +122,7 @@ export function StyleCardGrid({
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {options.map((name, index) => {
         const active = selected === index;
-        const previewConfig = { ...config, [previewKey]: index } as CharacterConfig;
+        const previewConfig: CharacterConfig = { ...config, [previewKey]: index };
 
         return (
           <button
