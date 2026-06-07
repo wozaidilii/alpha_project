@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
-import { type HistoricalEvent } from "~/types/event";
-import { toHistoricalQuestion } from "~/lib/event-adapters";
+import { fetchQuestionsByType } from "~/lib/load-questions";
+import { getGameMode } from "~/lib/game-mode";
+import { getTimelineBounds } from "~/lib/question-utils";
 import {
-  haversineDistance,
-  locationScore,
-  yearScore,
   calcSpeedMultiplier,
+  scoreRound,
 } from "~/lib/scoring";
 import {
   type BattlePhase,
@@ -24,9 +23,17 @@ import {
   type PusherRoundResults,
   type PusherGameOver,
 } from "~/types/battle";
+import {
+  type GameQuestion,
+  getQuestionYearEnd,
+  isFunfactQuestion,
+  requiresMap,
+  requiresQuizAnswer,
+} from "~/types/question";
 import { GameMap } from "~/app/game/_components/GameMap";
 import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
+import { QuizPanel } from "~/app/game/_components/QuizPanel";
 import { type PlayerAvatar } from "~/types/player";
 import { type CharacterConfig } from "~/types/character";
 import { api } from "~/trpc/react";
@@ -37,32 +44,48 @@ import { GameOverView } from "./GameOver";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function calcGuess(
-  event: HistoricalEvent,
-  lat: number,
-  lng: number,
-  year: number,
+function calcPlayerGuess(
+  question: GameQuestion,
+  raw: PusherGuessSubmitted | undefined,
   roundStartTime: number,
-  submittedAt: number,
   timePerRound: number,
 ): PlayerGuess {
-  const distanceKm = haversineDistance(event.lat, event.lng, lat, lng);
-  const locPts = locationScore(distanceKm);
-  const yrPts = yearScore(event.year, year);
+  const submittedAt = raw?.submittedAt ?? roundStartTime + timePerRound * 1000;
   const speedMult = calcSpeedMultiplier(
     roundStartTime,
     submittedAt,
     timePerRound,
   );
+
+  const needsMap = requiresMap(question);
+  const needsQuiz = requiresQuizAnswer(question);
+
+  const score = scoreRound({
+    questionType: question.type,
+    actualYear: question.year,
+    guessedYear: raw?.year ?? 0,
+    yearEnd: getQuestionYearEnd(question),
+    actualLat: question.type === "historical" ? question.lat : undefined,
+    actualLng: question.type === "historical" ? question.lng : undefined,
+    guessLat: needsMap ? (raw?.lat ?? 0) : undefined,
+    guessLng: needsMap ? (raw?.lng ?? 0) : undefined,
+    correctIndex:
+      question.type === "funfact" ? question.correctIndex : undefined,
+    guessedIndex: needsQuiz ? (raw?.guessIndex ?? undefined) : undefined,
+  });
+
   return {
-    lat,
-    lng,
-    year,
-    distanceKm,
-    locationPts: locPts,
-    yearPts: yrPts,
+    lat: raw?.lat ?? 0,
+    lng: raw?.lng ?? 0,
+    year: raw?.year ?? 0,
+    guessIndex: raw?.guessIndex ?? null,
+    locationPts: score.locationPts,
+    yearPts: score.yearPts,
+    quizPts: score.quizPts,
     speedMultiplier: speedMult,
-    total: Math.round((locPts + yrPts) * speedMult),
+    total: Math.round(score.total * speedMult),
+    distanceKm: score.distanceKm ?? 0,
+    isCorrect: score.isCorrect,
   };
 }
 
@@ -107,7 +130,6 @@ export function BattleGame({
   const channel = `game-${roomId}`;
   const myId = useRef(getOrCreatePlayerId());
 
-  // ─── state ──────────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<BattlePhase>("lobby");
   const [players, setPlayers] = useState<Record<string, BattlePlayer>>(() => ({
     [myId.current]: {
@@ -121,35 +143,37 @@ export function BattleGame({
     },
   }));
   const [settings, setSettings] = useState<BattleSettings>(
-    hostSettings ?? { rounds: 5, timePerRound: 60, startingHp: 100 },
+    hostSettings ?? {
+      rounds: 5,
+      timePerRound: 60,
+      startingHp: 100,
+      questionType: "historical",
+    },
   );
-  const [events, setEvents] = useState<HistoricalEvent[]>([]);
+  const [questions, setQuestions] = useState<GameQuestion[]>([]);
   const [currentRound, setCurrentRound] = useState(0);
   const [roundStartTime, setRoundStartTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
 
-  // current round guess
   const [guessLat, setGuessLat] = useState<number | null>(null);
   const [guessLng, setGuessLng] = useState<number | null>(null);
   const [guessYear, setGuessYear] = useState(1900);
+  const [guessIndex, setGuessIndex] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [opponentSubmitted, setOpponentSubmitted] = useState(false);
 
   const [results, setResults] = useState<BattleRoundResult[]>([]);
   const [lobbyError, setLobbyError] = useState("");
 
-  // ─── Refs for always-fresh values inside Pusher callbacks ───────────────────
-  // Pusher handlers are set up once (empty deps), so we need refs for anything
-  // that changes after mount.
   const playersRef = useRef(players);
   useEffect(() => {
     playersRef.current = players;
   }, [players]);
 
-  const eventsRef = useRef(events);
+  const questionsRef = useRef(questions);
   useEffect(() => {
-    eventsRef.current = events;
-  }, [events]);
+    questionsRef.current = questions;
+  }, [questions]);
 
   const currentRoundRef = useRef(currentRound);
   useEffect(() => {
@@ -166,21 +190,25 @@ export function BattleGame({
     settingsRef.current = settings;
   }, [settings]);
 
-  // collected guesses this round (host resolves)
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
-
-  // prevent resolveRound being called multiple times per round
   const resolvedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
 
-  // ─── resolve round (host only) ───────────────────────────────────────────────
+  const gameMode = getGameMode(settings.questionType);
+  const currentQuestion = questions[currentRound];
+  const needsMap = currentQuestion ? requiresMap(currentQuestion) : false;
+  const needsQuiz = currentQuestion ? requiresQuizAnswer(currentQuestion) : false;
+  const timelineBounds = currentQuestion
+    ? getTimelineBounds(currentQuestion)
+    : { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
+
   function resolveRound() {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
 
     const roundIdx = currentRoundRef.current;
-    const event = eventsRef.current[roundIdx];
-    if (!event) return;
+    const question = questionsRef.current[roundIdx];
+    if (!question) return;
 
     const currentPlayers = playersRef.current;
     const startTime = roundStartTimeRef.current ?? Date.now();
@@ -188,32 +216,14 @@ export function BattleGame({
 
     const guesses: Record<string, PlayerGuess> = {};
     for (const pid of Object.keys(currentPlayers)) {
-      const raw = collectedGuesses.current[pid];
-      if (raw) {
-        guesses[pid] = calcGuess(
-          event,
-          raw.lat,
-          raw.lng,
-          raw.year,
-          startTime,
-          raw.submittedAt,
-          tpr,
-        );
-      } else {
-        // didn't submit — 0 pts (submitted at deadline)
-        guesses[pid] = calcGuess(
-          event,
-          0,
-          0,
-          1900,
-          startTime,
-          startTime + tpr * 1000,
-          tpr,
-        );
-      }
+      guesses[pid] = calcPlayerGuess(
+        question,
+        collectedGuesses.current[pid],
+        startTime,
+        tpr,
+      );
     }
 
-    // HP
     const playerIds = Object.keys(currentPlayers);
     const hpAfter: Record<string, number> = {};
     const damage: Record<string, number> = {};
@@ -238,7 +248,7 @@ export function BattleGame({
 
     const result: BattleRoundResult = {
       roundIndex: roundIdx,
-      event,
+      question,
       guesses,
       hpAfter,
       damage,
@@ -257,7 +267,6 @@ export function BattleGame({
     }
   }
 
-  // ─── Pusher subscribe ────────────────────────────────────────────────────────
   useEffect(() => {
     const pusher = getPusherClient();
     const ch = pusher.subscribe(channel);
@@ -280,7 +289,7 @@ export function BattleGame({
 
     ch.bind("game-started", (data: PusherGameStarted) => {
       setSettings(data.settings);
-      setEvents(data.events);
+      setQuestions(data.questions);
       setPlayers(data.players);
     });
 
@@ -290,9 +299,16 @@ export function BattleGame({
       setCurrentRound(data.roundIndex);
       setRoundStartTime(data.startTime);
       setTimeLeft(settingsRef.current.timePerRound);
+
+      const question = questionsRef.current[data.roundIndex];
+      const bounds = question
+        ? getTimelineBounds(question)
+        : { defaultYear: 1900 };
+
       setGuessLat(null);
       setGuessLng(null);
-      setGuessYear(1900);
+      setGuessYear(bounds.defaultYear);
+      setGuessIndex(null);
       setSubmitted(false);
       setOpponentSubmitted(false);
       setPhase("playing");
@@ -302,7 +318,6 @@ export function BattleGame({
       if (data.playerId !== myId.current) setOpponentSubmitted(true);
       collectedGuesses.current[data.playerId] = data;
 
-      // host: if all players submitted, resolve immediately
       if (isHost) {
         const allIn = Object.keys(playersRef.current).every(
           (id) => collectedGuesses.current[id],
@@ -343,7 +358,6 @@ export function BattleGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Announce join (guest only) ──────────────────────────────────────────────
   useEffect(() => {
     if (isHost) return;
     void sendPusherEvent(channel, "player-joined", {
@@ -356,7 +370,6 @@ export function BattleGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Timer ───────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "playing" || !roundStartTime) return;
     const interval = setInterval(() => {
@@ -387,16 +400,19 @@ export function BattleGame({
     playCountdownTick(timeLeft);
   }, [phase, timeLeft]);
 
-  // ─── Actions ─────────────────────────────────────────────────────────────────
-
   async function handleStartGame() {
     try {
       setLobbyError("");
-      const gameEvents = await utils.event.random.fetch({
-        count: settings.rounds,
-      });
-      if (gameEvents.length < settings.rounds) {
-        setLobbyError("题库题目不足，请先导入更多题目");
+      const loaded = await fetchQuestionsByType(
+        settings.questionType,
+        settings.rounds,
+        {
+          fetchHistorical: (count) => utils.event.random.fetch({ count }),
+          fetchFunfact: (count) => utils.funfact.random.fetch({ count }),
+        },
+      );
+      if (loaded.error || loaded.questions.length < settings.rounds) {
+        setLobbyError(loaded.error ?? "题库题目不足");
         return;
       }
 
@@ -406,7 +422,7 @@ export function BattleGame({
       }
       void sendPusherEvent(channel, "game-started", {
         settings,
-        events: gameEvents,
+        questions: loaded.questions,
         players: initialPlayers,
       } satisfies PusherGameStarted);
 
@@ -422,13 +438,17 @@ export function BattleGame({
   }
 
   function handleSubmitGuess() {
-    if (guessLat === null || guessLng === null || submitted) return;
+    if (submitted) return;
+    if (needsMap && (guessLat === null || guessLng === null)) return;
+    if (needsQuiz && guessIndex === null) return;
+
     setSubmitted(true);
     void sendPusherEvent(channel, "guess-submitted", {
       playerId: myId.current,
-      lat: guessLat,
-      lng: guessLng,
-      year: guessYear,
+      lat: guessLat ?? 0,
+      lng: guessLng ?? 0,
+      year: needsQuiz ? 0 : guessYear,
+      guessIndex: needsQuiz ? guessIndex : undefined,
       submittedAt: Date.now(),
     } satisfies PusherGuessSubmitted);
   }
@@ -436,7 +456,6 @@ export function BattleGame({
   function handleNextRound() {
     if (!isHost) return;
     const next = currentRound + 1;
-    // Guard: don't start a round past the last one
     if (next >= settings.rounds) return;
     void sendPusherEvent(channel, "round-started", {
       roundIndex: next,
@@ -444,20 +463,15 @@ export function BattleGame({
     } satisfies PusherRoundStarted);
   }
 
-  // Called by host on the last round — no Pusher needed, just transition locally.
-  // The guest transitions via the game-over Pusher event (already sent by resolveRound).
   function handleViewResults() {
     setPhase("game-over");
   }
 
-  // ─── Derived ─────────────────────────────────────────────────────────────────
   const me = players[myId.current];
   const opponent = Object.values(players).find((p) => p.id !== myId.current);
-  const currentEvent = events[currentRound];
   const lastResult = results[results.length - 1];
   const playerList = Object.values(players);
 
-  // ─── Speed multiplier preview ─────────────────────────────────────────────────
   const speedPreview =
     roundStartTime && phase === "playing"
       ? Math.max(
@@ -466,7 +480,22 @@ export function BattleGame({
         )
       : null;
 
-  // ─── Lobby ───────────────────────────────────────────────────────────────────
+  const canSubmit = needsQuiz
+    ? guessIndex !== null
+    : needsMap
+      ? guessLat !== null
+      : true;
+
+  const submitLabel = submitted
+    ? "✓ 已提交，等待结算…"
+    : needsQuiz
+      ? guessIndex === null
+        ? "请先选择答案"
+        : "提交答案"
+      : needsMap && guessLat === null
+        ? "先在地图上选地点"
+        : "提交猜测";
+
   if (phase === "lobby") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
@@ -521,6 +550,12 @@ export function BattleGame({
           {isHost && (
             <div className="mb-4 space-y-1 rounded-xl bg-stone-800 p-4 text-sm text-stone-400">
               <div className="flex justify-between">
+                <span>游戏类型</span>
+                <span className="text-white">
+                  {gameMode?.emoji} {gameMode?.title ?? settings.questionType}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span>轮数</span>
                 <span className="text-white">{settings.rounds}</span>
               </div>
@@ -532,6 +567,15 @@ export function BattleGame({
                 <span>初始血量</span>
                 <span className="text-white">{settings.startingHp}</span>
               </div>
+            </div>
+          )}
+
+          {!isHost && settings.questionType && (
+            <div className="mb-4 rounded-xl bg-stone-800 p-4 text-center text-sm text-stone-400">
+              等待房主开始 ·{" "}
+              <span className="text-white">
+                {gameMode?.emoji} {gameMode?.title}
+              </span>
             </div>
           )}
 
@@ -556,7 +600,6 @@ export function BattleGame({
     );
   }
 
-  // ─── Round result ─────────────────────────────────────────────────────────────
   if (phase === "round-result" && lastResult) {
     const isLastRound =
       lastResult.roundIndex >= settings.rounds - 1 ||
@@ -574,7 +617,6 @@ export function BattleGame({
     );
   }
 
-  // ─── Game over ───────────────────────────────────────────────────────────────
   if (phase === "game-over") {
     return (
       <GameOverView
@@ -586,7 +628,6 @@ export function BattleGame({
     );
   }
 
-  // ─── Playing ─────────────────────────────────────────────────────────────────
   const timerPct = (timeLeft / settings.timePerRound) * 100;
   const timerColor =
     timerPct > 50
@@ -597,9 +638,10 @@ export function BattleGame({
 
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-stone-700 px-4 py-2">
-        <span className="font-bold text-red-400">⚔️ 对战</span>
+        <span className="font-bold text-red-400">
+          ⚔️ 对战 · {gameMode?.emoji} {gameMode?.title}
+        </span>
         <span className="text-sm text-stone-400">
           第 {currentRound + 1} / {settings.rounds} 轮
         </span>
@@ -610,7 +652,6 @@ export function BattleGame({
         </div>
       </div>
 
-      {/* Timer bar */}
       <div className="h-1.5 w-full bg-stone-700">
         <div
           className={`h-full transition-all ${timerColor}`}
@@ -618,10 +659,18 @@ export function BattleGame({
         />
       </div>
 
-      <div className="grid flex-1 grid-cols-[minmax(280px,320px)_minmax(0,1fr)] overflow-hidden">
-        {/* Left panel */}
-        <div className="flex flex-col gap-3 overflow-y-auto border-r border-stone-700 p-3">
-          {/* Timer + speed */}
+      <div
+        className={`grid flex-1 overflow-hidden ${
+          needsMap
+            ? "grid-cols-[minmax(280px,320px)_minmax(0,1fr)]"
+            : "grid-cols-1"
+        }`}
+      >
+        <div
+          className={`flex flex-col gap-3 overflow-y-auto border-r border-stone-700 p-3 ${
+            needsMap ? "" : "mx-auto w-full max-w-2xl"
+          }`}
+        >
           <div className="flex items-center justify-between rounded-lg bg-stone-800 px-4 py-2">
             <div>
               <div className="text-sm text-stone-400">剩余时间</div>
@@ -638,7 +687,6 @@ export function BattleGame({
             </span>
           </div>
 
-          {/* Opponent status */}
           <div className="flex items-center gap-2 rounded-lg bg-stone-800 px-4 py-2">
             <span className="text-sm text-stone-400">对手：</span>
             {opponentSubmitted ? (
@@ -650,59 +698,72 @@ export function BattleGame({
             )}
           </div>
 
-          {currentEvent && (
-            <EventCard question={toHistoricalQuestion(currentEvent)} />
+          {currentQuestion && (
+            <EventCard key={currentQuestion.id} question={currentQuestion} />
           )}
 
-          <TimelineSlider
-            value={guessYear}
-            onChange={(y) => {
-              if (!submitted) setGuessYear(y);
-            }}
-          />
+          {currentQuestion && isFunfactQuestion(currentQuestion) && (
+            <QuizPanel
+              question={currentQuestion}
+              selectedIndex={guessIndex}
+              onSelect={(index) => {
+                if (!submitted) setGuessIndex(index);
+              }}
+            />
+          )}
+
+          {!needsQuiz && (
+            <TimelineSlider
+              value={guessYear}
+              onChange={(y) => {
+                if (!submitted) setGuessYear(y);
+              }}
+              minYear={timelineBounds.minYear}
+              maxYear={timelineBounds.maxYear}
+            />
+          )}
 
           <button
             onClick={handleSubmitGuess}
-            disabled={guessLat === null || submitted}
+            disabled={!canSubmit || submitted}
             className={`rounded-lg py-2.5 font-bold transition ${
               submitted
                 ? "bg-green-700 text-green-300"
-                : guessLat === null
+                : !canSubmit
                   ? "cursor-not-allowed bg-stone-700 text-stone-500"
                   : "bg-red-500 text-white hover:bg-red-400"
             }`}
           >
-            {submitted
-              ? "✓ 已提交，等待结算…"
-              : guessLat === null
-                ? "先在地图上选地点"
-                : "提交猜测"}
+            {submitLabel}
           </button>
         </div>
 
-        {/* Map — pointer-events disabled after submit */}
-        <div className="relative min-h-0">
-          <GameMap
-            guessLat={guessLat}
-            guessLng={guessLng}
-            onGuess={(lat, lng) => {
-              if (!submitted) {
-                setGuessLat(lat);
-                setGuessLng(lng);
-              }
-            }}
-          />
-          {submitted && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
-              <div className="rounded-xl bg-green-800/80 px-6 py-3 text-center backdrop-blur-sm">
-                <div className="text-lg font-bold text-green-300">✓ 已锁定</div>
-                <div className="text-sm text-green-400">
-                  等待对手或计时结束…
+        {needsMap && (
+          <div className="relative min-h-0">
+            <GameMap
+              guessLat={guessLat}
+              guessLng={guessLng}
+              onGuess={(lat, lng) => {
+                if (!submitted) {
+                  setGuessLat(lat);
+                  setGuessLng(lng);
+                }
+              }}
+            />
+            {submitted && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
+                <div className="rounded-xl bg-green-800/80 px-6 py-3 text-center backdrop-blur-sm">
+                  <div className="text-lg font-bold text-green-300">
+                    ✓ 已锁定
+                  </div>
+                  <div className="text-sm text-green-400">
+                    等待对手或计时结束…
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

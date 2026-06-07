@@ -9,6 +9,8 @@ import {
   useCompletedPlayerSession,
 } from "~/lib/player-session-guard";
 import { CHARACTER_STORAGE_KEY } from "~/types/character";
+import { GAME_MODE_LIST, type GameModeConfig } from "~/lib/game-mode";
+import { type QuestionType } from "~/types/question";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -23,6 +25,7 @@ export default function BattleLobby() {
   const [rounds, setRounds] = useState(5);
   const [timePerRound, setTimePerRound] = useState(60);
   const [startingHp, setStartingHp] = useState(100);
+  const [questionType, setQuestionType] = useState<QuestionType>("historical");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function BattleLobby() {
       const roomId = generateRoomId();
       const params = new URLSearchParams({
         host: "1",
+        mode: questionType,
         rounds: String(rounds),
         time: String(timePerRound),
         hp: String(startingHp),
@@ -116,6 +120,38 @@ export default function BattleLobby() {
           <>
             <div className="mb-4 space-y-4 rounded-xl bg-stone-800 p-4">
               <h3 className="font-semibold text-stone-300">游戏设置</h3>
+
+              <div>
+                <label className="mb-2 block text-sm text-stone-400">
+                  游戏类型
+                </label>
+                <div className="flex flex-col gap-2">
+                  {GAME_MODE_LIST.map((mode: GameModeConfig) => (
+                    <button
+                      key={mode.slug}
+                      type="button"
+                      onClick={() => setQuestionType(mode.type)}
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                        questionType === mode.type
+                          ? "border-red-500 bg-red-500/10"
+                          : "border-stone-700 bg-stone-900 hover:border-stone-600"
+                      }`}
+                    >
+                      <span className="text-2xl">{mode.emoji}</span>
+                      <div>
+                        <div
+                          className={`font-semibold ${questionType === mode.type ? "text-red-300" : "text-stone-200"}`}
+                        >
+                          {mode.title}
+                        </div>
+                        <div className="text-xs text-stone-500">
+                          {mode.tagline}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <div>
                 <label className="mb-1 block text-sm text-stone-400">
