@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type GameQuestion } from "~/types/question";
+import { type GameQuestion, isFunfactQuestion } from "~/types/question";
 import { getQuestionBadge } from "~/lib/question-utils";
 import { fetchWikiSummary } from "~/lib/wikipedia";
 import { ImageLightbox } from "./ImageLightbox";
 
 interface Props {
   question: GameQuestion;
+}
+
+function getFallbackImageUrl(question: GameQuestion): string | undefined {
+  if (isFunfactQuestion(question)) {
+    return question.fallbackImageUrl;
+  }
+  return undefined;
 }
 
 export function EventCard({ question }: Props) {
@@ -19,12 +26,17 @@ export function EventCard({ question }: Props) {
   );
   const [loading, setLoading] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [triedFallback, setTriedFallback] = useState(false);
 
   useEffect(() => {
     setLightboxOpen(false);
+    setTriedFallback(false);
+    setLoading(false);
     setImageUrl(question.imageUrl ?? null);
     setFullImageUrl(question.imageUrl ?? null);
+
     if (question.imageUrl || !question.wikipediaTitle) return;
+
     setLoading(true);
     void fetchWikiSummary(question.wikipediaTitle)
       .then((wiki) => {
@@ -34,7 +46,26 @@ export function EventCard({ question }: Props) {
         if (full) setFullImageUrl(full);
       })
       .finally(() => setLoading(false));
-  }, [question]);
+  }, [question.id, question.imageUrl, question.wikipediaTitle]);
+
+  function handleImageError() {
+    if (triedFallback) {
+      setImageUrl(null);
+      setFullImageUrl(null);
+      return;
+    }
+
+    const fallback = getFallbackImageUrl(question);
+    if (!fallback || fallback === imageUrl) {
+      setImageUrl(null);
+      setFullImageUrl(null);
+      return;
+    }
+
+    setTriedFallback(true);
+    setImageUrl(fallback);
+    setFullImageUrl(fallback);
+  }
 
   const fallbackEmoji =
     question.type === "historical"
@@ -68,6 +99,7 @@ export function EventCard({ question }: Props) {
               src={imageUrl}
               alt={question.title}
               className="h-full w-full object-cover transition group-hover:scale-105"
+              onError={handleImageError}
             />
           )}
           {!loading && !imageUrl && (

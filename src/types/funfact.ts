@@ -11,8 +11,10 @@ export interface FunfactQuestionRecord {
   correctIndex: number;
   explanation?: string;
   category: string;
+  description?: string;
   hint?: string;
   funfact?: string[];
   difficulty?: number;
   imageUrl?: string;
+  fallbackImageUrl?: string;
 }

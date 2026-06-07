@@ -125,6 +125,7 @@ export interface FunfactQuestion extends QuestionBase {
   hint?: string;
   funfact?: string[];
   difficulty?: number;
+  fallbackImageUrl?: string;
 }
 
 export type GameQuestion =

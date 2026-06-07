@@ -24,7 +24,7 @@ export function toFunfactQuestion(
     id: record.id,
     sourceId: record.sourceId,
     title: record.title,
-    description: record.hint ?? record.title,
+    description: record.description ?? record.hint ?? record.title,
     year: 0,
     format: record.format,
     stem: record.stem,
@@ -36,6 +36,7 @@ export function toFunfactQuestion(
     funfact: record.funfact,
     difficulty: record.difficulty,
     imageUrl: record.imageUrl,
+    fallbackImageUrl: record.fallbackImageUrl,
   };
 }
 

@@ -86,13 +86,21 @@ create table if not exists funfact_questions (
   correct_index integer not null check (correct_index >= 0),
   explanation text,
   category text not null,
+  description text,
   hint text,
   funfact jsonb not null default '[]'::jsonb,
   difficulty integer,
   image_url text,
+  fallback_image_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table funfact_questions
+  add column if not exists description text;
+
+alter table funfact_questions
+  add column if not exists fallback_image_url text;
 
 create index if not exists funfact_questions_category_idx
   on funfact_questions(category);

@@ -1,6 +1,10 @@
 import { get } from "@vercel/blob";
 import { type NextRequest, NextResponse } from "next/server";
 import { isAllowedEventImagePathname } from "~/lib/event-image-url";
+import { readLocalEventImage } from "~/lib/local-event-image";
+
+const CACHE_HEADER =
+  "public, max-age=86400, stale-while-revalidate=604800";
 
 export async function GET(request: NextRequest) {
   const pathname = request.nextUrl.searchParams.get("pathname")?.trim();
@@ -18,29 +22,40 @@ export async function GET(request: NextRequest) {
       ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
     });
 
-    if (!result) {
-      return new NextResponse("Not found", { status: 404 });
-    }
+    if (result) {
+      if (result.statusCode === 304) {
+        return new NextResponse(null, {
+          status: 304,
+          headers: {
+            ETag: result.blob.etag,
+            "Cache-Control": CACHE_HEADER,
+          },
+        });
+      }
 
-    if (result.statusCode === 304) {
-      return new NextResponse(null, {
-        status: 304,
+      return new NextResponse(result.stream, {
         headers: {
+          "Content-Type": result.blob.contentType ?? "application/octet-stream",
+          "X-Content-Type-Options": "nosniff",
           ETag: result.blob.etag,
-          "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+          "Cache-Control": CACHE_HEADER,
         },
       });
     }
+  } catch {
+    // Blob 读取失败时回退到本地 rawdata/images
+  }
 
-    return new NextResponse(result.stream, {
+  const localImage = await readLocalEventImage(pathname);
+  if (localImage) {
+    return new NextResponse(new Uint8Array(localImage.body), {
       headers: {
-        "Content-Type": result.blob.contentType ?? "application/octet-stream",
+        "Content-Type": localImage.contentType,
         "X-Content-Type-Options": "nosniff",
-        ETag: result.blob.etag,
-        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        "Cache-Control": CACHE_HEADER,
       },
     });
-  } catch {
-    return new NextResponse("Failed to load image", { status: 502 });
   }
+
+  return new NextResponse("Not found", { status: 404 });
 }

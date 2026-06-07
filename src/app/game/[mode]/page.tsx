@@ -482,7 +482,9 @@ export default function GamePlayPage({ params }: PageProps) {
             needsMap ? "w-80" : "mx-auto w-full max-w-2xl"
           }`}
         >
-          {currentQuestion && <EventCard question={currentQuestion} />}
+          {currentQuestion && (
+            <EventCard key={currentQuestion.id} question={currentQuestion} />
+          )}
 
           {currentQuestion && isFunfactQuestion(currentQuestion) && (
             <QuizPanel

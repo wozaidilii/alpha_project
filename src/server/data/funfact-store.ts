@@ -14,10 +14,12 @@ interface FunfactQuestionRow {
   correct_index: number;
   explanation: string | null;
   category: string;
+  description: string | null;
   hint: string | null;
   funfact: string[] | null;
   difficulty: number | null;
   image_url: string | null;
+  fallback_image_url: string | null;
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -39,10 +41,12 @@ function toFunfactQuestion(row: FunfactQuestionRow): FunfactQuestionRecord {
     correctIndex: row.correct_index,
     explanation: row.explanation ?? undefined,
     category: row.category,
+    description: row.description ?? undefined,
     hint: row.hint ?? undefined,
     funfact: funfact.length > 0 ? funfact : undefined,
     difficulty: row.difficulty ?? undefined,
     imageUrl: toEventImageProxyUrl(row.image_url),
+    fallbackImageUrl: toEventImageProxyUrl(row.fallback_image_url),
   };
 }
 
@@ -60,10 +64,12 @@ export async function getRandomFunfactQuestions(
       correct_index,
       explanation,
       category,
+      description,
       hint,
       funfact,
       difficulty,
-      image_url
+      image_url,
+      fallback_image_url
     from funfact_questions
     order by random()
     limit ${count}

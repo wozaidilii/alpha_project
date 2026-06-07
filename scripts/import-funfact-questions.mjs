@@ -20,6 +20,17 @@ function normalizeFunfact(record) {
     .slice(0, 3);
 }
 
+function resolveRemoteImageUrl(record) {
+  const firstLocal = record.images?.find((image) => image.local_path);
+  return (
+    record.image_url ??
+    firstLocal?.thumb_url ??
+    record.images?.[0]?.thumb_url ??
+    record.images?.[0]?.url ??
+    null
+  );
+}
+
 function resolveImageUrl(record, blobUrlMap) {
   const firstLocal = record.images?.find((image) => image.local_path);
   const normalizedLocal = normalizeLocalPath(firstLocal?.local_path);
@@ -28,13 +39,31 @@ function resolveImageUrl(record, blobUrlMap) {
     if (blobUrl) return toEventImageProxyUrl(blobUrl);
   }
 
-  return toEventImageProxyUrl(
-    record.image_url ??
-      firstLocal?.thumb_url ??
-      record.images?.[0]?.thumb_url ??
-      record.images?.[0]?.url ??
-      null,
-  );
+  return toEventImageProxyUrl(resolveRemoteImageUrl(record));
+}
+
+function resolveFallbackImageUrl(record) {
+  return toEventImageProxyUrl(resolveRemoteImageUrl(record));
+}
+
+function buildQuestionRow(record, blobUrlMap, payload) {
+  const imageUrl = resolveImageUrl(record, blobUrlMap);
+  const fallbackImageUrl = resolveFallbackImageUrl(record);
+
+  return {
+    ...payload,
+    description: String(record.description ?? "").trim() || null,
+    hint: record.details?.hint ? String(record.details.hint).trim() : null,
+    funfact: normalizeFunfact(record),
+    difficulty: Number.isInteger(record.details?.difficulty)
+      ? record.details.difficulty
+      : null,
+    image_url: imageUrl,
+    fallback_image_url:
+      fallbackImageUrl && fallbackImageUrl !== imageUrl
+        ? fallbackImageUrl
+        : null,
+  };
 }
 
 function toMcqRow(record, blobUrlMap) {
@@ -50,7 +79,7 @@ function toMcqRow(record, blobUrlMap) {
   const options = mcq.options.map((item) => String(item).trim()).filter(Boolean);
   if (options.length < 2) return null;
 
-  return {
+  return buildQuestionRow(record, blobUrlMap, {
     id: `${record.id}_mcq`,
     source_id: String(record.id),
     format: "multiple_choice",
@@ -60,20 +89,14 @@ function toMcqRow(record, blobUrlMap) {
     correct_index: mcq.correct_index,
     explanation: mcq.explanation ? String(mcq.explanation).trim() : null,
     category: String(record.category ?? "unknown"),
-    hint: record.details?.hint ? String(record.details.hint).trim() : null,
-    funfact: normalizeFunfact(record),
-    difficulty: Number.isInteger(record.details?.difficulty)
-      ? record.details.difficulty
-      : null,
-    image_url: resolveImageUrl(record, blobUrlMap),
-  };
+  });
 }
 
 function toTfRow(record, blobUrlMap) {
   const tf = record.details?.true_false;
   if (!tf?.statement || typeof tf.answer !== "boolean") return null;
 
-  return {
+  return buildQuestionRow(record, blobUrlMap, {
     id: `${record.id}_tf`,
     source_id: String(record.id),
     format: "true_false",
@@ -83,13 +106,7 @@ function toTfRow(record, blobUrlMap) {
     correct_index: tf.answer ? 0 : 1,
     explanation: tf.explanation ? String(tf.explanation).trim() : null,
     category: String(record.category ?? "unknown"),
-    hint: record.details?.hint ? String(record.details.hint).trim() : null,
-    funfact: normalizeFunfact(record),
-    difficulty: Number.isInteger(record.details?.difficulty)
-      ? record.details.difficulty
-      : null,
-    image_url: resolveImageUrl(record, blobUrlMap),
-  };
+  });
 }
 
 function toRows(records, blobUrlMap) {
@@ -121,10 +138,12 @@ async function upsertRows(sql, rows) {
         "correct_index",
         "explanation",
         "category",
+        "description",
         "hint",
         "funfact",
         "difficulty",
         "image_url",
+        "fallback_image_url",
       )}
       on conflict (id) do update set
         source_id = excluded.source_id,
@@ -135,10 +154,12 @@ async function upsertRows(sql, rows) {
         correct_index = excluded.correct_index,
         explanation = excluded.explanation,
         category = excluded.category,
+        description = excluded.description,
         hint = excluded.hint,
         funfact = excluded.funfact,
         difficulty = excluded.difficulty,
         image_url = excluded.image_url,
+        fallback_image_url = excluded.fallback_image_url,
         updated_at = now()
     `;
     upserted += batch.length;
