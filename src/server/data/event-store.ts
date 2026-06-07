@@ -1,5 +1,6 @@
 import "server-only";
 
+import { toEventImageProxyUrl } from "~/lib/event-image-url";
 import { sql } from "~/server/db/client";
 import { type HistoricalEvent } from "~/types/event";
 
@@ -36,7 +37,7 @@ function toHistoricalEvent(row: HistoricalEventRow): HistoricalEvent {
     location: row.location,
     category: row.category,
     wikipediaTitle: row.wikipedia_title ?? undefined,
-    imageUrl: row.image_url ?? undefined,
+    imageUrl: toEventImageProxyUrl(row.image_url),
     funfact: parseFunfact(row.funfact),
   };
 }

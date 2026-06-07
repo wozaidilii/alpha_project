@@ -7,6 +7,7 @@ import {
   IMAGES_SOURCE,
   loadBlobUrlMap,
   normalizeLocalPath,
+  toEventImageProxyUrl,
 } from "./event-image-paths.mjs";
 
 const CATEGORY_MAP = {
@@ -38,15 +39,15 @@ function resolveImageUrl(record, blobUrlMap) {
   const normalizedLocal = normalizeLocalPath(firstLocal?.local_path);
   if (normalizedLocal) {
     const blobUrl = blobUrlMap[normalizedLocal];
-    if (blobUrl) return blobUrl;
+    if (blobUrl) return toEventImageProxyUrl(blobUrl);
   }
 
-  return (
+  return toEventImageProxyUrl(
     record.image_url ??
-    firstLocal?.thumb_url ??
-    record.images?.[0]?.thumb_url ??
-    record.images?.[0]?.url ??
-    null
+      firstLocal?.thumb_url ??
+      record.images?.[0]?.thumb_url ??
+      record.images?.[0]?.url ??
+      null,
   );
 }
 
@@ -137,11 +138,11 @@ if (rows.length === 0) {
   throw new Error("deepseek_events.json 中没有可导入的记录");
 }
 
-const withBlobImage = rows.filter((row) =>
-  row.image_url?.includes("blob.vercel-storage.com"),
+const withProxyImage = rows.filter((row) =>
+  row.image_url?.startsWith("/api/event-images"),
 ).length;
 const withRemoteImage = rows.filter(
-  (row) => row.image_url && !row.image_url.includes("blob.vercel-storage.com"),
+  (row) => row.image_url && !row.image_url.startsWith("/api/event-images"),
 ).length;
 const withoutImage = rows.filter((row) => !row.image_url).length;
 const withFunfact = rows.filter((row) => row.funfact.length > 0).length;
@@ -160,7 +161,7 @@ try {
   console.log(
     [
       `导入完成：${upserted} 条历史地理题目`,
-      `Blob 配图 ${withBlobImage} 条`,
+      `代理配图 ${withProxyImage} 条`,
       `远程配图 ${withRemoteImage} 条`,
       `无配图 ${withoutImage} 条`,
       `含冷知识 ${withFunfact} 条`,
