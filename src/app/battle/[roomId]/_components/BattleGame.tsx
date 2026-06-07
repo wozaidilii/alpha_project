@@ -28,6 +28,7 @@ import { GameMap } from "~/app/game/_components/GameMap";
 import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
 import { type PlayerAvatar } from "~/types/player";
+import { type CharacterConfig } from "~/types/character";
 import { api } from "~/trpc/react";
 import { playCountdownTick } from "~/lib/countdown-audio";
 import { HPBar } from "./HPBar";
@@ -77,6 +78,7 @@ interface Props {
   playerName: string;
   playerUserId?: string;
   playerAvatar: PlayerAvatar;
+  playerCharacter?: CharacterConfig;
   hostSettings: BattleSettings | null;
 }
 
@@ -98,6 +100,7 @@ export function BattleGame({
   playerName,
   playerUserId,
   playerAvatar,
+  playerCharacter,
   hostSettings,
 }: Props) {
   const utils = api.useUtils();
@@ -112,6 +115,7 @@ export function BattleGame({
       userId: playerUserId,
       name: playerName,
       avatar: playerAvatar,
+      character: playerCharacter,
       hp: hostSettings?.startingHp ?? 100,
       isHost,
     },
@@ -267,6 +271,7 @@ export function BattleGame({
           userId: data.userId,
           name: data.name,
           avatar: data.avatar,
+          character: data.character,
           hp: hostSettings?.startingHp ?? settingsRef.current.startingHp,
           isHost: false,
         },
@@ -346,6 +351,7 @@ export function BattleGame({
       userId: playerUserId,
       name: playerName,
       avatar: playerAvatar,
+      character: playerCharacter,
     } satisfies PusherPlayerJoined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

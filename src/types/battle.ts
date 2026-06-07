@@ -1,5 +1,6 @@
 import { type HistoricalEvent } from "~/types/event";
 import { type PlayerAvatar } from "~/types/player";
+import { type CharacterConfig } from "~/types/character";
 
 export type BattlePhase =
   | "lobby"        // waiting for 2nd player
@@ -12,6 +13,7 @@ export interface BattlePlayer {
   userId?: string;
   name: string;
   avatar: PlayerAvatar;
+  character?: CharacterConfig;
   hp: number;
   isHost: boolean;
 }
@@ -48,6 +50,7 @@ export interface PusherPlayerJoined {
   userId?: string;
   name: string;
   avatar: PlayerAvatar;
+  character?: CharacterConfig;
 }
 
 export interface PusherGameStarted {

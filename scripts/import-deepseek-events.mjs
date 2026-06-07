@@ -1,15 +1,13 @@
-import { access, copyFile, mkdir, readFile, symlink } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
 import { loadEnvFiles } from "./load-env.mjs";
-
-const ROOT = process.cwd();
-const DEEPSEEK_JSON = path.join(
-  ROOT,
-  "scripts/python/rawdata/deepseek_events.json",
-);
-const IMAGES_SOURCE = path.join(ROOT, "scripts/python/rawdata/images");
-const PUBLIC_EVENT_IMAGES = path.join(ROOT, "public/event-images");
+import {
+  DEEPSEEK_JSON,
+  IMAGES_SOURCE,
+  loadBlobUrlMap,
+  normalizeLocalPath,
+} from "./event-image-paths.mjs";
 
 const CATEGORY_MAP = {
   historical_event: "china",
@@ -35,11 +33,12 @@ function normalizeFunfact(record) {
     .slice(0, 3);
 }
 
-function resolveImageUrl(record) {
+function resolveImageUrl(record, blobUrlMap) {
   const firstLocal = record.images?.find((image) => image.local_path);
-  if (firstLocal?.local_path) {
-    const relative = String(firstLocal.local_path).replace(/^images[/\\]/, "");
-    return `/event-images/${relative.replaceAll("\\", "/")}`;
+  const normalizedLocal = normalizeLocalPath(firstLocal?.local_path);
+  if (normalizedLocal) {
+    const blobUrl = blobUrlMap[normalizedLocal];
+    if (blobUrl) return blobUrl;
   }
 
   return (
@@ -63,51 +62,7 @@ function isImportable(record) {
   );
 }
 
-async function ensurePublicImagesLink() {
-  await mkdir(path.join(ROOT, "public"), { recursive: true });
-
-  try {
-    await access(PUBLIC_EVENT_IMAGES);
-    return "existing";
-  } catch {
-    // Continue to create the link or copy fallback.
-  }
-
-  try {
-    await symlink(IMAGES_SOURCE, PUBLIC_EVENT_IMAGES, "junction");
-    return "symlink";
-  } catch (error) {
-    console.warn(
-      `无法创建图片目录联接，将改为逐条复制首图：${error instanceof Error ? error.message : error}`,
-    );
-    return "copy";
-  }
-}
-
-async function copyFirstImages(records) {
-  let copied = 0;
-  for (const record of records) {
-    const image = record.images?.find((item) => item.local_path);
-    if (!image?.local_path) continue;
-
-    const relative = String(image.local_path).replace(/^images[/\\]/, "");
-    const sourcePath = path.join(IMAGES_SOURCE, relative);
-    const targetPath = path.join(PUBLIC_EVENT_IMAGES, relative);
-
-    try {
-      await access(sourcePath);
-    } catch {
-      continue;
-    }
-
-    await mkdir(path.dirname(targetPath), { recursive: true });
-    await copyFile(sourcePath, targetPath);
-    copied += 1;
-  }
-  return copied;
-}
-
-function toRows(records) {
+function toRows(records, blobUrlMap) {
   return records.filter(isImportable).map((record) => ({
     id: String(record.id),
     title: String(record.title),
@@ -120,7 +75,7 @@ function toRows(records) {
     wikipedia_title: record.wikipedia_title
       ? String(record.wikipedia_title)
       : null,
-    image_url: resolveImageUrl(record),
+    image_url: resolveImageUrl(record, blobUrlMap),
     funfact: normalizeFunfact(record),
   }));
 }
@@ -175,28 +130,28 @@ if (!databaseUrl) {
 
 const raw = JSON.parse(await readFile(DEEPSEEK_JSON, "utf8"));
 const records = Array.isArray(raw.records) ? raw.records : [];
-const rows = toRows(records);
+const blobUrlMap = await loadBlobUrlMap();
+const rows = toRows(records, blobUrlMap);
 
 if (rows.length === 0) {
   throw new Error("deepseek_events.json 中没有可导入的记录");
 }
 
-const imageMode = await ensurePublicImagesLink();
-if (imageMode === "copy") {
-  const copied = await copyFirstImages(records);
-  console.log(`已复制 ${copied} 张首图到 public/event-images`);
-} else if (imageMode === "symlink") {
-  console.log("已联接 public/event-images -> scripts/python/rawdata/images");
-}
-
-const withLocalImage = rows.filter((row) =>
-  row.image_url?.startsWith("/event-images/"),
+const withBlobImage = rows.filter((row) =>
+  row.image_url?.includes("blob.vercel-storage.com"),
 ).length;
 const withRemoteImage = rows.filter(
-  (row) => row.image_url && !row.image_url.startsWith("/event-images/"),
+  (row) => row.image_url && !row.image_url.includes("blob.vercel-storage.com"),
 ).length;
 const withoutImage = rows.filter((row) => !row.image_url).length;
 const withFunfact = rows.filter((row) => row.funfact.length > 0).length;
+const mappedBlobCount = Object.keys(blobUrlMap).length;
+
+if (mappedBlobCount === 0) {
+  console.warn(
+    `未找到 Blob 映射文件，请先运行 npm run images:upload（图片目录：${IMAGES_SOURCE}）`,
+  );
+}
 
 const sql = postgres(databaseUrl, { max: 1 });
 
@@ -205,7 +160,7 @@ try {
   console.log(
     [
       `导入完成：${upserted} 条历史地理题目`,
-      `本地配图 ${withLocalImage} 条`,
+      `Blob 配图 ${withBlobImage} 条`,
       `远程配图 ${withRemoteImage} 条`,
       `无配图 ${withoutImage} 条`,
       `含冷知识 ${withFunfact} 条`,

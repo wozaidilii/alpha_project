@@ -1,5 +1,6 @@
 import { BattleGame } from "./_components/BattleGame";
 import { DEFAULT_AVATAR, normalizeAvatar } from "~/types/player";
+import { deserializeCharacter } from "~/types/character";
 
 interface Props {
   params: Promise<{ roomId: string }>;
@@ -17,6 +18,7 @@ export default async function BattleRoomPage({ params, searchParams }: Props) {
     icon: sp.avatarIcon ?? DEFAULT_AVATAR.icon,
     color: sp.avatarColor ?? DEFAULT_AVATAR.color,
   });
+  const character = sp.character ? deserializeCharacter(sp.character) : undefined;
   const settings = isHost
     ? {
         rounds: Number(sp.rounds ?? 5),
@@ -32,6 +34,7 @@ export default async function BattleRoomPage({ params, searchParams }: Props) {
       playerName={name}
       playerUserId={userId}
       playerAvatar={avatar}
+      playerCharacter={character}
       hostSettings={settings}
     />
   );

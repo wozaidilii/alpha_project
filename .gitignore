@@ -18,7 +18,16 @@ db.sqlite
 /.next/
 /out/
 next-env.d.ts
-# /public/event-images  # removed: images are committed to git for Vercel serving
+
+# 题库原始数据与配图（本地保留，图片走 Vercel Blob，题目导入进数据库）
+/deepseek_events.json
+scripts/python/rawdata/deepseek_events.json
+scripts/python/rawdata/images/
+scripts/python/rawdata/image_blob_urls.json
+images.zip
+
+# 旧的本地静态配图（已由 Blob 替代）
+public/event-images
 
 # production
 /build

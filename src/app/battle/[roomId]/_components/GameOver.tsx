@@ -7,6 +7,7 @@ import { type BattleOutcome } from "~/types/player";
 import { formatYear } from "~/lib/scoring";
 import { getStoredPlayerSession } from "~/lib/player-session";
 import { api } from "~/trpc/react";
+import { CharacterSVG } from "~/components/CharacterSVG";
 
 interface Props {
   roomId: string;
@@ -86,11 +87,17 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
       <div className="mx-auto w-full max-w-lg px-6 py-8">
         {/* Winner banner */}
         <div className="mb-8 rounded-2xl bg-gradient-to-br from-red-900/40 to-stone-800 p-8 text-center">
-          <div
-            className="mx-auto mb-3 grid h-20 w-20 place-items-center rounded-full text-5xl"
-            style={{ backgroundColor: winner.avatar.color }}
-          >
-            {winner.avatar.icon}
+          <div className="mx-auto mb-3 flex h-24 w-24 items-end justify-center overflow-hidden rounded-full bg-stone-700">
+            {winner.character ? (
+              <CharacterSVG config={winner.character} size={88} view="bust" />
+            ) : (
+              <div
+                className="grid h-24 w-24 place-items-center rounded-full text-5xl"
+                style={{ backgroundColor: winner.avatar.color }}
+              >
+                {winner.avatar.icon}
+              </div>
+            )}
           </div>
           <div className="text-2xl font-extrabold text-amber-400">
             {iWon ? "你赢了！" : `${winner.name} 获胜！`}
@@ -112,12 +119,18 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{i === 0 ? "🥇" : "🥈"}</span>
-                <span
-                  className="grid h-10 w-10 place-items-center rounded-full"
-                  style={{ backgroundColor: p.avatar.color }}
-                >
-                  {p.avatar.icon}
-                </span>
+                <div className="flex h-10 w-10 items-end justify-center overflow-hidden rounded-full bg-stone-700">
+                  {p.character ? (
+                    <CharacterSVG config={p.character} size={40} view="bust" />
+                  ) : (
+                    <span
+                      className="grid h-10 w-10 place-items-center rounded-full text-xl"
+                      style={{ backgroundColor: p.avatar.color }}
+                    >
+                      {p.avatar.icon}
+                    </span>
+                  )}
+                </div>
                 <div>
                   <div className="font-bold">
                     {p.name}{p.id === myId && <span className="ml-1 text-xs text-amber-400">(你)</span>}

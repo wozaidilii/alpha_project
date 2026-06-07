@@ -8,6 +8,7 @@ import {
   AuthLoading,
   useCompletedPlayerSession,
 } from "~/lib/player-session-guard";
+import { CHARACTER_STORAGE_KEY } from "~/types/character";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -42,6 +43,9 @@ export default function BattleLobby() {
     params.set("name", activeSession.user.name);
     params.set("avatarIcon", activeSession.user.avatar.icon);
     params.set("avatarColor", activeSession.user.avatar.color);
+    // Attach character config if player has customized one
+    const character = localStorage.getItem(CHARACTER_STORAGE_KEY);
+    if (character) params.set("character", character);
   }
 
   async function handleCreate() {
