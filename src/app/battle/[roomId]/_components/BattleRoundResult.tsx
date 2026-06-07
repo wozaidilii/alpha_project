@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import { type BattleRoundResult, type BattlePlayer } from "~/types/battle";
-import {
-  formatAnswerYear,
-  formatYear,
-} from "~/lib/scoring";
-import {
-  getQuestionResultSubtitle,
-} from "~/lib/question-utils";
+import { formatAnswerYear, formatYear } from "~/lib/scoring";
+import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import {
   getQuestionYearEnd,
   isFunfactQuestion,
   isHistoricalQuestion,
+  type QuestionType,
 } from "~/types/question";
 import {
   mountResultMap,
@@ -27,32 +23,35 @@ interface Props {
   result: BattleRoundResult;
   players: Record<string, BattlePlayer>;
   myId: string;
+  questionType: QuestionType;
+  roundReady: Record<string, boolean>;
   isLastRound: boolean;
-  isHost: boolean;
-  onNext: () => void;
-  onViewResults: () => void;
+  onReady: () => void;
 }
 
 export function BattleRoundResultView({
   result,
   players,
   myId,
+  questionType,
+  roundReady,
   isLastRound,
-  isHost,
-  onNext,
-  onViewResults,
+  onReady,
 }: Props) {
-  const [mapSlot, setMapSlot] = useState(0);
   const mapRef = useRef<ChinaResultMapHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { question } = result;
-  const showMap = result.question.type === "historical";
+  const showMap =
+    questionType === "historical" && isHistoricalQuestion(question);
   const yearEnd = getQuestionYearEnd(question);
+  const playerIds = Object.keys(players);
+  const iAmReady = roundReady[myId] === true;
+  const allReady =
+    playerIds.length >= 2 &&
+    playerIds.every((id) => roundReady[id] === true);
 
   useEffect(() => {
-    if (!showMap || !isHistoricalQuestion(question) || !containerRef.current) {
-      return;
-    }
+    if (!showMap || !containerRef.current) return;
 
     const container = containerRef.current;
     let active = true;
@@ -98,12 +97,8 @@ export function BattleRoundResultView({
       active = false;
       mapRef.current?.destroy();
       mapRef.current = null;
-      setMapSlot((slot) => slot + 1);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMap, mapSlot]);
-
-  const playerIds = Object.keys(players);
+  }, [showMap, result.roundIndex, question, players, result.guesses]);
 
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
     if (isFunfactQuestion(question)) {
@@ -155,7 +150,6 @@ export function BattleRoundResultView({
       <div className="flex-1 overflow-auto">
         {showMap && (
           <div
-            key={mapSlot}
             ref={containerRef}
             className="w-full border-b border-stone-700"
             style={{ height: 300 }}
@@ -256,25 +250,41 @@ export function BattleRoundResultView({
             );
           })()}
 
-          {isHost && !isLastRound && (
-            <button
-              onClick={onNext}
-              className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400"
-            >
-              下一轮 →
-            </button>
-          )}
-          {isHost && isLastRound && (
-            <button
-              onClick={onViewResults}
-              className="w-full rounded-xl bg-amber-500 py-3 font-bold text-stone-900 transition hover:bg-amber-400"
-            >
-              查看最终结果 🏆
-            </button>
-          )}
-          {!isHost && (
-            <p className="text-center text-stone-400">
-              {isLastRound ? "等待房主查看最终结果…" : "等待房主进入下一轮…"}
+          <div className="mb-4 flex flex-wrap justify-center gap-3">
+            {playerIds.map((pid) => (
+              <span
+                key={pid}
+                className={`rounded-full px-3 py-1 text-xs ${
+                  roundReady[pid]
+                    ? "bg-green-900/40 text-green-300"
+                    : "bg-stone-800 text-stone-400"
+                }`}
+              >
+                {players[pid]?.name}
+                {roundReady[pid] ? " ✓ 已准备" : " · 未准备"}
+              </span>
+            ))}
+          </div>
+
+          <button
+            onClick={onReady}
+            disabled={iAmReady || allReady}
+            className={`w-full rounded-xl py-3 font-bold transition ${
+              iAmReady
+                ? "cursor-default bg-green-800 text-green-200"
+                : "bg-red-500 text-white hover:bg-red-400"
+            }`}
+          >
+            {iAmReady
+              ? "✓ 已准备，等待对手…"
+              : isLastRound
+                ? "准备 · 查看最终结果"
+                : "准备 · 下一轮"}
+          </button>
+
+          {allReady && (
+            <p className="mt-3 text-center text-sm text-amber-300">
+              双方已准备，即将继续…
             </p>
           )}
         </div>

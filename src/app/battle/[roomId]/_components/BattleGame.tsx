@@ -23,6 +23,7 @@ import {
   type PusherRoundStarted,
   type PusherGuessSubmitted,
   type PusherRoundResults,
+  type PusherRoundReady,
   type PusherGameOver,
 } from "~/types/battle";
 import {
@@ -167,6 +168,7 @@ export function BattleGame({
   const [lobbyError, setLobbyError] = useState("");
   const [lobbySynced, setLobbySynced] = useState(isHost);
   const [gameSyncing, setGameSyncing] = useState(false);
+  const [roundReady, setRoundReady] = useState<Record<string, boolean>>({});
 
   const playersRef = useRef(players);
   useEffect(() => {
@@ -196,6 +198,7 @@ export function BattleGame({
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
   const resolvedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
+  const roundReadyRef = useRef<Record<string, boolean>>({});
 
   const gameMode = getGameMode(settings.questionType);
   const currentQuestion = questions[currentRound];
@@ -225,6 +228,33 @@ export function BattleGame({
     void sendPusherEvent(channel, "room-settings", {
       settings: settingsRef.current,
     } satisfies PusherRoomSettings);
+  }
+
+  function announcePresence() {
+    void sendPusherEvent(channel, "player-joined", {
+      playerId: myId.current,
+      userId: playerUserId,
+      name: playerName,
+      avatar: playerAvatar,
+      character: playerCharacter,
+      isHost,
+    } satisfies PusherPlayerJoined);
+  }
+
+  function upsertPlayer(data: PusherPlayerJoined) {
+    if (data.playerId === myId.current) return;
+    setPlayers((prev) => ({
+      ...prev,
+      [data.playerId]: {
+        id: data.playerId,
+        userId: data.userId,
+        name: data.name,
+        avatar: data.avatar,
+        character: data.character,
+        hp: settingsRef.current.startingHp,
+        isHost: data.isHost ?? false,
+      },
+    }));
   }
 
   function applyGameStarted(
@@ -288,7 +318,65 @@ export function BattleGame({
     setGuessIndex(null);
     setSubmitted(false);
     setOpponentSubmitted(false);
+    roundReadyRef.current = {};
+    setRoundReady({});
     setPhase("playing");
+  }
+
+  function handleNextRoundInternal() {
+    const next = currentRoundRef.current + 1;
+    if (next >= settingsRef.current.rounds) return;
+    const startTime = Date.now();
+    beginRound(next, startTime);
+    void sendPusherEvent(channel, "round-started", {
+      roundIndex: next,
+      startTime,
+    } satisfies PusherRoundStarted);
+  }
+
+  function checkAllReadyAndProceed() {
+    if (!isHost) return;
+
+    const ids = Object.keys(playersRef.current);
+    if (ids.length < 2) return;
+    if (!ids.every((id) => roundReadyRef.current[id])) return;
+
+    roundReadyRef.current = {};
+    setRoundReady({});
+
+    const roundIdx = currentRoundRef.current;
+    const isLastRound =
+      roundIdx >= settingsRef.current.rounds - 1 ||
+      ids.some((id) => (playersRef.current[id]?.hp ?? 0) <= 0);
+
+    if (isLastRound) {
+      const finalHp: Record<string, number> = {};
+      for (const id of ids) {
+        finalHp[id] = playersRef.current[id]?.hp ?? 0;
+      }
+      void sendPusherEvent(channel, "game-over", {
+        results: [],
+        finalHp,
+      } satisfies PusherGameOver);
+      setPhase("game-over");
+      return;
+    }
+
+    handleNextRoundInternal();
+  }
+
+  function handleRoundReady() {
+    const roundIdx = currentRoundRef.current;
+    if (roundReadyRef.current[myId.current]) return;
+
+    roundReadyRef.current[myId.current] = true;
+    setRoundReady({ ...roundReadyRef.current });
+    void sendPusherEvent(channel, "round-ready", {
+      playerId: myId.current,
+      roundIndex: roundIdx,
+    } satisfies PusherRoundReady);
+
+    if (isHost) checkAllReadyAndProceed();
   }
 
   function resolveRound() {
@@ -344,18 +432,26 @@ export function BattleGame({
       hpAfter,
       damage,
     };
+    applyRoundResult(result);
     void sendPusherEvent(channel, "round-results", {
       result,
     } satisfies PusherRoundResults);
+  }
 
-    const someOneDead = Object.values(hpAfter).some((hp) => hp <= 0);
-    const lastRound = roundIdx >= settingsRef.current.rounds - 1;
-    if (someOneDead || lastRound) {
-      void sendPusherEvent(channel, "game-over", {
-        results: [],
-        finalHp: hpAfter,
-      } satisfies PusherGameOver);
-    }
+  function applyRoundResult(result: BattleRoundResult) {
+    setResults((prev) => [...prev, result]);
+    setPlayers((prev) => {
+      const next = { ...prev };
+      for (const [pid, hp] of Object.entries(result.hpAfter)) {
+        const existing = next[pid];
+        if (existing) next[pid] = { ...existing, hp };
+      }
+      playersRef.current = next;
+      return next;
+    });
+    roundReadyRef.current = {};
+    setRoundReady({});
+    setPhase("round-result");
   }
 
   useEffect(() => {
@@ -363,20 +459,11 @@ export function BattleGame({
     const ch = pusher.subscribe(channel);
 
     ch.bind("player-joined", (data: PusherPlayerJoined) => {
-      if (data.playerId === myId.current) return;
-      setPlayers((prev) => ({
-        ...prev,
-        [data.playerId]: {
-          id: data.playerId,
-          userId: data.userId,
-          name: data.name,
-          avatar: data.avatar,
-          character: data.character,
-          hp: settingsRef.current.startingHp,
-          isHost: false,
-        },
-      }));
-      if (isHost) broadcastRoomSettings();
+      upsertPlayer(data);
+      if (isHost) {
+        broadcastRoomSettings();
+        announcePresence();
+      }
     });
 
     ch.bind("room-settings", (data: PusherRoomSettings) => {
@@ -412,16 +499,20 @@ export function BattleGame({
     });
 
     ch.bind("round-results", (data: PusherRoundResults) => {
-      setResults((prev) => [...prev, data.result]);
-      setPlayers((prev) => {
-        const next = { ...prev };
-        for (const [pid, hp] of Object.entries(data.result.hpAfter)) {
-          const existing = next[pid];
-          if (existing) next[pid] = { ...existing, hp };
-        }
-        return next;
+      if (isHost) return;
+      const localQuestion =
+        questionsRef.current[data.result.roundIndex] ?? data.result.question;
+      applyRoundResult({
+        ...data.result,
+        question: localQuestion,
       });
-      setPhase("round-result");
+    });
+
+    ch.bind("round-ready", (data: PusherRoundReady) => {
+      if (data.roundIndex !== currentRoundRef.current) return;
+      roundReadyRef.current[data.playerId] = true;
+      setRoundReady({ ...roundReadyRef.current });
+      if (isHost) checkAllReadyAndProceed();
     });
 
     ch.bind("game-over", (data: PusherGameOver) => {
@@ -431,9 +522,10 @@ export function BattleGame({
           const existing = next[pid];
           if (existing) next[pid] = { ...existing, hp };
         }
+        playersRef.current = next;
         return next;
       });
-      setPhase("game-over");
+      if (!isHost) setPhase("game-over");
     });
 
     return () => {
@@ -444,20 +536,15 @@ export function BattleGame({
   }, []);
 
   useEffect(() => {
-    if (!isHost || phase !== "lobby") return;
-    broadcastRoomSettings();
+    if (phase !== "lobby") return;
+    if (isHost) broadcastRoomSettings();
+    announcePresence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHost, phase]);
+  }, [phase]);
 
   useEffect(() => {
     if (isHost) return;
-    void sendPusherEvent(channel, "player-joined", {
-      playerId: myId.current,
-      userId: playerUserId,
-      name: playerName,
-      avatar: playerAvatar,
-      character: playerCharacter,
-    } satisfies PusherPlayerJoined);
+    announcePresence();
     void sendPusherEvent(channel, "request-room-settings", {
       playerId: myId.current,
     } satisfies PusherRequestRoomSettings);
@@ -546,23 +633,6 @@ export function BattleGame({
       guessIndex: needsQuiz ? guessIndex : undefined,
       submittedAt: Date.now(),
     } satisfies PusherGuessSubmitted);
-  }
-
-  function handleNextRound() {
-    if (!isHost) return;
-    const next = currentRound + 1;
-    if (next >= settings.rounds) return;
-
-    const startTime = Date.now();
-    beginRound(next, startTime);
-    void sendPusherEvent(channel, "round-started", {
-      roundIndex: next,
-      startTime,
-    } satisfies PusherRoundStarted);
-  }
-
-  function handleViewResults() {
-    setPhase("game-over");
   }
 
   const me = players[myId.current];
@@ -706,10 +776,10 @@ export function BattleGame({
         result={lastResult}
         players={players}
         myId={myId.current}
+        questionType={settings.questionType}
+        roundReady={roundReady}
         isLastRound={isLastRound}
-        isHost={isHost}
-        onNext={handleNextRound}
-        onViewResults={handleViewResults}
+        onReady={handleRoundReady}
       />
     );
   }

@@ -56,6 +56,7 @@ export interface PusherPlayerJoined {
   name: string;
   avatar: PlayerAvatar;
   character?: CharacterConfig;
+  isHost?: boolean;
 }
 
 /** 房主广播大厅设置，供加入方同步 */
@@ -93,6 +94,12 @@ export interface PusherGuessSubmitted {
 
 export interface PusherRoundResults {
   result: BattleRoundResult;
+}
+
+/** 结果页点击「准备」 */
+export interface PusherRoundReady {
+  playerId: string;
+  roundIndex: number;
 }
 
 export interface PusherGameOver {
