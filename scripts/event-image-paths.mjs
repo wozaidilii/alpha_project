@@ -71,3 +71,30 @@ export async function fileExists(filePath) {
     return false;
   }
 }
+
+const EVENT_IMAGE_PREFIX = "event-images/";
+const PROXY_PATH = "/api/event-images";
+
+/** 将 Blob 直链转为线上可访问的代理地址 */
+export function toEventImageProxyUrl(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== "string") return null;
+
+  const trimmed = imageUrl.trim();
+  if (trimmed.startsWith(`${PROXY_PATH}?`)) return trimmed;
+
+  if (trimmed.startsWith(EVENT_IMAGE_PREFIX)) {
+    return `${PROXY_PATH}?pathname=${encodeURIComponent(trimmed)}`;
+  }
+
+  try {
+    const { pathname } = new URL(trimmed);
+    const normalized = decodeURIComponent(pathname.replace(/^\/+/, ""));
+    if (normalized.startsWith(EVENT_IMAGE_PREFIX)) {
+      return `${PROXY_PATH}?pathname=${encodeURIComponent(normalized)}`;
+    }
+  } catch {
+    // 保留 Wikimedia 等外部 URL
+  }
+
+  return trimmed;
+}
