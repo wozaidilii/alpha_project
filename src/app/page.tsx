@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   AuthLoading,
@@ -10,14 +10,15 @@ import {
 import { CharacterSVG } from "~/components/CharacterSVG";
 import {
   type CharacterConfig,
-  CHARACTER_STORAGE_KEY,
-  deserializeCharacter,
+  CHARACTER_UPDATED_EVENT,
 } from "~/types/character";
+import { readStoredCharacter } from "~/lib/character-sync";
 
 type GameMode = "solo" | "battle";
 
 export default function Home() {
   const router = useRouter();
+  const pathname = usePathname();
   const { ready, session } = useCompletedPlayerSession();
 
   const [character, setCharacter] = useState<CharacterConfig | null>(null);
@@ -25,14 +26,30 @@ export default function Home() {
   const [selectedMode, setSelectedMode] = useState<GameMode>("solo");
   const redirectedRef = useRef(false);
 
-  // Load character from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(CHARACTER_STORAGE_KEY);
-    if (stored) setCharacter(deserializeCharacter(stored));
+  const syncCharacter = useCallback(() => {
+    const stored = readStoredCharacter();
+    setCharacter(stored);
     setCharacterChecked(true);
+    return stored;
   }, []);
 
-  // Force character creation if none exists
+  useEffect(() => {
+    syncCharacter();
+  }, [syncCharacter]);
+
+  useEffect(() => {
+    if (pathname === "/") {
+      syncCharacter();
+    }
+  }, [pathname, syncCharacter]);
+
+  useEffect(() => {
+    const onCharacterUpdated = () => syncCharacter();
+    window.addEventListener(CHARACTER_UPDATED_EVENT, onCharacterUpdated);
+    return () =>
+      window.removeEventListener(CHARACTER_UPDATED_EVENT, onCharacterUpdated);
+  }, [syncCharacter]);
+
   useEffect(() => {
     if (!ready || !characterChecked || redirectedRef.current) return;
     if (!character) {
@@ -49,7 +66,10 @@ export default function Home() {
     }
   }
 
-  // Show loading while auth or character not yet checked
+  function handleEditCharacter() {
+    void router.push("/character");
+  }
+
   if (!ready || !characterChecked || (!character && ready)) {
     return <AuthLoading />;
   }
@@ -58,22 +78,22 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-stone-950 text-white">
-      {/* ── Left Sidebar ── */}
-      <aside className="flex w-20 flex-col items-center border-r border-stone-800 bg-stone-900 py-5">
-        {/* Logo */}
-        <div className="text-3xl" title="HistoGuessr">🗺️</div>
+      <aside className="relative z-20 flex w-20 flex-col items-center border-r border-stone-800 bg-stone-900 py-5">
+        <div className="text-3xl" title="HistoGuessr">
+          🗺️
+        </div>
 
         <div className="flex-1" />
 
-        {/* Nav icons */}
         <div className="mb-4 flex flex-col items-center gap-3">
-          <Link
-            href="/character"
+          <button
+            type="button"
+            onClick={handleEditCharacter}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-xl text-stone-500 transition hover:bg-stone-800 hover:text-amber-400"
             title="捏脸"
           >
             ✏️
-          </Link>
+          </button>
           <Link
             href="/profile"
             className="flex h-10 w-10 items-center justify-center rounded-xl text-xl text-stone-500 transition hover:bg-stone-800 hover:text-amber-400"
@@ -83,7 +103,6 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* Avatar at bottom */}
         <div className="flex flex-col items-center gap-1.5">
           <div className="flex h-12 w-12 items-end justify-center overflow-hidden rounded-full bg-stone-800 ring-2 ring-stone-700">
             {session.user.avatar && (
@@ -101,30 +120,44 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* ── Main content ── */}
-      <main className="flex flex-1 flex-col items-center justify-center gap-8 px-8">
-        {/* Title */}
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-8 px-8">
         <h1 className="text-3xl font-extrabold tracking-wide text-amber-400">
           HistoGuessr
         </h1>
 
-        {/* Character (center-piece) */}
         <div className="relative flex flex-col items-center">
-          {/* Glow backdrop */}
-          <div className="absolute bottom-0 h-32 w-32 rounded-full bg-amber-500/10 blur-2xl" />
+          <div className="pointer-events-none absolute -inset-8 rounded-[3rem] bg-amber-500/10 blur-3xl" />
 
-          <div className="relative">
+          <button
+            type="button"
+            onClick={handleEditCharacter}
+            className="group relative rounded-[2rem] border border-stone-700/80 bg-gradient-to-b from-stone-900/90 to-stone-950 px-10 pb-6 pt-8 shadow-2xl shadow-black/40 transition hover:border-amber-500/40 hover:shadow-amber-950/20"
+            aria-label="编辑形象"
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-[2rem] bg-gradient-to-b from-amber-300/10 to-transparent" />
+            <div className="pointer-events-none absolute bottom-5 left-1/2 h-4 w-32 -translate-x-1/2 rounded-full bg-black/40 blur-md" />
             <CharacterSVG config={character ?? undefined} size={220} view="full" />
-          </div>
+            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-stone-950/70 px-2.5 py-1 text-[10px] font-medium text-amber-300 opacity-0 transition group-hover:opacity-100">
+              点击编辑
+            </span>
+          </button>
 
-          <p className="mt-2 text-lg font-semibold text-stone-300">
-            {session.user.name}
-          </p>
+          <div className="relative z-10 mt-4 flex flex-col items-center gap-2">
+            <p className="text-xl font-bold text-stone-100">{session.user.name}</p>
+            <button
+              type="button"
+              onClick={handleEditCharacter}
+              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-sm font-semibold text-amber-300 transition hover:border-amber-400/60 hover:bg-amber-500/20 hover:text-amber-200"
+            >
+              编辑形象
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
         </div>
 
-        {/* Mode selection */}
         <div className="flex gap-4">
           <button
+            type="button"
             onClick={() => setSelectedMode("solo")}
             className={`flex flex-col items-center gap-2 rounded-2xl border px-8 py-5 transition ${
               selectedMode === "solo"
@@ -138,6 +171,7 @@ export default function Home() {
           </button>
 
           <button
+            type="button"
             onClick={() => setSelectedMode("battle")}
             className={`flex flex-col items-center gap-2 rounded-2xl border px-8 py-5 transition ${
               selectedMode === "battle"
@@ -151,8 +185,8 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Start button */}
         <button
+          type="button"
           onClick={handleStart}
           className={`w-64 rounded-2xl py-4 text-lg font-extrabold shadow-lg transition active:scale-95 ${
             selectedMode === "solo"

@@ -4,89 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { CharacterSVG } from "~/components/CharacterSVG";
 import {
   type CharacterConfig,
   DEFAULT_CHARACTER,
+  CHARACTER_PRESETS,
   CHARACTER_STORAGE_KEY,
-  SKIN_TONES,
-  HAIR_COLORS,
-  HAIR_STYLE_NAMES,
-  TOP_COLORS,
-  TOP_STYLE_NAMES,
-  PANTS_COLORS,
-  PANTS_STYLE_NAMES,
   serializeCharacter,
   deserializeCharacter,
 } from "~/types/character";
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function ColorPicker({
-  colors,
-  selected,
-  onChange,
-}: {
-  colors: string[];
-  selected: number;
-  onChange: (i: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {colors.map((color, i) => (
-        <button
-          key={i}
-          onClick={() => onChange(i)}
-          className="h-8 w-8 rounded-full transition hover:scale-110"
-          style={{
-            backgroundColor: color,
-            outline: selected === i ? "3px solid #f59e0b" : "2px solid transparent",
-            outlineOffset: "2px",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function StylePicker({
-  options,
-  selected,
-  onChange,
-}: {
-  options: string[];
-  selected: number;
-  onChange: (i: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((name, i) => (
-        <button
-          key={i}
-          onClick={() => onChange(i)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-            selected === i
-              ? "bg-amber-500 text-stone-900"
-              : "bg-stone-700 text-stone-300 hover:bg-stone-600"
-          }`}
-        >
-          {name}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl bg-stone-800 p-4">
-      <h3 className="mb-3 text-sm font-semibold text-stone-400">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-// ─── Inner page (needs searchParams) ─────────────────────────────────────────
+import { notifyCharacterUpdated } from "~/lib/character-sync";
+import {
+  TabBar,
+  PreviewStage,
+  PanelSection,
+  ColorSwatchGrid,
+  StyleCardGrid,
+  PALETTE_META,
+  type CustomizerTab,
+} from "~/components/character/CustomizerWidgets";
 
 function CharacterPageInner() {
   const router = useRouter();
@@ -95,6 +30,7 @@ function CharacterPageInner() {
 
   const [config, setConfig] = useState<CharacterConfig>(DEFAULT_CHARACTER);
   const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<CustomizerTab>("skin");
 
   useEffect(() => {
     const stored = localStorage.getItem(CHARACTER_STORAGE_KEY);
@@ -108,6 +44,7 @@ function CharacterPageInner() {
 
   function handleSave() {
     localStorage.setItem(CHARACTER_STORAGE_KEY, serializeCharacter(config));
+    notifyCharacterUpdated();
     setSaved(true);
     if (required) {
       void router.replace("/");
@@ -119,102 +56,159 @@ function CharacterPageInner() {
     setSaved(false);
   }
 
+  function handleRandomize() {
+    const preset =
+      CHARACTER_PRESETS[Math.floor(Math.random() * CHARACTER_PRESETS.length)]!;
+    setConfig(preset);
+    setSaved(false);
+  }
+
   return (
-    <div className="min-h-screen bg-stone-900 text-white">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_#292018_0%,_#0c0a09_55%)] text-white">
+      <div className="flex items-center justify-between border-b border-stone-800/80 bg-stone-950/50 px-6 py-4 backdrop-blur">
         {required ? (
-          <span className="text-sm text-stone-500">创建你的角色后才能开始游戏</span>
+          <span className="text-sm text-stone-500">创建角色后即可开始探险</span>
         ) : (
-          <Link href="/" className="text-sm text-stone-400 hover:text-white">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-stone-400 transition hover:bg-stone-800 hover:text-white"
+          >
             ← 返回首页
           </Link>
         )}
-        <h1 className="font-bold text-amber-400">✨ 角色捏脸</h1>
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-[0.2em] text-amber-500/80">
+            Character Studio
+          </p>
+          <h1 className="text-xl font-extrabold text-amber-300">角色捏脸</h1>
+        </div>
         <div className="flex gap-2">
           <button
+            type="button"
+            onClick={handleRandomize}
+            className="rounded-xl border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-violet-500/50 hover:bg-violet-950/40 hover:text-violet-200"
+          >
+            🎲 随机
+          </button>
+          <button
+            type="button"
             onClick={handleReset}
-            className="rounded-lg bg-stone-700 px-3 py-1.5 text-sm text-stone-300 transition hover:bg-stone-600"
+            className="rounded-xl border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-stone-600 hover:bg-stone-800"
           >
             重置
           </button>
           <button
+            type="button"
             onClick={handleSave}
-            className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
+            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
               saved && !required
-                ? "bg-green-600 text-white"
-                : "bg-amber-500 text-stone-900 hover:bg-amber-400"
+                ? "bg-emerald-600 text-white"
+                : "bg-gradient-to-r from-amber-400 to-amber-500 text-stone-950 hover:from-amber-300 hover:to-amber-400"
             }`}
           >
-            {required ? "完成，进入游戏 →" : saved ? "✓ 已保存" : "保存"}
+            {required ? "完成 →" : saved ? "✓ 已保存" : "保存形象"}
           </button>
         </div>
       </div>
 
       {required && (
-        <div className="border-b border-amber-900/50 bg-amber-900/20 px-6 py-2 text-center text-sm text-amber-400">
-          👋 欢迎！先捏一个专属角色，然后就可以开始游戏了
+        <div className="border-b border-amber-500/20 bg-amber-500/10 px-6 py-3 text-center text-sm text-amber-200">
+          欢迎加入 HistoGuessr！先打造你的专属探险家形象吧
         </div>
       )}
 
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 p-6 md:flex-row">
-        {/* Left: Preview */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex h-72 w-48 items-end justify-center rounded-2xl bg-gradient-to-b from-stone-700 to-stone-800">
-            <CharacterSVG config={config} size={160} view="full" />
-          </div>
-          <div className="flex gap-4">
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex h-12 w-12 items-end justify-center overflow-hidden rounded-full bg-stone-700">
-                <CharacterSVG config={config} size={52} view="bust" />
-              </div>
-              <span className="text-xs text-stone-500">头像</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex h-16 w-12 items-end justify-center overflow-hidden rounded-xl bg-stone-700 pb-1">
-                <CharacterSVG config={config} size={44} view="full" />
-              </div>
-              <span className="text-xs text-stone-500">全身</span>
-            </div>
-          </div>
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[minmax(280px,360px)_1fr] lg:px-8">
+        <div className="lg:sticky lg:top-8 lg:self-start">
+          <PreviewStage config={config} />
         </div>
 
-        {/* Right: Options */}
-        <div className="flex flex-1 flex-col gap-4">
-          <Section title="🎨 肤色">
-            <ColorPicker colors={SKIN_TONES} selected={config.skinTone} onChange={(v) => update("skinTone", v)} />
-          </Section>
+        <div className="flex flex-col gap-5">
+          <TabBar active={activeTab} onChange={setActiveTab} />
 
-          <Section title="💇 发型">
-            <StylePicker options={HAIR_STYLE_NAMES} selected={config.hairStyle} onChange={(v) => update("hairStyle", v)} />
-            {config.hairStyle !== 4 && (
-              <div className="mt-3">
-                <p className="mb-2 text-xs text-stone-500">发色</p>
-                <ColorPicker colors={HAIR_COLORS} selected={config.hairColor} onChange={(v) => update("hairColor", v)} />
-              </div>
-            )}
-          </Section>
+          {activeTab === "skin" && (
+            <PanelSection title="肤色" subtitle="选择角色的基础肤色">
+              <ColorSwatchGrid
+                colors={[...PALETTE_META.skin.colors]}
+                labels={[...PALETTE_META.skin.labels]}
+                selected={config.skinTone}
+                onChange={(value) => update("skinTone", value)}
+              />
+            </PanelSection>
+          )}
 
-          <Section title="👕 上衣">
-            <StylePicker options={TOP_STYLE_NAMES} selected={config.topStyle} onChange={(v) => update("topStyle", v)} />
-            <div className="mt-3">
-              <p className="mb-2 text-xs text-stone-500">颜色</p>
-              <ColorPicker colors={TOP_COLORS} selected={config.topColor} onChange={(v) => update("topColor", v)} />
-            </div>
-          </Section>
+          {activeTab === "hair" && (
+            <>
+              <PanelSection title="发型" subtitle="点击卡片预览不同发型">
+                <StyleCardGrid
+                  options={[...PALETTE_META.hairStyles]}
+                  selected={config.hairStyle}
+                  onChange={(value) => update("hairStyle", value)}
+                  config={config}
+                  previewKey="hairStyle"
+                />
+              </PanelSection>
+              {config.hairStyle !== 4 && (
+                <PanelSection title="发色" subtitle="为发型搭配喜欢的颜色">
+                  <ColorSwatchGrid
+                    colors={[...PALETTE_META.hair.colors]}
+                    labels={[...PALETTE_META.hair.labels]}
+                    selected={config.hairColor}
+                    onChange={(value) => update("hairColor", value)}
+                  />
+                </PanelSection>
+              )}
+            </>
+          )}
 
-          <Section title="👖 下装">
-            <StylePicker options={PANTS_STYLE_NAMES} selected={config.pantsStyle} onChange={(v) => update("pantsStyle", v)} />
-            <div className="mt-3">
-              <p className="mb-2 text-xs text-stone-500">颜色</p>
-              <ColorPicker colors={PANTS_COLORS} selected={config.pantsColor} onChange={(v) => update("pantsColor", v)} />
-            </div>
-          </Section>
+          {activeTab === "top" && (
+            <>
+              <PanelSection title="上衣款式" subtitle="T 恤、卫衣、连衣裙或正装">
+                <StyleCardGrid
+                  options={[...PALETTE_META.topStyles]}
+                  selected={config.topStyle}
+                  onChange={(value) => update("topStyle", value)}
+                  config={config}
+                  previewKey="topStyle"
+                />
+              </PanelSection>
+              <PanelSection title="上衣颜色">
+                <ColorSwatchGrid
+                  colors={[...PALETTE_META.top.colors]}
+                  labels={[...PALETTE_META.top.labels]}
+                  selected={config.topColor}
+                  onChange={(value) => update("topColor", value)}
+                />
+              </PanelSection>
+            </>
+          )}
+
+          {activeTab === "pants" && (
+            <>
+              <PanelSection title="下装款式">
+                <StyleCardGrid
+                  options={[...PALETTE_META.pantsStyles]}
+                  selected={config.pantsStyle}
+                  onChange={(value) => update("pantsStyle", value)}
+                  config={config}
+                  previewKey="pantsStyle"
+                />
+              </PanelSection>
+              <PanelSection title="下装颜色">
+                <ColorSwatchGrid
+                  colors={[...PALETTE_META.pants.colors]}
+                  labels={[...PALETTE_META.pants.labels]}
+                  selected={config.pantsColor}
+                  onChange={(value) => update("pantsColor", value)}
+                />
+              </PanelSection>
+            </>
+          )}
 
           {required && (
             <button
+              type="button"
               onClick={handleSave}
-              className="w-full rounded-xl bg-amber-500 py-3 text-center font-bold text-stone-900 transition hover:bg-amber-400"
+              className="w-full rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 py-4 text-center text-lg font-extrabold text-stone-950 shadow-lg shadow-amber-950/30 transition hover:from-amber-300 hover:to-amber-400"
             >
               完成，进入游戏 →
             </button>
@@ -225,11 +219,15 @@ function CharacterPageInner() {
   );
 }
 
-// ─── Page (wrapped in Suspense for useSearchParams) ───────────────────────────
-
 export default function CharacterPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-stone-900 text-white">加载中…</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-stone-900 text-white">
+          加载中…
+        </div>
+      }
+    >
       <CharacterPageInner />
     </Suspense>
   );

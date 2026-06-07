@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AvatarPicker } from "~/components/AvatarPicker";
 import {
-  AVATAR_COLORS,
-  AVATAR_ICONS,
   DEFAULT_AVATAR,
   type BattleOutcome,
   type PlayerAvatar,
@@ -147,67 +146,22 @@ export default function ProfilePage() {
             <div className="mt-1 text-xs text-stone-500">/ 50,000</div>
           </div>
 
-          <div className="rounded-xl bg-stone-800 p-4">
-            <div className="mb-4 flex items-center gap-3">
-              <div
-                className="grid h-16 w-16 place-items-center rounded-full text-4xl"
-                style={{ backgroundColor: avatar.color }}
-              >
-                {avatar.icon}
-              </div>
-              <div className="min-w-0 flex-1">
-                <label className="mb-1 block text-sm text-stone-400">
-                  昵称
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={12}
-                  placeholder="最多 12 个字"
-                  className="w-full rounded-lg bg-stone-700 px-3 py-2 text-white placeholder-stone-500 outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-            </div>
-
-            <div className="mb-3">
-              <div className="mb-2 text-sm text-stone-400">形象</div>
-              <div className="grid grid-cols-5 gap-2">
-                {AVATAR_ICONS.map((icon) => (
-                  <button
-                    key={icon}
-                    type="button"
-                    onClick={() => setAvatar((prev) => ({ ...prev, icon }))}
-                    className={`grid h-10 place-items-center rounded-lg bg-stone-700 text-xl transition hover:bg-stone-600 ${
-                      avatar.icon === icon ? "ring-2 ring-amber-400" : ""
-                    }`}
-                    aria-label={`选择 ${icon}`}
-                  >
-                    {icon}
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          <div className="rounded-2xl border border-stone-700/70 bg-stone-900/70 p-4">
             <div className="mb-4">
-              <div className="mb-2 text-sm text-stone-400">颜色</div>
-              <div className="grid grid-cols-8 gap-2">
-                {AVATAR_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setAvatar((prev) => ({ ...prev, color }))}
-                    className={`h-8 rounded-lg transition ${
-                      avatar.color === color ? "ring-2 ring-white" : ""
-                    }`}
-                    style={{ backgroundColor: color }}
-                    aria-label={`选择颜色 ${color}`}
-                  />
-                ))}
-              </div>
+              <label className="mb-2 block text-sm text-stone-400">昵称</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={12}
+                placeholder="最多 12 个字"
+                className="w-full rounded-xl border border-stone-700 bg-stone-800 px-3 py-2 text-white placeholder-stone-500 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30"
+              />
             </div>
 
-            <div className="flex gap-2">
+            <AvatarPicker avatar={avatar} onChange={setAvatar} />
+
+            <div className="mt-5 flex gap-2">
               <button
                 onClick={handleSaveProfile}
                 disabled={!name.trim() || profileBusy}

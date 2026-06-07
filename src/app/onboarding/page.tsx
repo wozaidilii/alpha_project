@@ -2,9 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { AvatarPicker } from "~/components/AvatarPicker";
 import {
-  AVATAR_COLORS,
-  AVATAR_ICONS,
   DEFAULT_AVATAR,
   type PlayerAvatar,
   normalizeAvatar,
@@ -57,82 +56,39 @@ export default function OnboardingPage() {
   if (!ready || !session) return <AuthLoading />;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-stone-900 px-4 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#292018_0%,_#0c0a09_55%)] px-4 py-8 text-white">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-lg rounded-xl bg-stone-800 p-5"
+        className="w-full max-w-xl rounded-[1.75rem] border border-stone-700/70 bg-stone-900/80 p-6 shadow-2xl shadow-black/30 backdrop-blur"
       >
         <div className="mb-6">
-          <p className="text-sm text-stone-400">{session.user.email}</p>
-          <h1 className="mt-1 text-3xl font-extrabold text-amber-400">
-            建立角色
+          <p className="text-sm text-stone-500">{session.user.email}</p>
+          <h1 className="mt-1 text-3xl font-extrabold text-amber-300">
+            建立探险者档案
           </h1>
           <p className="mt-2 text-sm text-stone-400">
-            设置昵称和形象后才能进入游戏大厅
+            设置昵称与档案徽章；进入大厅后还可继续捏脸打造 3D 小人
           </p>
         </div>
 
-        <div className="mb-5 flex items-center gap-4">
-          <div
-            className="grid h-20 w-20 shrink-0 place-items-center rounded-full text-5xl"
-            style={{ backgroundColor: avatar.color }}
-          >
-            {avatar.icon}
-          </div>
-          <div className="min-w-0 flex-1">
-            <label className="mb-2 block text-sm font-medium text-stone-300">
-              昵称
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              maxLength={12}
-              placeholder="最多 12 个字"
-              autoFocus
-              className="w-full rounded-lg bg-stone-700 px-4 py-3 text-white placeholder-stone-500 outline-none focus:ring-2 focus:ring-amber-500"
-            />
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <div className="mb-2 text-sm font-medium text-stone-300">形象</div>
-          <div className="grid grid-cols-5 gap-2">
-            {AVATAR_ICONS.map((icon) => (
-              <button
-                key={icon}
-                type="button"
-                onClick={() => setAvatar((prev) => ({ ...prev, icon }))}
-                className={`grid h-11 place-items-center rounded-lg bg-stone-700 text-2xl transition hover:bg-stone-600 ${
-                  avatar.icon === icon ? "ring-2 ring-amber-400" : ""
-                }`}
-                aria-label={`选择 ${icon}`}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="mb-6">
-          <div className="mb-2 text-sm font-medium text-stone-300">颜色</div>
-          <div className="grid grid-cols-8 gap-2">
-            {AVATAR_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => setAvatar((prev) => ({ ...prev, color }))}
-                className={`h-9 rounded-lg transition ${
-                  avatar.color === color ? "ring-2 ring-white" : ""
-                }`}
-                style={{ backgroundColor: color }}
-                aria-label={`选择颜色 ${color}`}
-              />
-            ))}
-          </div>
+          <label className="mb-2 block text-sm font-medium text-stone-300">
+            昵称
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={12}
+            placeholder="最多 12 个字"
+            autoFocus
+            className="w-full rounded-xl border border-stone-700 bg-stone-800 px-4 py-3 text-white placeholder-stone-500 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30"
+          />
         </div>
 
-        <div className="flex gap-3">
+        <AvatarPicker avatar={avatar} onChange={setAvatar} />
+
+        <div className="mt-6 flex gap-3">
           <button
             type="submit"
             disabled={!name.trim() || updateProfileMutation.isPending}

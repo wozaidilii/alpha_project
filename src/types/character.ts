@@ -76,3 +76,12 @@ export function deserializeCharacter(s: string): CharacterConfig {
 }
 
 export const CHARACTER_STORAGE_KEY = "histoguessr_character";
+export const CHARACTER_UPDATED_EVENT = "histoguessr-character-updated";
+
+export const CHARACTER_PRESETS: CharacterConfig[] = [
+  { skinTone: 1, hairStyle: 0, hairColor: 0, topStyle: 0, topColor: 2, pantsStyle: 0, pantsColor: 0 },
+  { skinTone: 2, hairStyle: 3, hairColor: 3, topStyle: 1, topColor: 4, pantsStyle: 1, pantsColor: 1 },
+  { skinTone: 0, hairStyle: 1, hairColor: 1, topStyle: 2, topColor: 5, pantsStyle: 2, pantsColor: 2 },
+  { skinTone: 3, hairStyle: 2, hairColor: 4, topStyle: 3, topColor: 3, pantsStyle: 0, pantsColor: 1 },
+  { skinTone: 1, hairStyle: 4, hairColor: 0, topStyle: 0, topColor: 1, pantsStyle: 1, pantsColor: 3 },
+];
