@@ -5,7 +5,12 @@ import Link from "next/link";
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap } from "leaflet";
 import { type RoundData } from "~/types/game";
-import { requiresMap, getQuestionYearEnd } from "~/types/question";
+import {
+  requiresMap,
+  requiresQuizAnswer,
+  isFunfactQuestion,
+  getQuestionYearEnd,
+} from "~/types/question";
 import { type GameModeConfig } from "~/lib/game-mode";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear, formatAnswerYear } from "~/lib/scoring";
@@ -29,12 +34,16 @@ export function RoundResult({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const isLastRound = roundNumber >= totalRounds;
+  const isQuiz = requiresQuizAnswer(data.question);
   const showMap =
     requiresMap(data.question) &&
     data.guessLat !== null &&
     data.guessLng !== null &&
     data.question.type === "historical";
   const yearEnd = getQuestionYearEnd(data.question);
+  const funfactQuestion = isFunfactQuestion(data.question)
+    ? data.question
+    : null;
 
   useEffect(() => {
     if (!showMap || !containerRef.current || mapRef.current) return;
@@ -104,6 +113,16 @@ export function RoundResult({
 
   const actualYearLabel = formatAnswerYear(data.question.year, yearEnd);
 
+  function formatGuessAnswer(): string {
+    if (!funfactQuestion || data.guessIndex === null) return "未作答";
+    return funfactQuestion.options[data.guessIndex] ?? "未作答";
+  }
+
+  function formatCorrectAnswer(): string {
+    if (!funfactQuestion) return "";
+    return funfactQuestion.options[funfactQuestion.correctIndex] ?? "";
+  }
+
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
       <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
@@ -145,6 +164,38 @@ export function RoundResult({
             </p>
           )}
 
+          {isQuiz && funfactQuestion && (
+            <div className="mb-4 rounded-xl bg-stone-800 p-4">
+              <p className="mb-3 text-sm leading-relaxed text-stone-300">
+                {funfactQuestion.stem}
+              </p>
+              <div
+                className={`mb-3 inline-flex rounded-full px-3 py-1 text-sm font-semibold ${
+                  data.isCorrect
+                    ? "bg-green-950/60 text-green-300"
+                    : "bg-red-950/60 text-red-300"
+                }`}
+              >
+                {data.isCorrect ? "✓ 回答正确" : "✗ 回答错误"}
+              </div>
+              <div className="space-y-1 text-sm text-stone-400">
+                <div>
+                  你的答案：
+                  <span className="text-amber-400">{formatGuessAnswer()}</span>
+                </div>
+                <div>
+                  正确答案：
+                  <span className="text-green-400">{formatCorrectAnswer()}</span>
+                </div>
+              </div>
+              {funfactQuestion.explanation && (
+                <p className="mt-3 text-sm leading-relaxed text-stone-300">
+                  {funfactQuestion.explanation}
+                </p>
+              )}
+            </div>
+          )}
+
           <div
             className={`grid gap-4 ${showMap ? "grid-cols-2" : "grid-cols-1"}`}
           >
@@ -165,19 +216,32 @@ export function RoundResult({
               </div>
             )}
 
-            <div className="rounded-xl bg-stone-800 p-4">
-              <div className="mb-1 text-sm text-stone-400">📅 年份分</div>
-              <div className="text-3xl font-bold text-white">
-                {data.yearPts.toLocaleString()}
+            {isQuiz ? (
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="mb-1 text-sm text-stone-400">📚 答题分</div>
+                <div className="text-3xl font-bold text-white">
+                  {data.quizPts.toLocaleString()}
+                </div>
+                <div className="mt-1 text-sm text-stone-400">
+                  {data.isCorrect ? "答对得满分" : "答错不得分"}
+                </div>
               </div>
-              <div className="mt-1 text-sm text-stone-400">
-                你猜{" "}
-                <span className="text-amber-400">
-                  {formatYear(data.guessYear)}
-                </span>
-                ，实际 <span className="text-green-400">{actualYearLabel}</span>
+            ) : (
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="mb-1 text-sm text-stone-400">📅 年份分</div>
+                <div className="text-3xl font-bold text-white">
+                  {data.yearPts.toLocaleString()}
+                </div>
+                <div className="mt-1 text-sm text-stone-400">
+                  你猜{" "}
+                  <span className="text-amber-400">
+                    {formatYear(data.guessYear)}
+                  </span>
+                  ，实际{" "}
+                  <span className="text-green-400">{actualYearLabel}</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="mt-4 rounded-xl bg-gradient-to-r from-amber-600/20 to-amber-500/10 p-5 text-center">
@@ -190,6 +254,10 @@ export function RoundResult({
 
           {data.question.type === "historical" && data.question.funfact && (
             <FunfactPanel funfacts={data.question.funfact} />
+          )}
+
+          {funfactQuestion?.funfact && funfactQuestion.funfact.length > 0 && (
+            <FunfactPanel funfacts={funfactQuestion.funfact} />
           )}
 
           {showMap && (

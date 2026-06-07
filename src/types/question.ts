@@ -1,5 +1,7 @@
-/** 题目大类：历史地理猜谜 / 年代回忆杀 / 网络哏 */
-export type QuestionType = "historical" | "nostalgia" | "meme";
+import { type FunfactFormat } from "~/types/funfact";
+
+/** 题目大类：历史地理猜谜 / 历史冷知识 / 年代回忆杀 / 网络哏 */
+export type QuestionType = "historical" | "funfact" | "nostalgia" | "meme";
 
 /** 文化辐射范围（回忆杀与网络哏无精确地理坐标，用此字段标注共鸣圈层） */
 export type CulturalScope = "cn_mainland" | "cn_hk_tw" | "global";
@@ -108,8 +110,26 @@ export interface MemeQuestion extends QuestionBase {
   sourceUrl?: string;
 }
 
+/**
+ * 历史冷知识题：四选一或判断题，无地图与年份作答
+ */
+export interface FunfactQuestion extends QuestionBase {
+  type: "funfact";
+  format: FunfactFormat;
+  sourceId: string;
+  stem: string;
+  options: string[];
+  correctIndex: number;
+  explanation?: string;
+  category: string;
+  hint?: string;
+  funfact?: string[];
+  difficulty?: number;
+}
+
 export type GameQuestion =
   | HistoricalQuestion
+  | FunfactQuestion
   | NostalgiaQuestion
   | MemeQuestion;
 
@@ -129,8 +149,16 @@ export function isMemeQuestion(q: GameQuestion): q is MemeQuestion {
   return q.type === "meme";
 }
 
+export function isFunfactQuestion(q: GameQuestion): q is FunfactQuestion {
+  return q.type === "funfact";
+}
+
 export function requiresMap(q: GameQuestion): boolean {
   return q.type === "historical";
+}
+
+export function requiresQuizAnswer(q: GameQuestion): boolean {
+  return q.type === "funfact";
 }
 
 export function getQuestionYear(q: GameQuestion): number {

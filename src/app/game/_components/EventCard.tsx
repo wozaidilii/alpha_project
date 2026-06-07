@@ -39,9 +39,11 @@ export function EventCard({ question }: Props) {
   const fallbackEmoji =
     question.type === "historical"
       ? "🗺️"
-      : question.type === "nostalgia"
-        ? "📼"
-        : "🌐";
+      : question.type === "funfact"
+        ? "📚"
+        : question.type === "nostalgia"
+          ? "📼"
+          : "🌐";
 
   return (
     <>

@@ -10,6 +10,7 @@ import { loadEnvFiles } from "./load-env.mjs";
 import {
   BLOB_URL_MAP,
   DEEPSEEK_JSON,
+  FUNFACT_JSON,
   IMAGES_SOURCE,
   blobKeyFromLocalPath,
   collectLocalImagePaths,
@@ -79,19 +80,32 @@ const blobAuth = resolveBlobPutOptions();
 const blobAccess = resolveBlobAccess();
 console.log(`Blob 鉴权：${blobAuth.mode}，访问级别：${blobAccess}`);
 
-const raw = JSON.parse(await readFile(DEEPSEEK_JSON, "utf8"));
-const records = Array.isArray(raw.records) ? raw.records : [];
-const localPaths = [...collectLocalImagePaths(records)].sort();
+const localPaths = new Set();
+
+for (const jsonPath of [DEEPSEEK_JSON, FUNFACT_JSON]) {
+  try {
+    const raw = JSON.parse(await readFile(jsonPath, "utf8"));
+    const records = Array.isArray(raw.records) ? raw.records : [];
+    for (const localPath of collectLocalImagePaths(records)) {
+      localPaths.add(localPath);
+    }
+  } catch (error) {
+    if (jsonPath === DEEPSEEK_JSON) throw error;
+    console.warn(`跳过不存在的 funfact JSON：${jsonPath}`);
+  }
+}
+
+const sortedLocalPaths = [...localPaths].sort();
 const urlMap = await loadBlobUrlMap();
 
-if (localPaths.length === 0) {
-  console.log("deepseek_events.json 中没有可上传的本地图片");
+if (sortedLocalPaths.length === 0) {
+  console.log("JSON 记录中没有可上传的本地图片");
   process.exit(0);
 }
 
-const pending = localPaths.filter((localPath) => !urlMap[localPath]);
+const pending = sortedLocalPaths.filter((localPath) => !urlMap[localPath]);
 console.log(
-  `共 ${localPaths.length} 张本地图片，已上传 ${localPaths.length - pending.length} 张，待上传 ${pending.length} 张`,
+  `共 ${sortedLocalPaths.length} 张本地图片，已上传 ${sortedLocalPaths.length - pending.length} 张，待上传 ${pending.length} 张`,
 );
 
 let uploaded = 0;

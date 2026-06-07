@@ -6,6 +6,7 @@ import {
   locationScore,
   getTargetYear,
   formatAnswerYear,
+  quizScore,
 } from "~/lib/scoring";
 
 describe("getTargetYear", () => {
@@ -44,7 +45,43 @@ describe("formatAnswerYear", () => {
   });
 });
 
+describe("quizScore", () => {
+  it("答对得满分", () => {
+    expect(quizScore(true)).toBe(10000);
+  });
+
+  it("答错得零分", () => {
+    expect(quizScore(false)).toBe(0);
+  });
+});
+
 describe("scoreRound", () => {
+  it("冷知识题答对得满分", () => {
+    const result = scoreRound({
+      questionType: "funfact",
+      actualYear: 0,
+      guessedYear: 0,
+      correctIndex: 1,
+      guessedIndex: 1,
+    });
+    expect(result.quizPts).toBe(10000);
+    expect(result.total).toBe(10000);
+    expect(result.isCorrect).toBe(true);
+  });
+
+  it("冷知识题答错得零分", () => {
+    const result = scoreRound({
+      questionType: "funfact",
+      actualYear: 0,
+      guessedYear: 0,
+      correctIndex: 1,
+      guessedIndex: 0,
+    });
+    expect(result.quizPts).toBe(0);
+    expect(result.total).toBe(0);
+    expect(result.isCorrect).toBe(false);
+  });
+
   it("回忆杀题仅计年份分", () => {
     const result = scoreRound({
       questionType: "nostalgia",

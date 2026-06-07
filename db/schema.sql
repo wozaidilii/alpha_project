@@ -74,3 +74,31 @@ alter table historical_events
 
 create index if not exists historical_events_category_idx
   on historical_events(category);
+
+-- 历史冷知识答题：每条 raw 记录拆成选择题 + 判断题两行
+create table if not exists funfact_questions (
+  id text primary key,
+  source_id text not null,
+  format text not null check (format in ('multiple_choice', 'true_false')),
+  title text not null,
+  stem text not null,
+  options jsonb not null,
+  correct_index integer not null check (correct_index >= 0),
+  explanation text,
+  category text not null,
+  hint text,
+  funfact jsonb not null default '[]'::jsonb,
+  difficulty integer,
+  image_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists funfact_questions_category_idx
+  on funfact_questions(category);
+
+create index if not exists funfact_questions_format_idx
+  on funfact_questions(format);
+
+create index if not exists funfact_questions_source_id_idx
+  on funfact_questions(source_id);

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { type RoundData } from "~/types/game";
-import { requiresMap } from "~/types/question";
+import { requiresMap, requiresQuizAnswer } from "~/types/question";
 import { type GameModeConfig } from "~/lib/game-mode";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear } from "~/lib/scoring";
@@ -95,8 +95,9 @@ export function FinalScore({ rounds, gameMode, onRestart }: Props) {
                   {r.question.title}
                 </div>
                 <div className="text-xs text-stone-400">
-                  {formatYear(r.question.year)} ·{" "}
-                  {getQuestionResultSubtitle(r.question)}
+                  {requiresQuizAnswer(r.question)
+                    ? getQuestionResultSubtitle(r.question)
+                    : `${formatYear(r.question.year)} · ${getQuestionResultSubtitle(r.question)}`}
                 </div>
               </div>
               <div className="text-right">
@@ -106,7 +107,9 @@ export function FinalScore({ rounds, gameMode, onRestart }: Props) {
                 <div className="text-xs text-stone-500">
                   {requiresMap(r.question)
                     ? `📍${r.locationPts.toLocaleString()} + 📅${r.yearPts.toLocaleString()}`
-                    : `📅${r.yearPts.toLocaleString()}`}
+                    : requiresQuizAnswer(r.question)
+                      ? `📚${r.quizPts.toLocaleString()}`
+                      : `📅${r.yearPts.toLocaleString()}`}
                 </div>
               </div>
             </div>

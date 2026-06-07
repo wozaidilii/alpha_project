@@ -4,18 +4,30 @@ import {
   MODERN_CONTENT_MIN_YEAR,
   MODERN_CONTENT_MAX_YEAR,
   requiresMap,
+  requiresQuizAnswer,
 } from "~/types/question";
 
 const TYPE_LABELS: Record<QuestionType, string> = {
   historical: "历史",
+  funfact: "冷知识",
   nostalgia: "回忆杀",
   meme: "网络哏",
 };
 
 const TYPE_EMOJI: Record<QuestionType, string> = {
   historical: "🗺️",
+  funfact: "📚",
   nostalgia: "📼",
   meme: "🌐",
+};
+
+const FUNFACT_CATEGORY_LABELS: Record<string, string> = {
+  "历史funfact": "历史",
+  "人物funfact": "人物",
+  "文化作品funfact": "文化作品",
+  "器具发明funfact": "器具发明",
+  "生活funfact": "生活",
+  funtest: "测试",
 };
 
 const NOSTALGIA_SUB_LABELS = {
@@ -54,11 +66,21 @@ export function getQuestionTypeEmoji(type: QuestionType): string {
   return TYPE_EMOJI[type];
 }
 
+export function getFunfactCategoryLabel(category: string): string {
+  return FUNFACT_CATEGORY_LABELS[category] ?? category;
+}
+
 /** 题卡角标：题型 + 子类/历史分区 */
 export function getQuestionBadge(question: GameQuestion): string {
   if (question.type === "historical") {
     const region = question.category === "china" ? "🇨🇳 中国" : "🌍 世界";
     return `${TYPE_EMOJI.historical} ${region}历史`;
+  }
+  if (question.type === "funfact") {
+    const category = getFunfactCategoryLabel(question.category);
+    const format =
+      question.format === "multiple_choice" ? "四选一" : "判断题";
+    return `${TYPE_EMOJI.funfact} ${category} · ${format}`;
   }
   if (question.type === "nostalgia") {
     const sub = NOSTALGIA_SUB_LABELS[question.subCategory];
@@ -72,6 +94,12 @@ export function getQuestionBadge(question: GameQuestion): string {
 export function getQuestionResultSubtitle(question: GameQuestion): string {
   if (question.type === "historical") {
     return question.location;
+  }
+  if (question.type === "funfact") {
+    const category = getFunfactCategoryLabel(question.category);
+    const format =
+      question.format === "multiple_choice" ? "选择题" : "判断题";
+    return `${category} · ${format}`;
   }
   const scope = CULTURAL_SCOPE_LABELS[question.culturalScope];
   if (question.type === "meme") {
@@ -89,6 +117,9 @@ export function getTimelineBounds(question: GameQuestion): {
   maxYear: number;
   defaultYear: number;
 } {
+  if (requiresQuizAnswer(question)) {
+    return { minYear: 0, maxYear: 0, defaultYear: 0 };
+  }
   if (requiresMap(question)) {
     return { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
   }

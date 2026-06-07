@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { pickQuestions } from "~/data/questions";
 import { getGameMode } from "~/lib/game-mode";
-import { toHistoricalQuestions } from "~/lib/event-adapters";
+import { toFunfactQuestions, toHistoricalQuestions } from "~/lib/event-adapters";
 import { type HistoricalEvent } from "~/types/event";
 import { getTimelineBounds } from "~/lib/question-utils";
 import { scoreRound } from "~/lib/scoring";
@@ -16,7 +16,9 @@ import {
 import {
   type GameQuestion,
   requiresMap,
+  requiresQuizAnswer,
   getQuestionYearEnd,
+  isFunfactQuestion,
   type QuestionType,
 } from "~/types/question";
 import { type RoundData } from "~/types/game";
@@ -24,6 +26,7 @@ import { api } from "~/trpc/react";
 import { GameMap } from "../_components/GameMap";
 import { TimelineSlider } from "../_components/TimelineSlider";
 import { EventCard } from "../_components/EventCard";
+import { QuizPanel } from "../_components/QuizPanel";
 import { RoundResult } from "../_components/RoundResult";
 import { FinalScore } from "../_components/FinalScore";
 
@@ -51,20 +54,31 @@ export default function GamePlayPage({ params }: PageProps) {
   const [guessLat, setGuessLat] = useState<number | null>(null);
   const [guessLng, setGuessLng] = useState<number | null>(null);
   const [guessYear, setGuessYear] = useState<number>(1900);
+  const [guessIndex, setGuessIndex] = useState<number | null>(null);
   const currentQuestionRef = useRef<GameQuestion | undefined>(undefined);
   const guessLatRef = useRef<number | null>(null);
   const guessLngRef = useRef<number | null>(null);
   const guessYearRef = useRef<number>(1900);
+  const guessIndexRef = useRef<number | null>(null);
   const resolvedRoundRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
 
   const questionType = gameMode?.type;
   const isHistorical = questionType === "historical";
+  const isFunfact = questionType === "funfact";
 
   const eventsQuery = api.event.random.useQuery(
     { count: ROUNDS },
     {
       enabled: authReady && isHistorical,
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  const funfactQuery = api.funfact.random.useQuery(
+    { count: ROUNDS },
+    {
+      enabled: authReady && isFunfact,
       refetchOnWindowFocus: false,
     },
   );
@@ -78,6 +92,19 @@ export default function GamePlayPage({ params }: PageProps) {
     setLoadError("");
     setQuestions(toHistoricalQuestions(events));
   }, []);
+
+  const applyFunfactQuestions = useCallback(
+    (records: Parameters<typeof toFunfactQuestions>[0]) => {
+      if (records.length < ROUNDS) {
+        setLoadError("冷知识题库不足，请先运行导入脚本");
+        setQuestions([]);
+        return;
+      }
+      setLoadError("");
+      setQuestions(toFunfactQuestions(records));
+    },
+    [],
+  );
 
   const loadStaticQuestions = useCallback((type: QuestionType) => {
     const picked = pickQuestions({ count: ROUNDS, type });
@@ -97,9 +124,20 @@ export default function GamePlayPage({ params }: PageProps) {
         applyHistoricalEvents(result.data ?? []);
         return;
       }
+      if (type === "funfact") {
+        const result = await funfactQuery.refetch();
+        applyFunfactQuestions(result.data ?? []);
+        return;
+      }
       loadStaticQuestions(type);
     },
-    [applyHistoricalEvents, eventsQuery, loadStaticQuestions],
+    [
+      applyHistoricalEvents,
+      applyFunfactQuestions,
+      eventsQuery,
+      funfactQuery,
+      loadStaticQuestions,
+    ],
   );
 
   useEffect(() => {
@@ -109,18 +147,26 @@ export default function GamePlayPage({ params }: PageProps) {
       if (eventsQuery.data) applyHistoricalEvents(eventsQuery.data);
       return;
     }
+    if (isFunfact) {
+      if (funfactQuery.data) applyFunfactQuestions(funfactQuery.data);
+      return;
+    }
     loadStaticQuestions(questionType);
   }, [
     authReady,
     questionType,
     isHistorical,
+    isFunfact,
     eventsQuery.data,
+    funfactQuery.data,
     applyHistoricalEvents,
+    applyFunfactQuestions,
     loadStaticQuestions,
   ]);
 
   const currentQuestion = questions[round];
   const needsMap = currentQuestion ? requiresMap(currentQuestion) : false;
+  const needsQuiz = currentQuestion ? requiresQuizAnswer(currentQuestion) : false;
   const timelineBounds = currentQuestion
     ? getTimelineBounds(currentQuestion)
     : { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
@@ -142,6 +188,10 @@ export default function GamePlayPage({ params }: PageProps) {
   }, [guessYear]);
 
   useEffect(() => {
+    guessIndexRef.current = guessIndex;
+  }, [guessIndex]);
+
+  useEffect(() => {
     if (currentQuestion) {
       setGuessYear(timelineBounds.defaultYear);
       guessYearRef.current = timelineBounds.defaultYear;
@@ -149,6 +199,8 @@ export default function GamePlayPage({ params }: PageProps) {
       guessLatRef.current = null;
       setGuessLng(null);
       guessLngRef.current = null;
+      setGuessIndex(null);
+      guessIndexRef.current = null;
       setTimeLeft(ROUND_TIME_SECONDS);
       resolvedRoundRef.current = false;
       lastCountdownTickRef.current = null;
@@ -160,9 +212,36 @@ export default function GamePlayPage({ params }: PageProps) {
     if (!question || resolvedRoundRef.current) return;
 
     const roundNeedsMap = requiresMap(question);
+    const roundNeedsQuiz = requiresQuizAnswer(question);
     const currentGuessLat = guessLatRef.current;
     const currentGuessLng = guessLngRef.current;
     const currentGuessYear = guessYearRef.current;
+    const currentGuessIndex = guessIndexRef.current;
+
+    if (roundNeedsQuiz && currentGuessIndex === null) {
+      if (!timedOut) return;
+
+      resolvedRoundRef.current = true;
+      setRounds((prev) => [
+        ...prev,
+        {
+          question,
+          guessLat: null,
+          guessLng: null,
+          guessYear: 0,
+          guessIndex: null,
+          distanceKm: null,
+          locationPts: 0,
+          yearPts: 0,
+          quizPts: 0,
+          total: 0,
+          isCorrect: false,
+          timedOut: true,
+        },
+      ]);
+      setPhase("round-result");
+      return;
+    }
 
     if (
       roundNeedsMap &&
@@ -178,9 +257,11 @@ export default function GamePlayPage({ params }: PageProps) {
           guessLat: null,
           guessLng: null,
           guessYear: currentGuessYear,
+          guessIndex: null,
           distanceKm: null,
           locationPts: 0,
           yearPts: 0,
+          quizPts: 0,
           total: 0,
           timedOut: true,
         },
@@ -198,17 +279,23 @@ export default function GamePlayPage({ params }: PageProps) {
       actualLng: question.type === "historical" ? question.lng : undefined,
       guessLat: currentGuessLat ?? undefined,
       guessLng: currentGuessLng ?? undefined,
+      correctIndex:
+        question.type === "funfact" ? question.correctIndex : undefined,
+      guessedIndex: currentGuessIndex ?? undefined,
     });
 
     const data: RoundData = {
       question,
       guessLat: currentGuessLat,
       guessLng: currentGuessLng,
-      guessYear: currentGuessYear,
+      guessYear: roundNeedsQuiz ? 0 : currentGuessYear,
+      guessIndex: currentGuessIndex,
       distanceKm: score.distanceKm,
       locationPts: score.locationPts,
       yearPts: score.yearPts,
+      quizPts: score.quizPts,
       total: score.total,
+      isCorrect: score.isCorrect,
       timedOut,
     };
 
@@ -272,15 +359,23 @@ export default function GamePlayPage({ params }: PageProps) {
     void loadQuestions(gameMode.type);
   }
 
-  const canSubmit = needsMap ? guessLat !== null : true;
+  const canSubmit = needsQuiz
+    ? guessIndex !== null
+    : needsMap
+      ? guessLat !== null
+      : true;
   const isLoading =
     phase === "playing" &&
     questions.length === 0 &&
-    (isHistorical ? eventsQuery.isLoading : false);
+    (isHistorical
+      ? eventsQuery.isLoading
+      : isFunfact
+        ? funfactQuery.isLoading
+        : false);
 
   if (!authReady) return <AuthLoading />;
 
-  if (!gameMode) {
+  if (!gameMode || gameMode.enabled === false) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-stone-900 text-white">
         <p className="text-stone-400">未知的游戏类型</p>
@@ -308,7 +403,9 @@ export default function GamePlayPage({ params }: PageProps) {
           {loadError ||
             (isHistorical && eventsQuery.isError
               ? "题库加载失败，请检查数据库连接"
-              : "题库为空，请先导入题目")}
+              : isFunfact && funfactQuery.isError
+                ? "冷知识题库加载失败，请检查数据库连接"
+                : "题库为空，请先导入题目")}
         </p>
         <Link href="/game" className="text-amber-400 hover:underline">
           返回选择页面
@@ -335,6 +432,16 @@ export default function GamePlayPage({ params }: PageProps) {
       />
     );
   }
+
+  const submitLabel = needsQuiz
+    ? guessIndex === null
+      ? "请先选择答案"
+      : "提交答案"
+    : needsMap && guessLat === null
+      ? "先在地图上点击选择地点"
+      : needsMap
+        ? "提交猜测"
+        : "提交年份猜测";
 
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
@@ -377,6 +484,14 @@ export default function GamePlayPage({ params }: PageProps) {
         >
           {currentQuestion && <EventCard question={currentQuestion} />}
 
+          {currentQuestion && isFunfactQuestion(currentQuestion) && (
+            <QuizPanel
+              question={currentQuestion}
+              selectedIndex={guessIndex}
+              onSelect={setGuessIndex}
+            />
+          )}
+
           <div
             className={`rounded-lg border px-3 py-2 ${
               timeLeft <= 10
@@ -396,23 +511,21 @@ export default function GamePlayPage({ params }: PageProps) {
             </div>
           </div>
 
-          <TimelineSlider
-            value={guessYear}
-            onChange={setGuessYear}
-            minYear={timelineBounds.minYear}
-            maxYear={timelineBounds.maxYear}
-          />
+          {!needsQuiz && (
+            <TimelineSlider
+              value={guessYear}
+              onChange={setGuessYear}
+              minYear={timelineBounds.minYear}
+              maxYear={timelineBounds.maxYear}
+            />
+          )}
 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
             className="mt-2 w-full rounded-lg bg-amber-500 px-4 py-3 font-semibold text-stone-900 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {needsMap && guessLat === null
-              ? "先在地图上点击选择地点"
-              : needsMap
-                ? "提交猜测"
-                : "提交年份猜测"}
+            {submitLabel}
           </button>
         </div>
 

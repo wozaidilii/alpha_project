@@ -21,12 +21,12 @@ function shuffle<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
-/** 从静态题库随机抽取（仅 nostalgia / meme） */
+/** 从静态题库随机抽取（仅 nostalgia / meme）；历史题与冷知识题走数据库 */
 export function pickQuestions({
   count,
   type,
 }: PickQuestionsOptions): GameQuestion[] {
-  if (type === "historical") return [];
+  if (type === "historical" || type === "funfact") return [];
 
   const pool = staticQuestions.filter((q) => q.type === type);
   if (pool.length === 0) return [];
@@ -42,7 +42,7 @@ export function countByType(
       acc[q.type] += 1;
       return acc;
     },
-    { historical: 0, nostalgia: 0, meme: 0 } satisfies Record<
+    { historical: 0, funfact: 0, nostalgia: 0, meme: 0 } satisfies Record<
       QuestionType,
       number
     >,

@@ -5,9 +5,12 @@ export interface RoundData {
   guessLat: number | null;
   guessLng: number | null;
   guessYear: number;
+  guessIndex: number | null;
   distanceKm: number | null;
   locationPts: number;
   yearPts: number;
+  quizPts: number;
   total: number;
+  isCorrect?: boolean;
   timedOut?: boolean;
 }

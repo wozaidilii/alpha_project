@@ -6,6 +6,10 @@ export const DEEPSEEK_JSON = path.join(
   ROOT,
   "scripts/python/rawdata/deepseek_events.json",
 );
+export const FUNFACT_JSON = path.join(
+  ROOT,
+  "scripts/python/rawdata/deepseek_funfact_questions.json",
+);
 export const IMAGES_SOURCE = path.join(ROOT, "scripts/python/rawdata/images");
 export const BLOB_URL_MAP = path.join(
   ROOT,

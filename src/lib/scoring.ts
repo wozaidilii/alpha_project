@@ -65,8 +65,13 @@ export function formatAnswerYear(year: number, yearEnd?: number): string {
   return `${formatYear(year)} – ${formatYear(yearEnd)}（均值 ${formatYear(meanYear)}）`;
 }
 
+/** 冷知识题：答对满分 10000，答错 0 */
+export function quizScore(isCorrect: boolean): number {
+  return isCorrect ? 10000 : 0;
+}
+
 export interface RoundScoreInput {
-  questionType: "historical" | "nostalgia" | "meme";
+  questionType: "historical" | "funfact" | "nostalgia" | "meme";
   actualYear: number;
   guessedYear: number;
   yearEnd?: number;
@@ -74,17 +79,39 @@ export interface RoundScoreInput {
   actualLng?: number;
   guessLat?: number;
   guessLng?: number;
+  correctIndex?: number;
+  guessedIndex?: number;
 }
 
 export interface RoundScoreResult {
   locationPts: number;
   yearPts: number;
+  quizPts: number;
   total: number;
   distanceKm: number | null;
+  isCorrect?: boolean;
 }
 
 /** 按题型统一计分 */
 export function scoreRound(input: RoundScoreInput): RoundScoreResult {
+  if (input.questionType === "funfact") {
+    const guessedIndex = input.guessedIndex;
+    const isCorrect =
+      guessedIndex !== undefined &&
+      input.correctIndex !== undefined &&
+      guessedIndex === input.correctIndex;
+    const pts = quizScore(isCorrect);
+
+    return {
+      locationPts: 0,
+      yearPts: 0,
+      quizPts: pts,
+      total: pts,
+      distanceKm: null,
+      isCorrect,
+    };
+  }
+
   const yearPts = yearOnlyScore(
     input.actualYear,
     input.guessedYear,
@@ -95,6 +122,7 @@ export function scoreRound(input: RoundScoreInput): RoundScoreResult {
     return {
       locationPts: 0,
       yearPts,
+      quizPts: 0,
       total: yearPts,
       distanceKm: null,
     };
@@ -128,6 +156,7 @@ export function scoreRound(input: RoundScoreInput): RoundScoreResult {
   return {
     locationPts,
     yearPts: historicalYearPts,
+    quizPts: 0,
     total: totalScore(locationPts, historicalYearPts),
     distanceKm,
   };

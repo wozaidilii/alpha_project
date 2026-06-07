@@ -9,6 +9,7 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed-events.mjs",
     "db:import-deepseek": "node scripts/import-deepseek-events.mjs",
+    "db:import-funfact": "node scripts/import-funfact-questions.mjs",
     "images:upload": "node scripts/upload-event-images.mjs",
     "dev": "next dev --turbo",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",

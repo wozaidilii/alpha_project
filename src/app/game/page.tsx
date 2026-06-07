@@ -27,7 +27,7 @@ export default function GameModePage() {
             选择游戏类型
           </h1>
           <p className="mt-2 text-stone-400">
-            三种模式独立进行，每局只包含同一类型的题目
+            每种模式独立进行，每局只包含同一类型的题目
           </p>
         </div>
 

@@ -40,6 +40,20 @@ export const nostalgiaQuestionSchema = questionBaseSchema.extend({
   aliases: z.array(z.string()).optional(),
 });
 
+export const funfactQuestionSchema = questionBaseSchema.extend({
+  type: z.literal("funfact"),
+  format: z.enum(["multiple_choice", "true_false"]),
+  sourceId: z.string().min(1),
+  stem: z.string().min(1),
+  options: z.array(z.string().min(1)).min(2).max(4),
+  correctIndex: z.number().int().min(0),
+  explanation: z.string().optional(),
+  category: z.string().min(1),
+  hint: z.string().optional(),
+  funfact: z.array(z.string().min(1)).max(3).optional(),
+  difficulty: z.number().int().min(1).max(5).optional(),
+});
+
 export const memeQuestionSchema = questionBaseSchema.extend({
   type: z.literal("meme"),
   subCategory: z.enum(["phrase", "image", "video", "event", "character"]),
@@ -77,6 +91,7 @@ export const memeQuestionSchema = questionBaseSchema.extend({
 
 export const gameQuestionSchema = z.discriminatedUnion("type", [
   historicalQuestionSchema,
+  funfactQuestionSchema,
   nostalgiaQuestionSchema,
   memeQuestionSchema,
 ]);
