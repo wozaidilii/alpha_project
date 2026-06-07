@@ -27,8 +27,6 @@ import {
   type GameQuestion,
   getQuestionYearEnd,
   isFunfactQuestion,
-  requiresMap,
-  requiresQuizAnswer,
 } from "~/types/question";
 import { GameMap } from "~/app/game/_components/GameMap";
 import { EventCard } from "~/app/game/_components/EventCard";
@@ -46,6 +44,7 @@ import { GameOverView } from "./GameOver";
 
 function calcPlayerGuess(
   question: GameQuestion,
+  modeType: BattleSettings["questionType"],
   raw: PusherGuessSubmitted | undefined,
   roundStartTime: number,
   timePerRound: number,
@@ -57,11 +56,11 @@ function calcPlayerGuess(
     timePerRound,
   );
 
-  const needsMap = requiresMap(question);
-  const needsQuiz = requiresQuizAnswer(question);
+  const needsMap = modeType === "historical";
+  const needsQuiz = modeType === "funfact";
 
   const score = scoreRound({
-    questionType: question.type,
+    questionType: modeType,
     actualYear: question.year,
     guessedYear: raw?.year ?? 0,
     yearEnd: getQuestionYearEnd(question),
@@ -193,14 +192,57 @@ export function BattleGame({
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
   const resolvedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
+  const pendingRoundStart = useRef<PusherRoundStarted | null>(null);
 
   const gameMode = getGameMode(settings.questionType);
   const currentQuestion = questions[currentRound];
-  const needsMap = currentQuestion ? requiresMap(currentQuestion) : false;
-  const needsQuiz = currentQuestion ? requiresQuizAnswer(currentQuestion) : false;
+  // 与个人模式一致：整局题型由房间设置决定，而非单题字段
+  const needsMap = settings.questionType === "historical";
+  const needsQuiz = settings.questionType === "funfact";
   const timelineBounds = currentQuestion
     ? getTimelineBounds(currentQuestion)
     : { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
+
+  function applyGameStarted(data: PusherGameStarted) {
+    setSettings(data.settings);
+    setQuestions(data.questions);
+    setPlayers(data.players);
+    settingsRef.current = data.settings;
+    questionsRef.current = data.questions;
+    playersRef.current = data.players;
+  }
+
+  function beginRound(roundIndex: number, startTime: number) {
+    resolvedRef.current = false;
+    collectedGuesses.current = {};
+    setCurrentRound(roundIndex);
+    currentRoundRef.current = roundIndex;
+    setRoundStartTime(startTime);
+    roundStartTimeRef.current = startTime;
+    setTimeLeft(settingsRef.current.timePerRound);
+
+    const question = questionsRef.current[roundIndex];
+    const bounds = question
+      ? getTimelineBounds(question)
+      : { defaultYear: 1900 };
+
+    setGuessLat(null);
+    setGuessLng(null);
+    setGuessYear(bounds.defaultYear);
+    setGuessIndex(null);
+    setSubmitted(false);
+    setOpponentSubmitted(false);
+    setPhase("playing");
+  }
+
+  function tryStartPendingRound() {
+    const pending = pendingRoundStart.current;
+    if (!pending) return;
+    if (questionsRef.current.length === 0) return;
+
+    pendingRoundStart.current = null;
+    beginRound(pending.roundIndex, pending.startTime);
+  }
 
   function resolveRound() {
     if (resolvedRef.current) return;
@@ -215,9 +257,11 @@ export function BattleGame({
     const tpr = settingsRef.current.timePerRound;
 
     const guesses: Record<string, PlayerGuess> = {};
+    const modeType = settingsRef.current.questionType;
     for (const pid of Object.keys(currentPlayers)) {
       guesses[pid] = calcPlayerGuess(
         question,
+        modeType,
         collectedGuesses.current[pid],
         startTime,
         tpr,
@@ -288,30 +332,13 @@ export function BattleGame({
     });
 
     ch.bind("game-started", (data: PusherGameStarted) => {
-      setSettings(data.settings);
-      setQuestions(data.questions);
-      setPlayers(data.players);
+      applyGameStarted(data);
+      tryStartPendingRound();
     });
 
     ch.bind("round-started", (data: PusherRoundStarted) => {
-      resolvedRef.current = false;
-      collectedGuesses.current = {};
-      setCurrentRound(data.roundIndex);
-      setRoundStartTime(data.startTime);
-      setTimeLeft(settingsRef.current.timePerRound);
-
-      const question = questionsRef.current[data.roundIndex];
-      const bounds = question
-        ? getTimelineBounds(question)
-        : { defaultYear: 1900 };
-
-      setGuessLat(null);
-      setGuessLng(null);
-      setGuessYear(bounds.defaultYear);
-      setGuessIndex(null);
-      setSubmitted(false);
-      setOpponentSubmitted(false);
-      setPhase("playing");
+      pendingRoundStart.current = data;
+      tryStartPendingRound();
     });
 
     ch.bind("guess-submitted", (data: PusherGuessSubmitted) => {
@@ -420,18 +447,23 @@ export function BattleGame({
       for (const [pid, p] of Object.entries(players)) {
         initialPlayers[pid] = { ...p, hp: settings.startingHp };
       }
-      void sendPusherEvent(channel, "game-started", {
+
+      const payload = {
         settings,
         questions: loaded.questions,
         players: initialPlayers,
-      } satisfies PusherGameStarted);
+      } satisfies PusherGameStarted;
 
-      setTimeout(() => {
-        void sendPusherEvent(channel, "round-started", {
-          roundIndex: 0,
-          startTime: Date.now(),
-        } satisfies PusherRoundStarted);
-      }, 300);
+      // 房主本地先同步，避免 Pusher 回传延迟导致界面仍按默认历史模式渲染
+      applyGameStarted(payload);
+      await sendPusherEvent(channel, "game-started", payload);
+
+      const startTime = Date.now();
+      beginRound(0, startTime);
+      await sendPusherEvent(channel, "round-started", {
+        roundIndex: 0,
+        startTime,
+      } satisfies PusherRoundStarted);
     } catch {
       setLobbyError("题库加载失败，请检查数据库连接");
     }
@@ -457,9 +489,12 @@ export function BattleGame({
     if (!isHost) return;
     const next = currentRound + 1;
     if (next >= settings.rounds) return;
+
+    const startTime = Date.now();
+    beginRound(next, startTime);
     void sendPusherEvent(channel, "round-started", {
       roundIndex: next,
-      startTime: Date.now(),
+      startTime,
     } satisfies PusherRoundStarted);
   }
 
@@ -702,7 +737,7 @@ export function BattleGame({
             <EventCard key={currentQuestion.id} question={currentQuestion} />
           )}
 
-          {currentQuestion && isFunfactQuestion(currentQuestion) && (
+          {needsQuiz && currentQuestion && isFunfactQuestion(currentQuestion) && (
             <QuizPanel
               question={currentQuestion}
               selectedIndex={guessIndex}
@@ -712,7 +747,7 @@ export function BattleGame({
             />
           )}
 
-          {!needsQuiz && (
+          {needsMap && (
             <TimelineSlider
               value={guessYear}
               onChange={(y) => {

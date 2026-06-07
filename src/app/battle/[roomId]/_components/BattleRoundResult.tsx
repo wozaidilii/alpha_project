@@ -14,7 +14,6 @@ import {
   getQuestionYearEnd,
   isFunfactQuestion,
   isHistoricalQuestion,
-  requiresMap,
 } from "~/types/question";
 import {
   mountResultMap,
@@ -47,11 +46,13 @@ export function BattleRoundResultView({
   const mapRef = useRef<ChinaResultMapHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { question } = result;
-  const showMap = requiresMap(question) && isHistoricalQuestion(question);
+  const showMap = result.question.type === "historical";
   const yearEnd = getQuestionYearEnd(question);
 
   useEffect(() => {
-    if (!showMap || !containerRef.current) return;
+    if (!showMap || !isHistoricalQuestion(question) || !containerRef.current) {
+      return;
+    }
 
     const container = containerRef.current;
     let active = true;
