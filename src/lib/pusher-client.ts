@@ -16,9 +16,12 @@ export async function sendPusherEvent(
   event: string,
   data: unknown,
 ) {
-  await fetch("/api/pusher/trigger", {
+  const response = await fetch("/api/pusher/trigger", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel, event, data }),
   });
+  if (!response.ok) {
+    throw new Error(`Pusher 事件发送失败: ${event}`);
+  }
 }

@@ -65,3 +65,32 @@ export async function getRandomHistoricalEvents(
 
   return rows.map(toHistoricalEvent);
 }
+
+/** 按 ID 批量取题，保持传入顺序 */
+export async function getHistoricalEventsByIds(
+  ids: string[],
+): Promise<HistoricalEvent[]> {
+  if (ids.length === 0) return [];
+
+  const rows = await sql<HistoricalEventRow[]>`
+    select
+      id,
+      title,
+      description,
+      year,
+      lat,
+      lng,
+      location,
+      category,
+      wikipedia_title,
+      image_url,
+      funfact
+    from historical_events
+    where id in ${sql(ids)}
+  `;
+
+  const byId = new Map(rows.map((row) => [row.id, toHistoricalEvent(row)]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((event): event is HistoricalEvent => event != null);
+}

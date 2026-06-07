@@ -77,3 +77,36 @@ export async function getRandomFunfactQuestions(
 
   return rows.map(toFunfactQuestion);
 }
+
+/** 按 ID 批量取题，保持传入顺序 */
+export async function getFunfactQuestionsByIds(
+  ids: string[],
+): Promise<FunfactQuestionRecord[]> {
+  if (ids.length === 0) return [];
+
+  const rows = await sql<FunfactQuestionRow[]>`
+    select
+      id,
+      source_id,
+      format,
+      title,
+      stem,
+      options,
+      correct_index,
+      explanation,
+      category,
+      description,
+      hint,
+      funfact,
+      difficulty,
+      image_url,
+      fallback_image_url
+    from funfact_questions
+    where id in ${sql(ids)}
+  `;
+
+  const byId = new Map(rows.map((row) => [row.id, toFunfactQuestion(row)]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter((record): record is FunfactQuestionRecord => record != null);
+}

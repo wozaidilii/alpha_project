@@ -50,6 +50,29 @@ export function loadStaticQuestions(
   return ensureCount(type, count, pickQuestions({ count, type }));
 }
 
+export async function fetchQuestionsByIds(
+  type: QuestionType,
+  ids: string[],
+  fetchers: {
+    fetchHistoricalByIds: (ids: string[]) => Promise<HistoricalEvent[]>;
+    fetchFunfactByIds: (ids: string[]) => Promise<FunfactQuestionRecord[]>;
+  },
+): Promise<LoadQuestionsResult> {
+  const count = ids.length;
+  if (count === 0) {
+    return { questions: [], error: insufficientError(type) };
+  }
+  if (type === "historical") {
+    const events = await fetchers.fetchHistoricalByIds(ids);
+    return historicalFromEvents(events, count);
+  }
+  if (type === "funfact") {
+    const records = await fetchers.fetchFunfactByIds(ids);
+    return funfactFromRecords(records, count);
+  }
+  return { questions: [], error: insufficientError(type) };
+}
+
 export async function fetchQuestionsByType(
   type: QuestionType,
   count: number,

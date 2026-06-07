@@ -58,10 +58,23 @@ export interface PusherPlayerJoined {
   character?: CharacterConfig;
 }
 
+/** 房主广播大厅设置，供加入方同步 */
+export interface PusherRoomSettings {
+  settings: BattleSettings;
+}
+
+/** 加入方请求房主同步大厅设置 */
+export interface PusherRequestRoomSettings {
+  playerId: string;
+}
+
 export interface PusherGameStarted {
   settings: BattleSettings;
-  questions: GameQuestion[];
   players: Record<string, BattlePlayer>;
+  /** 仅同步 ID，加入方本地拉取完整题目，避免 Pusher 消息过大 */
+  questionIds: string[];
+  roundIndex: number;
+  startTime: number;
 }
 
 export interface PusherRoundStarted {

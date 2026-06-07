@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
-import { fetchQuestionsByType } from "~/lib/load-questions";
+import { fetchQuestionsByType, fetchQuestionsByIds } from "~/lib/load-questions";
 import { getGameMode } from "~/lib/game-mode";
 import { getTimelineBounds } from "~/lib/question-utils";
 import {
@@ -17,6 +17,8 @@ import {
   type PlayerGuess,
   type BattleRoundResult,
   type PusherPlayerJoined,
+  type PusherRoomSettings,
+  type PusherRequestRoomSettings,
   type PusherGameStarted,
   type PusherRoundStarted,
   type PusherGuessSubmitted,
@@ -163,6 +165,8 @@ export function BattleGame({
 
   const [results, setResults] = useState<BattleRoundResult[]>([]);
   const [lobbyError, setLobbyError] = useState("");
+  const [lobbySynced, setLobbySynced] = useState(isHost);
+  const [gameSyncing, setGameSyncing] = useState(false);
 
   const playersRef = useRef(players);
   useEffect(() => {
@@ -192,7 +196,6 @@ export function BattleGame({
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
   const resolvedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
-  const pendingRoundStart = useRef<PusherRoundStarted | null>(null);
 
   const gameMode = getGameMode(settings.questionType);
   const currentQuestion = questions[currentRound];
@@ -203,13 +206,66 @@ export function BattleGame({
     ? getTimelineBounds(currentQuestion)
     : { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
 
-  function applyGameStarted(data: PusherGameStarted) {
-    setSettings(data.settings);
-    setQuestions(data.questions);
-    setPlayers(data.players);
-    settingsRef.current = data.settings;
-    questionsRef.current = data.questions;
-    playersRef.current = data.players;
+  function applyRoomSettings(next: BattleSettings) {
+    setSettings(next);
+    settingsRef.current = next;
+    setLobbySynced(true);
+    setPlayers((prev) => {
+      const me = prev[myId.current];
+      if (!me) return prev;
+      return {
+        ...prev,
+        [myId.current]: { ...me, hp: next.startingHp },
+      };
+    });
+  }
+
+  function broadcastRoomSettings() {
+    if (!isHost) return;
+    void sendPusherEvent(channel, "room-settings", {
+      settings: settingsRef.current,
+    } satisfies PusherRoomSettings);
+  }
+
+  function applyGameStarted(
+    settings: BattleSettings,
+    players: Record<string, BattlePlayer>,
+    questions: GameQuestion[],
+  ) {
+    setSettings(settings);
+    setQuestions(questions);
+    setPlayers(players);
+    settingsRef.current = settings;
+    questionsRef.current = questions;
+    playersRef.current = players;
+  }
+
+  async function handleRemoteGameStarted(data: PusherGameStarted) {
+    setLobbyError("");
+    setGameSyncing(true);
+    try {
+      const loaded = await fetchQuestionsByIds(
+        data.settings.questionType,
+        data.questionIds,
+        {
+          fetchHistoricalByIds: (ids) =>
+            utils.event.byIds.fetch({ ids }),
+          fetchFunfactByIds: (ids) =>
+            utils.funfact.byIds.fetch({ ids }),
+        },
+      );
+      if (loaded.error || loaded.questions.length < data.questionIds.length) {
+        setLobbyError(loaded.error ?? "同步题目失败，请让房主重新开始");
+        return;
+      }
+
+      applyGameStarted(data.settings, data.players, loaded.questions);
+      beginRound(data.roundIndex, data.startTime);
+    } catch {
+      setLobbyError("同步题目失败，请检查网络连接");
+    } finally {
+      setGameSyncing(false);
+    }
   }
 
   function beginRound(roundIndex: number, startTime: number) {
@@ -233,15 +289,6 @@ export function BattleGame({
     setSubmitted(false);
     setOpponentSubmitted(false);
     setPhase("playing");
-  }
-
-  function tryStartPendingRound() {
-    const pending = pendingRoundStart.current;
-    if (!pending) return;
-    if (questionsRef.current.length === 0) return;
-
-    pendingRoundStart.current = null;
-    beginRound(pending.roundIndex, pending.startTime);
   }
 
   function resolveRound() {
@@ -325,20 +372,31 @@ export function BattleGame({
           name: data.name,
           avatar: data.avatar,
           character: data.character,
-          hp: hostSettings?.startingHp ?? settingsRef.current.startingHp,
+          hp: settingsRef.current.startingHp,
           isHost: false,
         },
       }));
+      if (isHost) broadcastRoomSettings();
+    });
+
+    ch.bind("room-settings", (data: PusherRoomSettings) => {
+      applyRoomSettings(data.settings);
+    });
+
+    ch.bind("request-room-settings", (data: PusherRequestRoomSettings) => {
+      if (!isHost || data.playerId === myId.current) return;
+      broadcastRoomSettings();
     });
 
     ch.bind("game-started", (data: PusherGameStarted) => {
-      applyGameStarted(data);
-      tryStartPendingRound();
+      // 房主已在本地开局，忽略 Pusher 回传
+      if (isHost) return;
+      void handleRemoteGameStarted(data);
     });
 
     ch.bind("round-started", (data: PusherRoundStarted) => {
-      pendingRoundStart.current = data;
-      tryStartPendingRound();
+      if (questionsRef.current.length === 0) return;
+      beginRound(data.roundIndex, data.startTime);
     });
 
     ch.bind("guess-submitted", (data: PusherGuessSubmitted) => {
@@ -386,6 +444,12 @@ export function BattleGame({
   }, []);
 
   useEffect(() => {
+    if (!isHost || phase !== "lobby") return;
+    broadcastRoomSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHost, phase]);
+
+  useEffect(() => {
     if (isHost) return;
     void sendPusherEvent(channel, "player-joined", {
       playerId: myId.current,
@@ -394,6 +458,9 @@ export function BattleGame({
       avatar: playerAvatar,
       character: playerCharacter,
     } satisfies PusherPlayerJoined);
+    void sendPusherEvent(channel, "request-room-settings", {
+      playerId: myId.current,
+    } satisfies PusherRequestRoomSettings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -448,22 +515,18 @@ export function BattleGame({
         initialPlayers[pid] = { ...p, hp: settings.startingHp };
       }
 
+      const startTime = Date.now();
       const payload = {
         settings,
-        questions: loaded.questions,
         players: initialPlayers,
-      } satisfies PusherGameStarted;
-
-      // 房主本地先同步，避免 Pusher 回传延迟导致界面仍按默认历史模式渲染
-      applyGameStarted(payload);
-      await sendPusherEvent(channel, "game-started", payload);
-
-      const startTime = Date.now();
-      beginRound(0, startTime);
-      await sendPusherEvent(channel, "round-started", {
+        questionIds: loaded.questions.map((q) => q.id),
         roundIndex: 0,
         startTime,
-      } satisfies PusherRoundStarted);
+      } satisfies PusherGameStarted;
+
+      applyGameStarted(settings, initialPlayers, loaded.questions);
+      beginRound(0, startTime);
+      await sendPusherEvent(channel, "game-started", payload);
     } catch {
       setLobbyError("题库加载失败，请检查数据库连接");
     }
@@ -582,7 +645,7 @@ export function BattleGame({
             )}
           </div>
 
-          {isHost && (
+          {(isHost || lobbySynced) && (
             <div className="mb-4 space-y-1 rounded-xl bg-stone-800 p-4 text-sm text-stone-400">
               <div className="flex justify-between">
                 <span>游戏类型</span>
@@ -605,12 +668,9 @@ export function BattleGame({
             </div>
           )}
 
-          {!isHost && settings.questionType && (
+          {!isHost && !lobbySynced && (
             <div className="mb-4 rounded-xl bg-stone-800 p-4 text-center text-sm text-stone-400">
-              等待房主开始 ·{" "}
-              <span className="text-white">
-                {gameMode?.emoji} {gameMode?.title}
-              </span>
+              正在同步房间设置…
             </div>
           )}
 
@@ -623,7 +683,9 @@ export function BattleGame({
               {playerList.length < 2 ? "等待对手…" : "开始游戏 ⚔️"}
             </button>
           ) : (
-            <p className="text-center text-stone-400">等待房主开始游戏…</p>
+            <p className="text-center text-stone-400">
+              {gameSyncing ? "正在同步游戏，请稍候…" : "等待房主开始游戏…"}
+            </p>
           )}
           {lobbyError && (
             <p className="mt-3 text-center text-sm text-red-400">
