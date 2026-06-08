@@ -3,17 +3,18 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import "leaflet/dist/leaflet.css";
-import type { Map as LeafletMap } from "leaflet";
 import { type RoundData } from "~/types/game";
 import {
   requiresMap,
   requiresQuizAnswer,
   isFunfactQuestion,
+  isHistoricalQuestion,
   getQuestionYearEnd,
 } from "~/types/question";
 import { type GameModeConfig } from "~/lib/game-mode";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear, formatAnswerYear } from "~/lib/scoring";
+import { mountResultMap, type ChinaResultMapHandle } from "~/lib/china-leaflet";
 import { FunfactPanel } from "./FunfactPanel";
 
 interface Props {
@@ -32,84 +33,73 @@ export function RoundResult({
   onNext,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<LeafletMap | null>(null);
+  const mapRef = useRef<ChinaResultMapHandle | null>(null);
   const isLastRound = roundNumber >= totalRounds;
   const isQuiz = requiresQuizAnswer(data.question);
+  const historicalQuestion = isHistoricalQuestion(data.question)
+    ? data.question
+    : null;
   const showMap =
     requiresMap(data.question) &&
     data.guessLat !== null &&
     data.guessLng !== null &&
-    data.question.type === "historical";
+    historicalQuestion !== null;
   const yearEnd = getQuestionYearEnd(data.question);
   const funfactQuestion = isFunfactQuestion(data.question)
     ? data.question
     : null;
 
   useEffect(() => {
-    if (!showMap || !containerRef.current || mapRef.current) return;
+    if (
+      !showMap ||
+      !historicalQuestion ||
+      !containerRef.current ||
+      mapRef.current
+    )
+      return;
 
-    void import("leaflet").then((L) => {
-      if (
-        !containerRef.current ||
-        mapRef.current ||
-        data.question.type !== "historical"
-      )
+    const container = containerRef.current;
+    let active = true;
+
+    void mountResultMap(
+      container,
+      [
+        {
+          point: { lat: historicalQuestion.lat, lng: historicalQuestion.lng },
+          color: "#22c55e",
+          label: "实际地点",
+          radius: 12,
+        },
+        {
+          point: { lat: data.guessLat!, lng: data.guessLng! },
+          color: "#f59e0b",
+          label: "你的猜测",
+          radius: 10,
+        },
+      ],
+      [
+        {
+          from: { lat: historicalQuestion.lat, lng: historicalQuestion.lng },
+          to: { lat: data.guessLat!, lng: data.guessLng! },
+          color: "#f59e0b",
+        },
+      ],
+      () => active,
+    ).then((handle) => {
+      if (!active) {
+        handle.destroy();
         return;
-
-      const actualPos: [number, number] = [
-        data.question.lat,
-        data.question.lng,
-      ];
-      const guessPos: [number, number] = [data.guessLat!, data.guessLng!];
-      const bounds = L.latLngBounds([actualPos, guessPos]);
-
-      const map = L.map(containerRef.current, {
-        zoomControl: true,
-        scrollWheelZoom: false,
-      }).fitBounds(bounds, { padding: [40, 40] });
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map);
-
-      L.circleMarker(actualPos, {
-        radius: 12,
-        fillColor: "#22c55e",
-        color: "#fff",
-        weight: 2,
-        fillOpacity: 1,
-      })
-        .addTo(map)
-        .bindTooltip("实际地点", { permanent: true, direction: "top" });
-
-      L.circleMarker(guessPos, {
-        radius: 10,
-        fillColor: "#f59e0b",
-        color: "#fff",
-        weight: 2,
-        fillOpacity: 1,
-      })
-        .addTo(map)
-        .bindTooltip("你的猜测", { permanent: true, direction: "top" });
-
-      L.polyline([actualPos, guessPos], {
-        color: "#f59e0b",
-        weight: 2,
-        opacity: 0.7,
-        dashArray: "6 4",
-      }).addTo(map);
-
-      mapRef.current = map;
+      }
+      mapRef.current = handle;
     });
 
     return () => {
-      mapRef.current?.remove();
+      active = false;
+      mapRef.current?.destroy();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMap]);
+  }, [showMap, historicalQuestion]);
 
   const actualYearLabel = formatAnswerYear(data.question.year, yearEnd);
 
@@ -185,7 +175,9 @@ export function RoundResult({
                 </div>
                 <div>
                   正确答案：
-                  <span className="text-green-400">{formatCorrectAnswer()}</span>
+                  <span className="text-green-400">
+                    {formatCorrectAnswer()}
+                  </span>
                 </div>
               </div>
               {funfactQuestion.explanation && (

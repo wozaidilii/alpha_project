@@ -1,11 +1,5 @@
 import type { Map as LeafletMap, CircleMarker } from "leaflet";
-import {
-  CHINA_BOUNDS,
-  CHINA_MAP_CENTER,
-  CHINA_MAP_ZOOM,
-  clampToChina,
-  type LatLng,
-} from "~/lib/china-map";
+import { CHINA_BOUNDS, clampToChina, type LatLng } from "~/lib/china-map";
 
 const CHINA_LEAFLET_BOUNDS: [[number, number], [number, number]] = [
   [CHINA_BOUNDS.southWest.lat, CHINA_BOUNDS.southWest.lng],
@@ -64,6 +58,12 @@ function safeRemoveMap(map: LeafletMap) {
 }
 
 function addGeoqTileLayer(map: LeafletMap, L: typeof import("leaflet")) {
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution:
+      '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  }).addTo(map);
+
   L.tileLayer(
     "https://map.geoq.cn/ArcGIS/rest/services/ChinaOnlineCommunity/MapServer/tile/{z}/{y}/{x}",
     {
@@ -79,8 +79,6 @@ function createChinaMap(
   options?: { scrollWheelZoom?: boolean },
 ) {
   const map = L.map(container, {
-    center: [CHINA_MAP_CENTER.lat, CHINA_MAP_CENTER.lng],
-    zoom: CHINA_MAP_ZOOM,
     minZoom: 4,
     maxZoom: 18,
     maxBounds: CHINA_LEAFLET_BOUNDS,
@@ -90,16 +88,12 @@ function createChinaMap(
   });
 
   addGeoqTileLayer(map, L);
-
-  // 可视化国界，强调仅在中国范围内操作
-  L.rectangle(CHINA_LEAFLET_BOUNDS, {
-    color: "#b45309",
-    weight: 2,
-    fill: false,
-    dashArray: "8 6",
-    opacity: 0.55,
-    interactive: false,
-  }).addTo(map);
+  map.fitBounds(CHINA_LEAFLET_BOUNDS, { padding: [0, 0] });
+  map.setZoom(Math.min(map.getZoom() + 1, map.getMaxZoom()), {
+    animate: false,
+  });
+  window.setTimeout(() => map.invalidateSize(), 0);
+  window.setTimeout(() => map.invalidateSize(), 200);
 
   return map;
 }
