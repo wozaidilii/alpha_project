@@ -105,38 +105,59 @@ export function BattleRoundResultView({
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
     if (isFunfactQuestion(question)) {
       return (
-        <div className="mt-1 text-xs text-stone-400">
-          {guess.isCorrect ? "✓ 答对" : "✗ 答错"} · 冷知识分{" "}
-          {guess.quizPts.toLocaleString()}
+        <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
+          <div className="flex justify-between gap-2">
+            <span>答题分</span>
+            <span className="font-bold text-white">
+              {guess.quizPts.toLocaleString()}
+            </span>
+          </div>
+          <div className="mt-1">{guess.isCorrect ? "答对" : "答错"}</div>
         </div>
       );
     }
     if (showMap) {
       return (
-        <>
-          <div className="mt-1 text-xs text-stone-400">
-            📍 {guess.locationPts.toLocaleString()} + 📅{" "}
-            {guess.yearPts.toLocaleString()}
+        <div className="mt-3 space-y-2 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
+          <div className="flex justify-between gap-2">
+            <span>地点分</span>
+            <span className="font-bold text-white">
+              {guess.locationPts.toLocaleString()}
+            </span>
           </div>
-          <div className="mt-1 text-xs text-stone-400">
-            年份：{formatYear(guess.year)}
+          <div className="flex justify-between gap-2">
+            <span>年份分</span>
+            <span className="font-bold text-white">
+              {guess.yearPts.toLocaleString()}
+            </span>
+          </div>
+          <div>
+            选择年份：{formatYear(guess.year)}
             {guess.speedMultiplier > 1.01 && (
               <span className="ml-2 font-bold text-amber-400">
                 ⚡×{guess.speedMultiplier.toFixed(2)}
               </span>
             )}
           </div>
-        </>
+        </div>
       );
     }
     return (
-      <div className="mt-1 text-xs text-stone-400">
-        年份：{formatYear(guess.year)} · 年份分 {guess.yearPts.toLocaleString()}
-        {guess.speedMultiplier > 1.01 && (
-          <span className="ml-2 font-bold text-amber-400">
-            ⚡×{guess.speedMultiplier.toFixed(2)}
+      <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
+        <div className="flex justify-between gap-2">
+          <span>年份分</span>
+          <span className="font-bold text-white">
+            {guess.yearPts.toLocaleString()}
           </span>
-        )}
+        </div>
+        <div className="mt-1">
+          选择年份：{formatYear(guess.year)}
+          {guess.speedMultiplier > 1.01 && (
+            <span className="ml-2 font-bold text-amber-400">
+              ⚡×{guess.speedMultiplier.toFixed(2)}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
@@ -155,11 +176,11 @@ export function BattleRoundResultView({
           <div
             ref={containerRef}
             className="w-full border-b border-stone-700"
-            style={{ height: 300 }}
+            style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           />
         )}
 
-        <div className="mx-auto max-w-2xl px-5 py-5">
+        <div className="mx-auto max-w-5xl px-5 py-4">
           <h2 className="mb-1 text-xl font-bold text-amber-400">
             {question.title}
           </h2>
@@ -189,6 +210,7 @@ export function BattleRoundResultView({
                       <span className="text-xs text-amber-400">(你)</span>
                     )}
                   </div>
+                  <div className="text-xs text-stone-500">本轮总分</div>
                   <div className="text-3xl font-extrabold text-white">
                     {guess?.total.toLocaleString() ?? 0}
                   </div>

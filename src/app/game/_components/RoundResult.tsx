@@ -15,7 +15,6 @@ import { type GameModeConfig } from "~/lib/game-mode";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import { formatYear, formatAnswerYear } from "~/lib/scoring";
 import { mountResultMap, type ChinaResultMapHandle } from "~/lib/china-leaflet";
-import { FunfactPanel } from "./FunfactPanel";
 
 interface Props {
   data: RoundData;
@@ -48,6 +47,8 @@ export function RoundResult({
   const funfactQuestion = isFunfactQuestion(data.question)
     ? data.question
     : null;
+  const resultFunfacts =
+    historicalQuestion?.funfact ?? funfactQuestion?.funfact;
 
   useEffect(() => {
     if (
@@ -113,6 +114,12 @@ export function RoundResult({
     return funfactQuestion.options[funfactQuestion.correctIndex] ?? "";
   }
 
+  function formatDistance(): string {
+    if (data.distanceKm === null) return "未计算";
+    if (data.distanceKm < 1) return `${Math.round(data.distanceKm * 1000)} 米`;
+    return `${Math.round(data.distanceKm).toLocaleString()} 公里`;
+  }
+
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
       <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
@@ -137,15 +144,15 @@ export function RoundResult({
           <div
             ref={containerRef}
             className="w-full border-b border-stone-700"
-            style={{ height: 360 }}
+            style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           />
         )}
 
-        <div className="mx-auto w-full max-w-2xl px-6 py-6">
-          <h2 className="mb-1 text-2xl font-bold text-amber-400">
+        <div className="mx-auto w-full max-w-5xl px-5 py-4">
+          <h2 className="mb-1 text-xl font-bold text-amber-400">
             {data.question.title}
           </h2>
-          <p className="mb-6 text-sm text-stone-400">
+          <p className="mb-4 text-sm text-stone-400">
             {getQuestionResultSubtitle(data.question)}
           </p>
           {data.timedOut && (
@@ -189,85 +196,84 @@ export function RoundResult({
           )}
 
           <div
-            className={`grid gap-4 ${showMap ? "grid-cols-2" : "grid-cols-1"}`}
+            className={`grid gap-4 ${
+              resultFunfacts?.length
+                ? "lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.05fr)]"
+                : ""
+            }`}
           >
-            {showMap && (
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="mb-1 text-sm text-stone-400">📍 地点分</div>
-                <div className="text-3xl font-bold text-white">
-                  {data.locationPts.toLocaleString()}
+            <div className="rounded-xl bg-gradient-to-r from-amber-600/20 to-amber-500/10 p-4">
+              <div className="grid gap-4 sm:grid-cols-[150px_1fr] sm:items-center">
+                <div className="text-center">
+                  <div className="text-sm text-stone-400">本轮总分</div>
+                  <div className="text-4xl font-extrabold text-amber-400">
+                    {data.total.toLocaleString()}
+                  </div>
+                  <div className="text-sm text-stone-500">/ 10,000</div>
                 </div>
-                <div className="mt-1 text-sm text-stone-400">
-                  距实际地点{" "}
-                  <span className="text-white">
-                    {data.distanceKm !== null && data.distanceKm < 1
-                      ? `${Math.round(data.distanceKm * 1000)} 米`
-                      : `${Math.round(data.distanceKm ?? 0).toLocaleString()} 公里`}
-                  </span>
-                </div>
-              </div>
-            )}
 
-            {isQuiz ? (
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="mb-1 text-sm text-stone-400">📚 答题分</div>
-                <div className="text-3xl font-bold text-white">
-                  {data.quizPts.toLocaleString()}
-                </div>
-                <div className="mt-1 text-sm text-stone-400">
-                  {data.isCorrect ? "答对得满分" : "答错不得分"}
+                <div className="min-w-0 space-y-2 text-sm text-stone-300">
+                  {showMap && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-950/30 px-3 py-2">
+                      <span className="text-stone-400">地点分</span>
+                      <span className="font-bold text-white">
+                        {data.locationPts.toLocaleString()}
+                      </span>
+                      <span className="basis-full text-xs text-stone-500">
+                        距实际地点 {formatDistance()}
+                      </span>
+                    </div>
+                  )}
+
+                  {isQuiz ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-950/30 px-3 py-2">
+                      <span className="text-stone-400">答题分</span>
+                      <span className="font-bold text-white">
+                        {data.quizPts.toLocaleString()}
+                      </span>
+                      <span className="basis-full text-xs text-stone-500">
+                        {data.isCorrect ? "答对得满分" : "答错不得分"}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-950/30 px-3 py-2">
+                      <span className="text-stone-400">年份分</span>
+                      <span className="font-bold text-white">
+                        {data.yearPts.toLocaleString()}
+                      </span>
+                      <span className="basis-full text-xs text-stone-500">
+                        你猜{" "}
+                        <span className="text-amber-300">
+                          {formatYear(data.guessYear)}
+                        </span>
+                        ，实际{" "}
+                        <span className="text-green-300">
+                          {actualYearLabel}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="mb-1 text-sm text-stone-400">📅 年份分</div>
-                <div className="text-3xl font-bold text-white">
-                  {data.yearPts.toLocaleString()}
+            </div>
+
+            {resultFunfacts && resultFunfacts.length > 0 && (
+              <div className="rounded-xl bg-stone-800/90 p-4">
+                <div className="mb-2 text-sm font-semibold text-amber-400">
+                  💡 冷知识
                 </div>
-                <div className="mt-1 text-sm text-stone-400">
-                  你猜{" "}
-                  <span className="text-amber-400">
-                    {formatYear(data.guessYear)}
-                  </span>
-                  ，实际{" "}
-                  <span className="text-green-400">{actualYearLabel}</span>
-                </div>
+                <ul className="list-inside list-disc space-y-1 text-xs leading-5 text-stone-300">
+                  {resultFunfacts.map((fact, index) => (
+                    <li key={index}>{fact}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
-
-          <div className="mt-4 rounded-xl bg-gradient-to-r from-amber-600/20 to-amber-500/10 p-5 text-center">
-            <div className="text-sm text-stone-400">本轮总分</div>
-            <div className="text-5xl font-extrabold text-amber-400">
-              {data.total.toLocaleString()}
-            </div>
-            <div className="text-sm text-stone-500">/ 10,000</div>
-          </div>
-
-          {data.question.type === "historical" && data.question.funfact && (
-            <FunfactPanel funfacts={data.question.funfact} />
-          )}
-
-          {funfactQuestion?.funfact && funfactQuestion.funfact.length > 0 && (
-            <FunfactPanel funfacts={funfactQuestion.funfact} />
-          )}
-
-          {showMap && (
-            <div className="mt-3 flex justify-center gap-4">
-              <div className="flex items-center gap-1.5 text-sm text-stone-400">
-                <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
-                实际地点
-              </div>
-              <div className="flex items-center gap-1.5 text-sm text-stone-400">
-                <span className="inline-block h-3 w-3 rounded-full bg-amber-400" />
-                你的猜测
-              </div>
-            </div>
-          )}
 
           <button
             onClick={onNext}
-            className="mt-6 w-full rounded-xl bg-amber-500 py-3 font-bold text-stone-900 transition hover:bg-amber-400"
+            className="mt-4 w-full rounded-xl bg-amber-500 py-3 font-bold text-stone-900 transition hover:bg-amber-400"
           >
             {isLastRound
               ? "查看最终得分 →"
