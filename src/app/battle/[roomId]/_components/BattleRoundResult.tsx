@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
+import type { Map as LeafletMap } from "leaflet";
 import { type BattleRoundResult, type BattlePlayer } from "~/types/battle";
 import { formatAnswerYear, formatYear } from "~/lib/scoring";
 import { getQuestionResultSubtitle } from "~/lib/question-utils";
@@ -11,12 +12,6 @@ import {
   isHistoricalQuestion,
   type QuestionType,
 } from "~/types/question";
-import {
-  mountResultMap,
-  type ChinaResultLine,
-  type ChinaResultMapHandle,
-  type ChinaResultMarker,
-} from "~/lib/china-leaflet";
 import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
 
 interface Props {
@@ -38,7 +33,7 @@ export function BattleRoundResultView({
   isLastRound,
   onReady,
 }: Props) {
-  const mapRef = useRef<ChinaResultMapHandle | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { question } = result;
   const showMap =
@@ -47,8 +42,7 @@ export function BattleRoundResultView({
   const playerIds = Object.keys(players);
   const iAmReady = roundReady[myId] === true;
   const allReady =
-    playerIds.length >= 2 &&
-    playerIds.every((id) => roundReady[id] === true);
+    playerIds.length >= 2 && playerIds.every((id) => roundReady[id] === true);
 
   useEffect(() => {
     if (!showMap || !containerRef.current) return;
@@ -56,46 +50,78 @@ export function BattleRoundResultView({
     const container = containerRef.current;
     let active = true;
 
-    const actual = { lat: question.lat, lng: question.lng };
-    const markers: ChinaResultMarker[] = [
-      {
-        point: actual,
-        color: "#22c55e",
-        label: "实际地点",
-        radius: 12,
-      },
-    ];
-    const lines: ChinaResultLine[] = [];
-    const colors = ["#f59e0b", "#a78bfa"];
-    let colorIdx = 0;
+    void import("leaflet").then((L) => {
+      if (!active || !containerRef.current || mapRef.current) return;
 
-    for (const [pid, guess] of Object.entries(result.guesses)) {
-      const player = players[pid];
-      const color = colors[colorIdx++ % colors.length]!;
-      const guessPoint = { lat: guess.lat, lng: guess.lng };
+      const actualPos: [number, number] = [question.lat, question.lng];
+      const guessEntries = Object.entries(result.guesses);
+      const guessPositions = guessEntries.map(
+        ([, guess]) => [guess.lat, guess.lng] as [number, number],
+      );
+      const allPositions = [actualPos, ...guessPositions];
 
-      markers.push({
-        point: guessPoint,
-        color,
-        label: player?.name ?? pid,
-        radius: 10,
+      const map = L.map(container, {
+        zoomControl: true,
+        scrollWheelZoom: false,
+        worldCopyJump: true,
       });
-      lines.push({ from: guessPoint, to: actual, color });
-    }
 
-    void mountResultMap(container, markers, lines, () => active).then(
-      (handle) => {
-        if (!active) {
-          handle.destroy();
-          return;
-        }
-        mapRef.current = handle;
-      },
-    );
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(map);
+
+      const bounds = L.latLngBounds(allPositions);
+      if (allPositions.length > 1 && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+      } else {
+        map.setView(actualPos, 4);
+      }
+
+      L.circleMarker(actualPos, {
+        radius: 12,
+        fillColor: "#22c55e",
+        color: "#fff",
+        weight: 2,
+        fillOpacity: 1,
+      })
+        .addTo(map)
+        .bindTooltip("实际地点", { permanent: true, direction: "top" });
+
+      const colors = ["#f59e0b", "#a78bfa"];
+      guessEntries.forEach(([pid, guess], index) => {
+        const color = colors[index % colors.length]!;
+        const guessPos: [number, number] = [guess.lat, guess.lng];
+
+        L.circleMarker(guessPos, {
+          radius: 10,
+          fillColor: color,
+          color: "#fff",
+          weight: 2,
+          fillOpacity: 1,
+        })
+          .addTo(map)
+          .bindTooltip(players[pid]?.name ?? pid, {
+            permanent: true,
+            direction: "top",
+          });
+
+        L.polyline([guessPos, actualPos], {
+          color,
+          weight: 2,
+          opacity: 0.7,
+          dashArray: "6 4",
+        }).addTo(map);
+      });
+
+      window.setTimeout(() => map.invalidateSize(), 0);
+      mapRef.current = map;
+    });
 
     return () => {
       active = false;
-      mapRef.current?.destroy();
+      mapRef.current?.remove();
       mapRef.current = null;
     };
   }, [showMap, result.roundIndex, question, players, result.guesses]);
@@ -129,8 +155,7 @@ export function BattleRoundResultView({
     }
     return (
       <div className="mt-1 text-xs text-stone-400">
-        年份：{formatYear(guess.year)} · 年份分{" "}
-        {guess.yearPts.toLocaleString()}
+        年份：{formatYear(guess.year)} · 年份分 {guess.yearPts.toLocaleString()}
         {guess.speedMultiplier > 1.01 && (
           <span className="ml-2 font-bold text-amber-400">
             ⚡×{guess.speedMultiplier.toFixed(2)}
@@ -144,7 +169,9 @@ export function BattleRoundResultView({
     <div className="flex h-screen flex-col bg-stone-900 text-white">
       <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
         <h1 className="font-bold text-red-400">⚔️ 对战</h1>
-        <span className="text-stone-400">第 {result.roundIndex + 1} 轮结果</span>
+        <span className="text-stone-400">
+          第 {result.roundIndex + 1} 轮结果
+        </span>
       </div>
 
       <div className="flex-1 overflow-auto">
