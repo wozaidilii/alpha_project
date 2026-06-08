@@ -199,6 +199,11 @@ export function BattleGame({
   const resolvedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
   const roundReadyRef = useRef<Record<string, boolean>>({});
+  const phaseRef = useRef(phase);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const gameMode = getGameMode(settings.questionType);
   const currentQuestion = questions[currentRound];
@@ -213,13 +218,17 @@ export function BattleGame({
     setSettings(next);
     settingsRef.current = next;
     setLobbySynced(true);
+    // 仅在等待大厅中同步初始血量，游戏中不可重置
+    if (phaseRef.current !== "lobby") return;
+
     setPlayers((prev) => {
-      const me = prev[myId.current];
-      if (!me) return prev;
-      return {
-        ...prev,
-        [myId.current]: { ...me, hp: next.startingHp },
-      };
+      const nextPlayers = { ...prev };
+      for (const id of Object.keys(nextPlayers)) {
+        const player = nextPlayers[id];
+        if (player) nextPlayers[id] = { ...player, hp: next.startingHp };
+      }
+      playersRef.current = nextPlayers;
+      return nextPlayers;
     });
   }
 
@@ -243,18 +252,23 @@ export function BattleGame({
 
   function upsertPlayer(data: PusherPlayerJoined) {
     if (data.playerId === myId.current) return;
-    setPlayers((prev) => ({
-      ...prev,
-      [data.playerId]: {
-        id: data.playerId,
-        userId: data.userId,
-        name: data.name,
-        avatar: data.avatar,
-        character: data.character,
-        hp: settingsRef.current.startingHp,
-        isHost: data.isHost ?? false,
-      },
-    }));
+    setPlayers((prev) => {
+      const existing = prev[data.playerId];
+      const nextPlayers = {
+        ...prev,
+        [data.playerId]: {
+          id: data.playerId,
+          userId: data.userId,
+          name: data.name,
+          avatar: data.avatar,
+          character: data.character,
+          hp: existing?.hp ?? settingsRef.current.startingHp,
+          isHost: data.isHost ?? false,
+        },
+      };
+      playersRef.current = nextPlayers;
+      return nextPlayers;
+    });
   }
 
   function applyGameStarted(
@@ -459,6 +473,7 @@ export function BattleGame({
     const ch = pusher.subscribe(channel);
 
     ch.bind("player-joined", (data: PusherPlayerJoined) => {
+      if (phaseRef.current !== "lobby") return;
       upsertPlayer(data);
       if (isHost) {
         broadcastRoomSettings();
@@ -472,6 +487,7 @@ export function BattleGame({
 
     ch.bind("request-room-settings", (data: PusherRequestRoomSettings) => {
       if (!isHost || data.playerId === myId.current) return;
+      if (phaseRef.current !== "lobby") return;
       broadcastRoomSettings();
     });
 
