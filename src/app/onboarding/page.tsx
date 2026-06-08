@@ -67,7 +67,7 @@ export default function OnboardingPage() {
             建立探险者档案
           </h1>
           <p className="mt-2 text-sm text-stone-400">
-            设置昵称与档案徽章；进入大厅后还可继续捏脸打造 3D 小人
+            设置昵称与档案徽章；进入大厅后还可继续创建 Live2D 风格角色
           </p>
         </div>
 

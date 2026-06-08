@@ -37,7 +37,10 @@ function CharacterPageInner() {
     if (stored) setConfig(deserializeCharacter(stored));
   }, []);
 
-  function update<K extends keyof CharacterConfig>(key: K, value: CharacterConfig[K]) {
+  function update<K extends keyof CharacterConfig>(
+    key: K,
+    value: CharacterConfig[K],
+  ) {
     setSaved(false);
     setConfig((prev) => ({ ...prev, [key]: value }));
   }
@@ -64,10 +67,10 @@ function CharacterPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_#292018_0%,_#0c0a09_55%)] text-white">
-      <div className="flex items-center justify-between border-b border-stone-800/80 bg-stone-950/50 px-6 py-4 backdrop-blur">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_#34203f_0%,_#0c0a12_58%)] text-white">
+      <div className="flex items-center justify-between border-b border-fuchsia-300/10 bg-stone-950/55 px-6 py-4 backdrop-blur">
         {required ? (
-          <span className="text-sm text-stone-500">创建角色后即可开始探险</span>
+          <span className="text-sm text-stone-500">创建角色后即可进入大厅</span>
         ) : (
           <Link
             href="/"
@@ -77,23 +80,25 @@ function CharacterPageInner() {
           </Link>
         )}
         <div className="text-center">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-500/80">
-            Character Studio
+          <p className="text-xs tracking-[0.2em] text-pink-300/80 uppercase">
+            Live2D Style Studio
           </p>
-          <h1 className="text-xl font-extrabold text-amber-300">角色捏脸</h1>
+          <h1 className="text-xl font-extrabold text-pink-200">
+            二次元角色捏脸
+          </h1>
         </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={handleRandomize}
-            className="rounded-xl border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-violet-500/50 hover:bg-violet-950/40 hover:text-violet-200"
+            className="rounded-xl border border-fuchsia-300/15 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-pink-300/50 hover:bg-fuchsia-950/40 hover:text-pink-200"
           >
             🎲 随机
           </button>
           <button
             type="button"
             onClick={handleReset}
-            className="rounded-xl border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-stone-600 hover:bg-stone-800"
+            className="rounded-xl border border-fuchsia-300/15 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-stone-600 hover:bg-stone-800"
           >
             重置
           </button>
@@ -103,7 +108,7 @@ function CharacterPageInner() {
             className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
               saved && !required
                 ? "bg-emerald-600 text-white"
-                : "bg-gradient-to-r from-amber-400 to-amber-500 text-stone-950 hover:from-amber-300 hover:to-amber-400"
+                : "bg-gradient-to-r from-pink-300 to-fuchsia-500 text-stone-950 hover:from-pink-200 hover:to-fuchsia-400"
             }`}
           >
             {required ? "完成 →" : saved ? "✓ 已保存" : "保存形象"}
@@ -112,8 +117,8 @@ function CharacterPageInner() {
       </div>
 
       {required && (
-        <div className="border-b border-amber-500/20 bg-amber-500/10 px-6 py-3 text-center text-sm text-amber-200">
-          欢迎加入 HistoGuessr！先打造你的专属探险家形象吧
+        <div className="border-b border-pink-300/20 bg-pink-500/10 px-6 py-3 text-center text-sm text-pink-100">
+          欢迎加入 HistoGuessr！先创建你的 Live2D 风格角色
         </div>
       )}
 
@@ -126,7 +131,10 @@ function CharacterPageInner() {
           <TabBar active={activeTab} onChange={setActiveTab} />
 
           {activeTab === "skin" && (
-            <PanelSection title="肤色" subtitle="选择角色的基础肤色">
+            <PanelSection
+              title="脸部基调"
+              subtitle="选择角色的基础肤色与整体气质"
+            >
               <ColorSwatchGrid
                 colors={[...PALETTE_META.skin.colors]}
                 labels={[...PALETTE_META.skin.labels]}
@@ -138,7 +146,10 @@ function CharacterPageInner() {
 
           {activeTab === "hair" && (
             <>
-              <PanelSection title="发型" subtitle="点击卡片预览不同发型">
+              <PanelSection
+                title="发型轮廓"
+                subtitle="点击卡片预览不同二次元发型"
+              >
                 <StyleCardGrid
                   options={[...PALETTE_META.hairStyles]}
                   selected={config.hairStyle}
@@ -148,7 +159,7 @@ function CharacterPageInner() {
                 />
               </PanelSection>
               {config.hairStyle !== 4 && (
-                <PanelSection title="发色" subtitle="为发型搭配喜欢的颜色">
+                <PanelSection title="发色" subtitle="为发型搭配高饱和发色">
                   <ColorSwatchGrid
                     colors={[...PALETTE_META.hair.colors]}
                     labels={[...PALETTE_META.hair.labels]}
@@ -162,7 +173,10 @@ function CharacterPageInner() {
 
           {activeTab === "top" && (
             <>
-              <PanelSection title="上衣款式" subtitle="T 恤、卫衣、连衣裙或正装">
+              <PanelSection
+                title="服装款式"
+                subtitle="制服、偶像外套、连衣裙或幻想披肩"
+              >
                 <StyleCardGrid
                   options={[...PALETTE_META.topStyles]}
                   selected={config.topStyle}
@@ -171,7 +185,7 @@ function CharacterPageInner() {
                   previewKey="topStyle"
                 />
               </PanelSection>
-              <PanelSection title="上衣颜色">
+              <PanelSection title="服装主色">
                 <ColorSwatchGrid
                   colors={[...PALETTE_META.top.colors]}
                   labels={[...PALETTE_META.top.labels]}
@@ -184,7 +198,7 @@ function CharacterPageInner() {
 
           {activeTab === "pants" && (
             <>
-              <PanelSection title="下装款式">
+              <PanelSection title="配饰款式">
                 <StyleCardGrid
                   options={[...PALETTE_META.pantsStyles]}
                   selected={config.pantsStyle}
@@ -193,7 +207,7 @@ function CharacterPageInner() {
                   previewKey="pantsStyle"
                 />
               </PanelSection>
-              <PanelSection title="下装颜色">
+              <PanelSection title="配饰颜色">
                 <ColorSwatchGrid
                   colors={[...PALETTE_META.pants.colors]}
                   labels={[...PALETTE_META.pants.labels]}
@@ -208,7 +222,7 @@ function CharacterPageInner() {
             <button
               type="button"
               onClick={handleSave}
-              className="w-full rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 py-4 text-center text-lg font-extrabold text-stone-950 shadow-lg shadow-amber-950/30 transition hover:from-amber-300 hover:to-amber-400"
+              className="w-full rounded-2xl bg-gradient-to-r from-pink-300 to-fuchsia-500 py-4 text-center text-lg font-extrabold text-stone-950 shadow-lg shadow-fuchsia-950/30 transition hover:from-pink-200 hover:to-fuchsia-400"
             >
               完成，进入游戏 →
             </button>

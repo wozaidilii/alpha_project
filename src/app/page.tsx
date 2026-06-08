@@ -92,7 +92,7 @@ export default function Home() {
             className="flex h-10 w-10 items-center justify-center rounded-xl text-xl text-stone-500 transition hover:bg-stone-800 hover:text-amber-400"
             title="捏脸"
           >
-            ✏️
+            ✨
           </button>
           <Link
             href="/profile"
@@ -131,19 +131,25 @@ export default function Home() {
           <button
             type="button"
             onClick={handleEditCharacter}
-            className="group relative rounded-[2rem] border border-stone-700/80 bg-gradient-to-b from-stone-900/90 to-stone-950 px-10 pb-6 pt-8 shadow-2xl shadow-black/40 transition hover:border-amber-500/40 hover:shadow-amber-950/20"
+            className="group relative rounded-[2rem] border border-stone-700/80 bg-gradient-to-b from-stone-900/90 to-stone-950 px-10 pt-8 pb-6 shadow-2xl shadow-black/40 transition hover:border-amber-500/40 hover:shadow-amber-950/20"
             aria-label="编辑形象"
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-[2rem] bg-gradient-to-b from-amber-300/10 to-transparent" />
             <div className="pointer-events-none absolute bottom-5 left-1/2 h-4 w-32 -translate-x-1/2 rounded-full bg-black/40 blur-md" />
-            <CharacterSVG config={character ?? undefined} size={220} view="full" />
-            <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-stone-950/70 px-2.5 py-1 text-[10px] font-medium text-amber-300 opacity-0 transition group-hover:opacity-100">
+            <CharacterSVG
+              config={character ?? undefined}
+              size={220}
+              view="full"
+            />
+            <span className="pointer-events-none absolute top-3 right-3 rounded-full bg-stone-950/70 px-2.5 py-1 text-[10px] font-medium text-amber-300 opacity-0 transition group-hover:opacity-100">
               点击编辑
             </span>
           </button>
 
           <div className="relative z-10 mt-4 flex flex-col items-center gap-2">
-            <p className="text-xl font-bold text-stone-100">{session.user.name}</p>
+            <p className="text-xl font-bold text-stone-100">
+              {session.user.name}
+            </p>
             <button
               type="button"
               onClick={handleEditCharacter}
