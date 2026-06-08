@@ -1,7 +1,7 @@
 "use client";
 
 import { type BattlePlayer } from "~/types/battle";
-import { CharacterSVG } from "~/components/CharacterSVG";
+import { CharacterPortrait } from "~/components/CharacterPortrait";
 
 interface Props {
   player: BattlePlayer;
@@ -14,11 +14,14 @@ export function HPBar({ player, flipped }: Props) {
     pct > 50 ? "bg-green-500" : pct > 20 ? "bg-amber-500" : "bg-red-500";
 
   return (
-    <div className={`flex items-center gap-1.5 ${flipped ? "flex-row-reverse" : ""}`}>
-      {/* Avatar: character SVG or fallback emoji */}
-      <div className="h-8 w-8 overflow-hidden rounded-full bg-stone-700 flex items-center justify-center flex-shrink-0">
+    <div
+      className={`flex items-center gap-1.5 ${flipped ? "flex-row-reverse" : ""}`}
+    >
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-700">
         {player.character ? (
-          <CharacterSVG config={player.character} size={36} view="bust" />
+          <div className="relative h-full w-full">
+            <CharacterPortrait config={player.character} variant="avatar" />
+          </div>
         ) : (
           <span
             className="grid h-8 w-8 place-items-center rounded-full text-sm"
@@ -39,7 +42,9 @@ export function HPBar({ player, flipped }: Props) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="min-w-[28px] text-xs font-bold text-white">{player.hp}</span>
+      <span className="min-w-[28px] text-xs font-bold text-white">
+        {player.hp}
+      </span>
     </div>
   );
 }

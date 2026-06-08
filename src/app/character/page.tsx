@@ -1,27 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import {
-  type CharacterConfig,
-  DEFAULT_CHARACTER,
-  CHARACTER_PRESETS,
-  CHARACTER_STORAGE_KEY,
-  serializeCharacter,
-  deserializeCharacter,
-} from "~/types/character";
+import { CharacterPortrait } from "~/components/CharacterPortrait";
 import { notifyCharacterUpdated } from "~/lib/character-sync";
 import {
-  TabBar,
-  PreviewStage,
-  PanelSection,
-  ColorSwatchGrid,
-  StyleCardGrid,
-  PALETTE_META,
-  type CustomizerTab,
-} from "~/components/character/CustomizerWidgets";
+  CHARACTER_PORTRAITS,
+  CHARACTER_STORAGE_KEY,
+  DEFAULT_CHARACTER,
+  deserializeCharacter,
+  serializeCharacter,
+  type CharacterConfig,
+} from "~/types/character";
+
+function configForPortrait(portraitId: number): CharacterConfig {
+  const portrait = CHARACTER_PORTRAITS[portraitId] ?? CHARACTER_PORTRAITS[0];
+  return {
+    portraitId: portrait.id,
+    ...portrait.defaultConfig,
+  };
+}
 
 function CharacterPageInner() {
   const router = useRouter();
@@ -30,19 +30,17 @@ function CharacterPageInner() {
 
   const [config, setConfig] = useState<CharacterConfig>(DEFAULT_CHARACTER);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<CustomizerTab>("skin");
+  const selectedPortrait =
+    CHARACTER_PORTRAITS[config.portraitId ?? 0] ?? CHARACTER_PORTRAITS[0];
 
   useEffect(() => {
     const stored = localStorage.getItem(CHARACTER_STORAGE_KEY);
     if (stored) setConfig(deserializeCharacter(stored));
   }, []);
 
-  function update<K extends keyof CharacterConfig>(
-    key: K,
-    value: CharacterConfig[K],
-  ) {
+  function handleSelect(portraitId: number) {
+    setConfig(configForPortrait(portraitId));
     setSaved(false);
-    setConfig((prev) => ({ ...prev, [key]: value }));
   }
 
   function handleSave() {
@@ -54,23 +52,11 @@ function CharacterPageInner() {
     }
   }
 
-  function handleReset() {
-    setConfig(DEFAULT_CHARACTER);
-    setSaved(false);
-  }
-
-  function handleRandomize() {
-    const preset =
-      CHARACTER_PRESETS[Math.floor(Math.random() * CHARACTER_PRESETS.length)]!;
-    setConfig(preset);
-    setSaved(false);
-  }
-
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_#34203f_0%,_#0c0a12_58%)] text-white">
-      <div className="flex items-center justify-between border-b border-fuchsia-300/10 bg-stone-950/55 px-6 py-4 backdrop-blur">
+    <div className="min-h-screen bg-stone-950/65 text-white backdrop-blur-[1px]">
+      <div className="flex items-center justify-between border-b border-[#c9a46a]/20 bg-stone-950/65 px-6 py-4 backdrop-blur">
         {required ? (
-          <span className="text-sm text-stone-500">创建角色后即可进入大厅</span>
+          <span className="text-sm text-stone-500">选择角色后即可进入大厅</span>
         ) : (
           <Link
             href="/"
@@ -80,154 +66,125 @@ function CharacterPageInner() {
           </Link>
         )}
         <div className="text-center">
-          <p className="text-xs tracking-[0.2em] text-pink-300/80 uppercase">
-            Live2D Style Studio
+          <p className="text-xs tracking-[0.2em] text-[#d8bd82]/80 uppercase">
+            Character Select
           </p>
-          <h1 className="text-xl font-extrabold text-pink-200">
-            二次元角色捏脸
-          </h1>
+          <h1 className="text-xl font-extrabold text-[#e8d7b0]">选择角色</h1>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleRandomize}
-            className="rounded-xl border border-fuchsia-300/15 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-pink-300/50 hover:bg-fuchsia-950/40 hover:text-pink-200"
-          >
-            🎲 随机
-          </button>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="rounded-xl border border-fuchsia-300/15 bg-stone-900 px-3 py-2 text-sm text-stone-300 transition hover:border-stone-600 hover:bg-stone-800"
-          >
-            重置
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
-              saved && !required
-                ? "bg-emerald-600 text-white"
-                : "bg-gradient-to-r from-pink-300 to-fuchsia-500 text-stone-950 hover:from-pink-200 hover:to-fuchsia-400"
-            }`}
-          >
-            {required ? "完成 →" : saved ? "✓ 已保存" : "保存形象"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+            saved && !required
+              ? "bg-emerald-600 text-white"
+              : "bg-gradient-to-r from-[#e8d7b0] to-[#c9a46a] text-stone-950 hover:from-[#f8f4ea] hover:to-[#d8bd82]"
+          }`}
+        >
+          {required ? "确认进入 →" : saved ? "✓ 已保存" : "保存选择"}
+        </button>
       </div>
 
       {required && (
-        <div className="border-b border-pink-300/20 bg-pink-500/10 px-6 py-3 text-center text-sm text-pink-100">
-          欢迎加入 HistoGuessr！先创建你的 Live2D 风格角色
+        <div className="border-b border-[#c9a46a]/20 bg-[#c9a46a]/10 px-6 py-3 text-center text-sm text-[#e8d7b0]">
+          欢迎加入 HistoGuessr！先选择你的历史探险角色
         </div>
       )}
 
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[minmax(280px,360px)_1fr] lg:px-8">
-        <div className="lg:sticky lg:top-8 lg:self-start">
-          <PreviewStage config={config} />
-        </div>
+      <div className="mx-auto grid min-h-[calc(100vh-73px)] max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[380px_1fr] lg:px-8">
+        <section className="lg:sticky lg:top-8 lg:self-start">
+          <div className="overflow-hidden rounded-2xl border border-[#d8bd82]/25 bg-[#f8f4ea] shadow-2xl shadow-black/45">
+            <div className="relative h-[560px]">
+              <CharacterPortrait config={config} variant="full" priority />
+            </div>
+            <div className="border-t border-[#c9a46a]/20 bg-stone-950/90 px-5 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-extrabold text-[#e8d7b0]">
+                    {selectedPortrait.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-[#d8bd82]">
+                    {selectedPortrait.archetype}
+                  </p>
+                </div>
+                <span className="rounded-full border border-[#c9a46a]/30 px-3 py-1 text-xs text-stone-400">
+                  {selectedPortrait.age} 岁
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-stone-400">
+                {selectedPortrait.personality}
+              </p>
+            </div>
+          </div>
+        </section>
 
-        <div className="flex flex-col gap-5">
-          <TabBar active={activeTab} onChange={setActiveTab} />
+        <section className="self-center rounded-2xl border border-[#c9a46a]/15 bg-stone-950/70 p-5 shadow-2xl shadow-black/30 backdrop-blur">
+          <div className="mb-5">
+            <h3 className="text-lg font-bold text-stone-100">角色列表</h3>
+            <p className="mt-1 text-sm text-stone-500">
+              选择一个角色作为大厅、对战和档案中的默认形象
+            </p>
+          </div>
 
-          {activeTab === "skin" && (
-            <PanelSection
-              title="脸部基调"
-              subtitle="选择角色的基础肤色与整体气质"
-            >
-              <ColorSwatchGrid
-                colors={[...PALETTE_META.skin.colors]}
-                labels={[...PALETTE_META.skin.labels]}
-                selected={config.skinTone}
-                onChange={(value) => update("skinTone", value)}
-              />
-            </PanelSection>
-          )}
-
-          {activeTab === "hair" && (
-            <>
-              <PanelSection
-                title="发型轮廓"
-                subtitle="点击卡片预览不同二次元发型"
-              >
-                <StyleCardGrid
-                  options={[...PALETTE_META.hairStyles]}
-                  selected={config.hairStyle}
-                  onChange={(value) => update("hairStyle", value)}
-                  config={config}
-                  previewKey="hairStyle"
-                />
-              </PanelSection>
-              {config.hairStyle !== 4 && (
-                <PanelSection title="发色" subtitle="为发型搭配高饱和发色">
-                  <ColorSwatchGrid
-                    colors={[...PALETTE_META.hair.colors]}
-                    labels={[...PALETTE_META.hair.labels]}
-                    selected={config.hairColor}
-                    onChange={(value) => update("hairColor", value)}
-                  />
-                </PanelSection>
-              )}
-            </>
-          )}
-
-          {activeTab === "top" && (
-            <>
-              <PanelSection
-                title="服装款式"
-                subtitle="制服、偶像外套、连衣裙或幻想披肩"
-              >
-                <StyleCardGrid
-                  options={[...PALETTE_META.topStyles]}
-                  selected={config.topStyle}
-                  onChange={(value) => update("topStyle", value)}
-                  config={config}
-                  previewKey="topStyle"
-                />
-              </PanelSection>
-              <PanelSection title="服装主色">
-                <ColorSwatchGrid
-                  colors={[...PALETTE_META.top.colors]}
-                  labels={[...PALETTE_META.top.labels]}
-                  selected={config.topColor}
-                  onChange={(value) => update("topColor", value)}
-                />
-              </PanelSection>
-            </>
-          )}
-
-          {activeTab === "pants" && (
-            <>
-              <PanelSection title="配饰款式">
-                <StyleCardGrid
-                  options={[...PALETTE_META.pantsStyles]}
-                  selected={config.pantsStyle}
-                  onChange={(value) => update("pantsStyle", value)}
-                  config={config}
-                  previewKey="pantsStyle"
-                />
-              </PanelSection>
-              <PanelSection title="配饰颜色">
-                <ColorSwatchGrid
-                  colors={[...PALETTE_META.pants.colors]}
-                  labels={[...PALETTE_META.pants.labels]}
-                  selected={config.pantsColor}
-                  onChange={(value) => update("pantsColor", value)}
-                />
-              </PanelSection>
-            </>
-          )}
+          <div className="grid gap-4 md:grid-cols-3">
+            {CHARACTER_PORTRAITS.map((portrait) => {
+              const active = selectedPortrait.id === portrait.id;
+              return (
+                <button
+                  key={portrait.id}
+                  type="button"
+                  onClick={() => handleSelect(portrait.id)}
+                  className={`overflow-hidden rounded-2xl border text-left transition ${
+                    active
+                      ? "border-[#d8bd82]/80 bg-[#c9a46a]/15 shadow-lg shadow-black/25"
+                      : "border-[#c9a46a]/15 bg-[#111827]/70 hover:border-[#c9a46a]/35 hover:bg-[#182033]"
+                  }`}
+                >
+                  <div className="relative h-60 bg-[#f8f4ea]">
+                    <Image
+                      src={portrait.image}
+                      alt={portrait.name}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 240px"
+                      className="object-cover object-top"
+                    />
+                  </div>
+                  <div className="space-y-2 px-4 py-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`text-base font-extrabold ${
+                          active ? "text-[#e8d7b0]" : "text-stone-100"
+                        }`}
+                      >
+                        {portrait.name}
+                      </span>
+                      {active && (
+                        <span className="rounded-full bg-[#c9a46a] px-2 py-0.5 text-[10px] font-bold text-stone-950">
+                          已选择
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-[#d8bd82]">
+                      {portrait.archetype}
+                    </p>
+                    <p className="min-h-10 text-xs leading-5 text-stone-500">
+                      {portrait.personality}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
           {required && (
             <button
               type="button"
               onClick={handleSave}
-              className="w-full rounded-2xl bg-gradient-to-r from-pink-300 to-fuchsia-500 py-4 text-center text-lg font-extrabold text-stone-950 shadow-lg shadow-fuchsia-950/30 transition hover:from-pink-200 hover:to-fuchsia-400"
+              className="mt-6 w-full rounded-2xl bg-gradient-to-r from-[#e8d7b0] to-[#c9a46a] py-4 text-center text-lg font-extrabold text-stone-950 shadow-lg shadow-black/30 transition hover:from-[#f8f4ea] hover:to-[#d8bd82]"
             >
-              完成，进入游戏 →
+              确认角色，进入游戏 →
             </button>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

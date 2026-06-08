@@ -7,6 +7,7 @@ import {
   getTargetYear,
   formatAnswerYear,
   quizScore,
+  CHINA_LOCATION_SCORE_ZERO_KM,
 } from "~/lib/scoring";
 
 describe("getTargetYear", () => {
@@ -118,5 +119,15 @@ describe("yearScore / locationScore", () => {
 
   it("地点重合得 5000", () => {
     expect(locationScore(0)).toBe(5000);
+  });
+
+  it("中国地图距离超过计分范围后地点分归零", () => {
+    expect(locationScore(CHINA_LOCATION_SCORE_ZERO_KM)).toBe(0);
+    expect(locationScore(CHINA_LOCATION_SCORE_ZERO_KM + 1)).toBe(0);
+  });
+
+  it("中国地图一千公里误差只保留少量地点分", () => {
+    expect(locationScore(1000)).toBeGreaterThan(0);
+    expect(locationScore(1000)).toBeLessThan(1000);
   });
 });

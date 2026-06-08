@@ -7,7 +7,10 @@ import {
   AuthLoading,
   useCompletedPlayerSession,
 } from "~/lib/player-session-guard";
-import { CharacterSVG } from "~/components/CharacterSVG";
+import {
+  CharacterPortrait,
+  getCharacterPortrait,
+} from "~/components/CharacterPortrait";
 import {
   type CharacterConfig,
   CHARACTER_UPDATED_EVENT,
@@ -75,10 +78,11 @@ export default function Home() {
   }
 
   if (!session) return <AuthLoading />;
+  const portrait = getCharacterPortrait(character);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-stone-950 text-white">
-      <aside className="relative z-20 flex w-20 flex-col items-center border-r border-stone-800 bg-stone-900 py-5">
+    <div className="flex h-screen overflow-hidden bg-stone-950/55 text-white backdrop-blur-[1px]">
+      <aside className="relative z-20 flex w-20 flex-col items-center border-r border-stone-800/80 bg-stone-950/70 py-5 backdrop-blur">
         <div className="text-3xl" title="HistoGuessr">
           🗺️
         </div>
@@ -90,9 +94,9 @@ export default function Home() {
             type="button"
             onClick={handleEditCharacter}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-xl text-stone-500 transition hover:bg-stone-800 hover:text-amber-400"
-            title="捏脸"
+            title="选择角色"
           >
-            ✨
+            像
           </button>
           <Link
             href="/profile"
@@ -120,8 +124,9 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-8 px-8">
-        <h1 className="text-3xl font-extrabold tracking-wide text-amber-400">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-8 py-5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(245,158,11,0.12),_rgba(12,10,9,0.38)_45%,_rgba(12,10,9,0.82)_100%)]" />
+        <h1 className="text-2xl font-extrabold tracking-wide text-amber-400">
           HistoGuessr
         </h1>
 
@@ -131,31 +136,35 @@ export default function Home() {
           <button
             type="button"
             onClick={handleEditCharacter}
-            className="group relative rounded-[2rem] border border-stone-700/80 bg-gradient-to-b from-stone-900/90 to-stone-950 px-10 pt-8 pb-6 shadow-2xl shadow-black/40 transition hover:border-amber-500/40 hover:shadow-amber-950/20"
-            aria-label="编辑形象"
+            className="group relative overflow-hidden rounded-[2rem] border border-stone-700/80 bg-[#f8f4ea] px-6 pt-5 pb-0 shadow-2xl shadow-black/45 transition hover:border-amber-500/40 hover:shadow-amber-950/20"
+            aria-label="选择角色"
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-[2rem] bg-gradient-to-b from-amber-300/10 to-transparent" />
-            <div className="pointer-events-none absolute bottom-5 left-1/2 h-4 w-32 -translate-x-1/2 rounded-full bg-black/40 blur-md" />
-            <CharacterSVG
-              config={character ?? undefined}
-              size={220}
-              view="full"
-            />
-            <span className="pointer-events-none absolute top-3 right-3 rounded-full bg-stone-950/70 px-2.5 py-1 text-[10px] font-medium text-amber-300 opacity-0 transition group-hover:opacity-100">
-              点击编辑
+            <div className="pointer-events-none absolute bottom-4 left-1/2 h-4 w-40 -translate-x-1/2 rounded-full bg-black/35 blur-md" />
+            <div className="relative h-[min(34vh,280px)] min-h-[210px] w-[220px]">
+              <CharacterPortrait config={character} variant="full" priority />
+            </div>
+            <span className="pointer-events-none absolute top-3 right-3 rounded-full bg-stone-950/75 px-2.5 py-1 text-[10px] font-medium text-amber-300 opacity-0 transition group-hover:opacity-100">
+              更换角色
             </span>
           </button>
 
-          <div className="relative z-10 mt-4 flex flex-col items-center gap-2">
+          <div className="relative z-10 mt-2 flex flex-col items-center gap-1">
             <p className="text-xl font-bold text-stone-100">
               {session.user.name}
+            </p>
+            <p className="text-sm font-semibold text-amber-300">
+              {portrait.name} · {portrait.archetype}
+            </p>
+            <p className="max-w-sm text-center text-xs leading-5 text-stone-400">
+              {portrait.personality}
             </p>
             <button
               type="button"
               onClick={handleEditCharacter}
-              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-sm font-semibold text-amber-300 transition hover:border-amber-400/60 hover:bg-amber-500/20 hover:text-amber-200"
+              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1 text-sm font-semibold text-amber-300 transition hover:border-amber-400/60 hover:bg-amber-500/20 hover:text-amber-200"
             >
-              编辑形象
+              更换角色
               <span aria-hidden="true">→</span>
             </button>
           </div>
@@ -165,13 +174,13 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setSelectedMode("solo")}
-            className={`flex flex-col items-center gap-2 rounded-2xl border px-8 py-5 transition ${
+            className={`flex flex-col items-center gap-2 rounded-2xl border px-8 py-4 transition ${
               selectedMode === "solo"
                 ? "border-amber-500 bg-amber-500/10 text-amber-400"
                 : "border-stone-700 bg-stone-800 text-stone-400 hover:border-stone-600 hover:bg-stone-700"
             }`}
           >
-            <span className="text-3xl">🧭</span>
+            <span className="text-2xl">🧭</span>
             <span className="font-bold">个人模式</span>
             <span className="text-xs opacity-70">挑战自我最高分</span>
           </button>
@@ -179,13 +188,13 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setSelectedMode("battle")}
-            className={`flex flex-col items-center gap-2 rounded-2xl border px-8 py-5 transition ${
+            className={`flex flex-col items-center gap-2 rounded-2xl border px-8 py-4 transition ${
               selectedMode === "battle"
                 ? "border-red-500 bg-red-500/10 text-red-400"
                 : "border-stone-700 bg-stone-800 text-stone-400 hover:border-stone-600 hover:bg-stone-700"
             }`}
           >
-            <span className="text-3xl">⚔️</span>
+            <span className="text-2xl">⚔️</span>
             <span className="font-bold">对战模式</span>
             <span className="text-xs opacity-70">邀请朋友 PK</span>
           </button>
@@ -194,7 +203,7 @@ export default function Home() {
         <button
           type="button"
           onClick={handleStart}
-          className={`w-64 rounded-2xl py-4 text-lg font-extrabold shadow-lg transition active:scale-95 ${
+          className={`w-64 rounded-2xl py-3 text-lg font-extrabold shadow-lg transition active:scale-95 ${
             selectedMode === "solo"
               ? "bg-amber-500 text-stone-900 hover:bg-amber-400"
               : "bg-red-500 text-white hover:bg-red-400"

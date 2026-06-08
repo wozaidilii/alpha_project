@@ -18,10 +18,17 @@ export function haversineDistance(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Max distance score: 5000. Score decays with distance.
-// Full score within ~25km, zero at ~15000km
+export const LOCATION_SCORE_MAX = 5000;
+export const CHINA_LOCATION_SCORE_DECAY_KM = 600;
+export const CHINA_LOCATION_SCORE_ZERO_KM = 2500;
+
+// 中国地图模式使用更紧的距离分曲线；跨大半个中国的误差应接近 0 分。
 export function locationScore(distanceKm: number): number {
-  return Math.round(5000 * Math.exp(-distanceKm / 2000));
+  if (distanceKm <= 0) return LOCATION_SCORE_MAX;
+  if (distanceKm >= CHINA_LOCATION_SCORE_ZERO_KM) return 0;
+  return Math.round(
+    LOCATION_SCORE_MAX * Math.exp(-distanceKm / CHINA_LOCATION_SCORE_DECAY_KM),
+  );
 }
 
 // Max year score: 5000. Score decays with year difference.
@@ -128,12 +135,7 @@ export function scoreRound(input: RoundScoreInput): RoundScoreResult {
     };
   }
 
-  const {
-    actualLat,
-    actualLng,
-    guessLat,
-    guessLng,
-  } = input;
+  const { actualLat, actualLng, guessLat, guessLng } = input;
 
   if (
     actualLat === undefined ||

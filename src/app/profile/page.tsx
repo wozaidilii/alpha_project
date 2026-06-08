@@ -128,7 +128,7 @@ export default function ProfilePage() {
             个人档案
           </h1>
           <p className="mb-6 text-stone-400">
-            编辑形象，查看个人最高分和历史战绩
+            选择角色，查看个人最高分和历史战绩
           </p>
 
           <div className="mb-4 rounded-xl bg-stone-800 p-4">

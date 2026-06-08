@@ -59,6 +59,7 @@ export async function getRandomHistoricalEvents(
       image_url,
       funfact
     from historical_events
+    where category = 'china'
     order by random()
     limit ${count}
   `;
@@ -87,6 +88,7 @@ export async function getHistoricalEventsByIds(
       funfact
     from historical_events
     where id in ${sql(ids)}
+      and category = 'china'
   `;
 
   const byId = new Map(rows.map((row) => [row.id, toHistoricalEvent(row)]));

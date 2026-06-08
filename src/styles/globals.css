@@ -1,6 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    linear-gradient(rgba(10, 8, 6, 0.5), rgba(10, 8, 6, 0.72)),
+    url("/backgrounds/historical-china-map-bg.png") center / cover fixed
+      no-repeat,
+    #0c0a09;
 }

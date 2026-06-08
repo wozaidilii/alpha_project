@@ -1,6 +1,7 @@
 // ─── Character configuration ──────────────────────────────────────────────────
 
 export interface CharacterConfig {
+  portraitId?: number; // 0–2, premium portrait base
   skinTone: number; // 0–4
   hairStyle: number; // 0–4
   hairColor: number; // 0–5
@@ -11,72 +12,75 @@ export interface CharacterConfig {
 }
 
 export const DEFAULT_CHARACTER: CharacterConfig = {
+  portraitId: 0,
   skinTone: 1,
   hairStyle: 0,
   hairColor: 0,
-  topStyle: 0,
-  topColor: 2,
-  pantsStyle: 0,
-  pantsColor: 3,
+  topStyle: 1,
+  topColor: 1,
+  pantsStyle: 2,
+  pantsColor: 0,
 };
 
-// ─── Color palettes ───────────────────────────────────────────────────────────
-
-export const SKIN_TONES = [
-  "#FDDBB4", // 白皙
-  "#F5C08A", // 自然
-  "#D4915A", // 小麦
-  "#A0622A", // 深棕
-  "#5C3317", // 深色
-];
-
-export const HAIR_COLORS = [
-  "#21130F", // 墨茶
-  "#5B3A90", // 夜紫
-  "#E8B35C", // 蜂蜜金
-  "#F472B6", // 樱粉
-  "#38BDF8", // 湖蓝
-  "#C084FC", // 星紫
-];
-
-export const HAIR_STYLE_NAMES = [
-  "学生短发",
-  "姬发长发",
-  "蓬松卷发",
-  "侧马尾",
-  "利落短发",
-];
-
-export const TOP_COLORS = [
-  "#EF4444", // 赤红
-  "#3B82F6", // 学院蓝
-  "#10B981", // 薄荷绿
-  "#F59E0B", // 金橙
-  "#8B5CF6", // 魔法紫
-  "#F8FAFC", // 月白
-];
-
-export const TOP_STYLE_NAMES = [
-  "学院制服",
-  "偶像外套",
-  "幻想连衣裙",
-  "术士披肩",
-];
-
-export const PANTS_COLORS = [
-  "#F472B6", // 樱粉
-  "#A78BFA", // 梦紫
-  "#38BDF8", // 晶蓝
-  "#FACC15", // 星金
-  "#2DD4BF", // 青绿
-];
-
-export const PANTS_STYLE_NAMES = ["发饰蝴蝶结", "兽耳发饰", "耳机光环"];
+export const CHARACTER_PORTRAITS = [
+  {
+    id: 0,
+    name: "沈逸尘",
+    archetype: "书生剑修",
+    age: 22,
+    personality: "冷静克制，擅长从史料细节中推断年代。",
+    image: "/characters/xianxia-scholar-swordsman.png",
+    defaultConfig: {
+      skinTone: 1,
+      hairStyle: 0,
+      hairColor: 0,
+      topStyle: 1,
+      topColor: 1,
+      pantsStyle: 2,
+      pantsColor: 0,
+    },
+  },
+  {
+    id: 1,
+    name: "温照影",
+    archetype: "赤绫史官",
+    age: 20,
+    personality: "聪慧锐利，随身携带竹简与朱砂笔。",
+    image: "/characters/xianxia-red-historian.png",
+    defaultConfig: {
+      skinTone: 0,
+      hairStyle: 2,
+      hairColor: 0,
+      topStyle: 0,
+      topColor: 3,
+      pantsStyle: 1,
+      pantsColor: 3,
+    },
+  },
+  {
+    id: 2,
+    name: "陆青衡",
+    archetype: "青衣机关师",
+    age: 19,
+    personality: "开朗机敏，喜欢用机关罗盘记录古地图。",
+    image: "/characters/xianxia-jade-mechanist.png",
+    defaultConfig: {
+      skinTone: 1,
+      hairStyle: 4,
+      hairColor: 5,
+      topStyle: 2,
+      topColor: 5,
+      pantsStyle: 0,
+      pantsColor: 4,
+    },
+  },
+] as const;
 
 // ─── Serialization ────────────────────────────────────────────────────────────
 
 export function serializeCharacter(c: CharacterConfig): string {
   return [
+    c.portraitId ?? 0,
     c.skinTone,
     c.hairStyle,
     c.hairColor,
@@ -89,17 +93,20 @@ export function serializeCharacter(c: CharacterConfig): string {
 
 export function deserializeCharacter(s: string): CharacterConfig {
   const parts = s.split("-").map(Number);
-  if (parts.length !== 7 || parts.some(isNaN)) return DEFAULT_CHARACTER;
-  const [
-    skinTone,
-    hairStyle,
-    hairColor,
-    topStyle,
-    topColor,
-    pantsStyle,
-    pantsColor,
-  ] = parts as [number, number, number, number, number, number, number];
+  if ((parts.length !== 7 && parts.length !== 8) || parts.some(isNaN)) {
+    return DEFAULT_CHARACTER;
+  }
+  const legacyOffset = parts.length === 7 ? 0 : 1;
+  const portraitId = parts.length === 8 ? parts[0]! : 0;
+  const skinTone = parts[legacyOffset]!;
+  const hairStyle = parts[legacyOffset + 1]!;
+  const hairColor = parts[legacyOffset + 2]!;
+  const topStyle = parts[legacyOffset + 3]!;
+  const topColor = parts[legacyOffset + 4]!;
+  const pantsStyle = parts[legacyOffset + 5]!;
+  const pantsColor = parts[legacyOffset + 6]!;
   return {
+    portraitId,
     skinTone,
     hairStyle,
     hairColor,
@@ -112,51 +119,3 @@ export function deserializeCharacter(s: string): CharacterConfig {
 
 export const CHARACTER_STORAGE_KEY = "histoguessr_character";
 export const CHARACTER_UPDATED_EVENT = "histoguessr-character-updated";
-
-export const CHARACTER_PRESETS: CharacterConfig[] = [
-  {
-    skinTone: 1,
-    hairStyle: 0,
-    hairColor: 0,
-    topStyle: 0,
-    topColor: 1,
-    pantsStyle: 0,
-    pantsColor: 0,
-  },
-  {
-    skinTone: 0,
-    hairStyle: 1,
-    hairColor: 3,
-    topStyle: 2,
-    topColor: 5,
-    pantsStyle: 0,
-    pantsColor: 3,
-  },
-  {
-    skinTone: 1,
-    hairStyle: 3,
-    hairColor: 5,
-    topStyle: 1,
-    topColor: 4,
-    pantsStyle: 2,
-    pantsColor: 2,
-  },
-  {
-    skinTone: 2,
-    hairStyle: 2,
-    hairColor: 4,
-    topStyle: 3,
-    topColor: 2,
-    pantsStyle: 1,
-    pantsColor: 4,
-  },
-  {
-    skinTone: 0,
-    hairStyle: 4,
-    hairColor: 2,
-    topStyle: 0,
-    topColor: 3,
-    pantsStyle: 2,
-    pantsColor: 1,
-  },
-];
