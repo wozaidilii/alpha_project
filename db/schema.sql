@@ -72,8 +72,20 @@ create table if not exists historical_events (
 alter table historical_events
   add column if not exists funfact jsonb not null default '[]'::jsonb;
 
+alter table historical_events
+  add column if not exists hint text;
+
+alter table historical_events
+  add column if not exists difficulty integer check (difficulty is null or (difficulty >= 1 and difficulty <= 5));
+
 create index if not exists historical_events_category_idx
   on historical_events(category);
+
+create index if not exists historical_events_difficulty_idx
+  on historical_events(difficulty);
+
+create index if not exists funfact_questions_difficulty_idx
+  on funfact_questions(difficulty);
 
 -- 历史冷知识答题：每条 raw 记录拆成选择题 + 判断题两行
 create table if not exists funfact_questions (

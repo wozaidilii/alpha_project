@@ -10,6 +10,7 @@ import { loadEnvFiles } from "./load-env.mjs";
 import {
   BLOB_URL_MAP,
   DEEPSEEK_JSON,
+  FAMOUS_JSON,
   FUNFACT_JSON,
   IMAGES_SOURCE,
   blobKeyFromLocalPath,
@@ -82,7 +83,7 @@ console.log(`Blob 鉴权：${blobAuth.mode}，访问级别：${blobAccess}`);
 
 const localPaths = new Set();
 
-for (const jsonPath of [DEEPSEEK_JSON, FUNFACT_JSON]) {
+for (const jsonPath of [DEEPSEEK_JSON, FUNFACT_JSON, FAMOUS_JSON]) {
   try {
     const raw = JSON.parse(await readFile(jsonPath, "utf8"));
     const records = Array.isArray(raw.records) ? raw.records : [];
@@ -91,7 +92,7 @@ for (const jsonPath of [DEEPSEEK_JSON, FUNFACT_JSON]) {
     }
   } catch (error) {
     if (jsonPath === DEEPSEEK_JSON) throw error;
-    console.warn(`跳过不存在的 funfact JSON：${jsonPath}`);
+    console.warn(`跳过不存在的 JSON：${jsonPath}`);
   }
 }
 

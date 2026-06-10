@@ -29,6 +29,8 @@ import { EventCard } from "../_components/EventCard";
 import { QuizPanel } from "../_components/QuizPanel";
 import { RoundResult } from "../_components/RoundResult";
 import { FinalScore } from "../_components/FinalScore";
+import { DifficultySetup } from "../_components/DifficultySetup";
+import { getDifficultyLabel } from "~/lib/difficulty";
 
 const ROUNDS = 5;
 const ROUND_TIME_SECONDS = 30;
@@ -66,19 +68,25 @@ export default function GamePlayPage({ params }: PageProps) {
   const questionType = gameMode?.type;
   const isHistorical = questionType === "historical";
   const isFunfact = questionType === "funfact";
+  const needsDifficultySetup = isHistorical || isFunfact;
+
+  const [selectedDifficulty, setSelectedDifficulty] = useState<
+    number | undefined
+  >(undefined);
+  const [gameStarted, setGameStarted] = useState(!needsDifficultySetup);
 
   const eventsQuery = api.event.random.useQuery(
-    { count: ROUNDS },
+    { count: ROUNDS, difficulty: selectedDifficulty },
     {
-      enabled: authReady && isHistorical,
+      enabled: authReady && isHistorical && gameStarted,
       refetchOnWindowFocus: false,
     },
   );
 
   const funfactQuery = api.funfact.random.useQuery(
-    { count: ROUNDS },
+    { count: ROUNDS, difficulty: selectedDifficulty },
     {
-      enabled: authReady && isFunfact,
+      enabled: authReady && isFunfact && gameStarted,
       refetchOnWindowFocus: false,
     },
   );
@@ -141,7 +149,7 @@ export default function GamePlayPage({ params }: PageProps) {
   );
 
   useEffect(() => {
-    if (!authReady) return;
+    if (!authReady || !gameStarted) return;
     if (!questionType) return;
     if (isHistorical) {
       if (eventsQuery.data) applyHistoricalEvents(eventsQuery.data);
@@ -154,6 +162,7 @@ export default function GamePlayPage({ params }: PageProps) {
     loadStaticQuestions(questionType);
   }, [
     authReady,
+    gameStarted,
     questionType,
     isHistorical,
     isFunfact,
@@ -359,6 +368,18 @@ export default function GamePlayPage({ params }: PageProps) {
     void loadQuestions(gameMode.type);
   }
 
+  function handleStartGame() {
+    setGameStarted(true);
+    setRound(0);
+    setPhase("playing");
+    setRounds([]);
+    setQuestions([]);
+    setLoadError("");
+    setTimeLeft(ROUND_TIME_SECONDS);
+    resolvedRoundRef.current = false;
+    lastCountdownTickRef.current = null;
+  }
+
   const canSubmit = needsQuiz
     ? guessIndex !== null
     : needsMap
@@ -383,6 +404,17 @@ export default function GamePlayPage({ params }: PageProps) {
           返回选择页面
         </Link>
       </div>
+    );
+  }
+
+  if (needsDifficultySetup && !gameStarted) {
+    return (
+      <DifficultySetup
+        gameMode={gameMode}
+        selectedDifficulty={selectedDifficulty}
+        onSelectDifficulty={setSelectedDifficulty}
+        onStart={handleStartGame}
+      />
     );
   }
 
@@ -463,9 +495,16 @@ export default function GamePlayPage({ params }: PageProps) {
             退出
           </Link>
         </div>
-        <span className="text-stone-400">
-          第 {round + 1} / {ROUNDS} 轮
-        </span>
+        <div className="flex items-center gap-4 text-stone-400">
+          {needsDifficultySetup && (
+            <span className="text-xs text-stone-500">
+              {getDifficultyLabel(selectedDifficulty)}
+            </span>
+          )}
+          <span>
+            第 {round + 1} / {ROUNDS} 轮
+          </span>
+        </div>
       </div>
       <div className="h-1 bg-stone-800">
         <div

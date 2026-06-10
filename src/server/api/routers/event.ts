@@ -5,11 +5,18 @@ import {
 } from "~/server/data/event-store";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
+const difficultyInput = z.number().int().min(1).max(5).optional();
+
 export const eventRouter = createTRPCRouter({
   random: publicProcedure
-    .input(z.object({ count: z.number().int().min(1).max(20) }))
+    .input(
+      z.object({
+        count: z.number().int().min(1).max(20),
+        difficulty: difficultyInput,
+      }),
+    )
     .query(({ input }) => {
-      return getRandomHistoricalEvents(input.count);
+      return getRandomHistoricalEvents(input);
     }),
 
   byIds: publicProcedure

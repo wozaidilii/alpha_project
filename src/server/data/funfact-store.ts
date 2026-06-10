@@ -50,30 +50,49 @@ function toFunfactQuestion(row: FunfactQuestionRow): FunfactQuestionRecord {
   };
 }
 
+export interface FunfactQuestionQuery {
+  count: number;
+  difficulty?: number;
+}
+
+const FUNFACT_QUESTION_COLUMNS = sql`
+  id,
+  source_id,
+  format,
+  title,
+  stem,
+  options,
+  correct_index,
+  explanation,
+  category,
+  description,
+  hint,
+  funfact,
+  difficulty,
+  image_url,
+  fallback_image_url
+`;
+
 export async function getRandomFunfactQuestions(
-  count: number,
+  query: FunfactQuestionQuery,
 ): Promise<FunfactQuestionRecord[]> {
-  const rows = await sql<FunfactQuestionRow[]>`
-    select
-      id,
-      source_id,
-      format,
-      title,
-      stem,
-      options,
-      correct_index,
-      explanation,
-      category,
-      description,
-      hint,
-      funfact,
-      difficulty,
-      image_url,
-      fallback_image_url
-    from funfact_questions
-    order by random()
-    limit ${count}
-  `;
+  const { count, difficulty } = query;
+
+  const rows =
+    difficulty == null
+      ? await sql<FunfactQuestionRow[]>`
+          select ${FUNFACT_QUESTION_COLUMNS}
+          from funfact_questions
+          order by random()
+          limit ${count}
+        `
+      : await sql<FunfactQuestionRow[]>`
+          select ${FUNFACT_QUESTION_COLUMNS}
+          from funfact_questions
+          where difficulty = ${difficulty}
+          order by random()
+          limit ${count}
+        `;
 
   return rows.map(toFunfactQuestion);
 }
@@ -85,22 +104,7 @@ export async function getFunfactQuestionsByIds(
   if (ids.length === 0) return [];
 
   const rows = await sql<FunfactQuestionRow[]>`
-    select
-      id,
-      source_id,
-      format,
-      title,
-      stem,
-      options,
-      correct_index,
-      explanation,
-      category,
-      description,
-      hint,
-      funfact,
-      difficulty,
-      image_url,
-      fallback_image_url
+    select ${FUNFACT_QUESTION_COLUMNS}
     from funfact_questions
     where id in ${sql(ids)}
   `;

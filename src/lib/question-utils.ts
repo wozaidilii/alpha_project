@@ -1,3 +1,4 @@
+import { getDifficultyLabel } from "~/lib/difficulty";
 import {
   type GameQuestion,
   type QuestionType,
@@ -27,6 +28,10 @@ const FUNFACT_CATEGORY_LABELS: Record<string, string> = {
   "文化作品funfact": "文化作品",
   "器具发明funfact": "器具发明",
   "生活funfact": "生活",
+  事件: "事件",
+  人物: "人物",
+  文化习俗: "文化习俗",
+  杂务: "杂务",
   funtest: "测试",
 };
 
@@ -70,17 +75,22 @@ export function getFunfactCategoryLabel(category: string): string {
   return FUNFACT_CATEGORY_LABELS[category] ?? category;
 }
 
+function formatDifficultySuffix(difficulty: number | undefined): string {
+  if (difficulty == null) return "";
+  return ` · ${getDifficultyLabel(difficulty)}`;
+}
+
 /** 题卡角标：题型 + 子类/历史分区 */
 export function getQuestionBadge(question: GameQuestion): string {
   if (question.type === "historical") {
     const region = question.category === "china" ? "🇨🇳 中国" : "🌍 世界";
-    return `${TYPE_EMOJI.historical} ${region}历史`;
+    return `${TYPE_EMOJI.historical} ${region}历史${formatDifficultySuffix(question.difficulty)}`;
   }
   if (question.type === "funfact") {
     const category = getFunfactCategoryLabel(question.category);
     const format =
       question.format === "multiple_choice" ? "四选一" : "判断题";
-    return `${TYPE_EMOJI.funfact} ${category} · ${format}`;
+    return `${TYPE_EMOJI.funfact} ${category} · ${format}${formatDifficultySuffix(question.difficulty)}`;
   }
   if (question.type === "nostalgia") {
     const sub = NOSTALGIA_SUB_LABELS[question.subCategory];
