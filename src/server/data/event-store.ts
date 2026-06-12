@@ -16,6 +16,13 @@ interface HistoricalEventRow {
   wikipedia_title: string | null;
   image_url: string | null;
   funfact: string[] | null;
+  hint: string | null;
+  difficulty: number | null;
+}
+
+export interface HistoricalEventQuery {
+  count: number;
+  difficulty?: number;
 }
 
 function parseFunfact(value: unknown): string[] | undefined {
@@ -38,31 +45,50 @@ function toHistoricalEvent(row: HistoricalEventRow): HistoricalEvent {
     category: row.category,
     wikipediaTitle: row.wikipedia_title ?? undefined,
     imageUrl: toEventImageProxyUrl(row.image_url),
+    hint: row.hint ?? undefined,
+    difficulty: row.difficulty ?? undefined,
     funfact: parseFunfact(row.funfact),
   };
 }
 
+const HISTORICAL_EVENT_COLUMNS = sql`
+  id,
+  title,
+  description,
+  year,
+  lat,
+  lng,
+  location,
+  category,
+  wikipedia_title,
+  image_url,
+  funfact,
+  hint,
+  difficulty
+`;
+
 export async function getRandomHistoricalEvents(
-  count: number,
+  query: HistoricalEventQuery,
 ): Promise<HistoricalEvent[]> {
-  const rows = await sql<HistoricalEventRow[]>`
-    select
-      id,
-      title,
-      description,
-      year,
-      lat,
-      lng,
-      location,
-      category,
-      wikipedia_title,
-      image_url,
-      funfact
-    from historical_events
-    where category = 'china'
-    order by random()
-    limit ${count}
-  `;
+  const { count, difficulty } = query;
+
+  const rows =
+    difficulty == null
+      ? await sql<HistoricalEventRow[]>`
+          select ${HISTORICAL_EVENT_COLUMNS}
+          from historical_events
+          where category = 'china'
+          order by random()
+          limit ${count}
+        `
+      : await sql<HistoricalEventRow[]>`
+          select ${HISTORICAL_EVENT_COLUMNS}
+          from historical_events
+          where category = 'china'
+            and difficulty = ${difficulty}
+          order by random()
+          limit ${count}
+        `;
 
   return rows.map(toHistoricalEvent);
 }
@@ -74,18 +100,7 @@ export async function getHistoricalEventsByIds(
   if (ids.length === 0) return [];
 
   const rows = await sql<HistoricalEventRow[]>`
-    select
-      id,
-      title,
-      description,
-      year,
-      lat,
-      lng,
-      location,
-      category,
-      wikipedia_title,
-      image_url,
-      funfact
+    select ${HISTORICAL_EVENT_COLUMNS}
     from historical_events
     where id in ${sql(ids)}
       and category = 'china'

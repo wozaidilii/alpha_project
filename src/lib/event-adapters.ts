@@ -6,7 +6,12 @@ import { type FunfactQuestion, type HistoricalQuestion } from "~/types/question"
 export function toHistoricalQuestion(
   event: HistoricalEvent,
 ): HistoricalQuestion {
-  return { ...event, type: "historical" };
+  return {
+    ...event,
+    type: "historical",
+    hint: event.hint,
+    difficulty: event.difficulty,
+  };
 }
 
 export function toHistoricalQuestions(

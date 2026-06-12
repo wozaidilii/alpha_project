@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type GameQuestion, isFunfactQuestion } from "~/types/question";
+import {
+  type GameQuestion,
+  isFunfactQuestion,
+  isHistoricalQuestion,
+} from "~/types/question";
+import { getDifficultyLabel } from "~/lib/difficulty";
 import { getQuestionBadge } from "~/lib/question-utils";
 import { fetchWikiSummary } from "~/lib/wikipedia";
 import { ImageLightbox } from "./ImageLightbox";
@@ -130,6 +135,22 @@ export function EventCard({ question }: Props) {
           <p className="text-sm leading-relaxed text-stone-300">
             {question.description}
           </p>
+          {isHistoricalQuestion(question) && question.hint && (
+            <p className="mt-2 text-sm leading-relaxed text-stone-400 italic">
+              提示：{question.hint}
+            </p>
+          )}
+          {isFunfactQuestion(question) && question.hint && (
+            <p className="mt-2 text-sm leading-relaxed text-stone-400 italic">
+              提示：{question.hint}
+            </p>
+          )}
+          {(isHistoricalQuestion(question) || isFunfactQuestion(question)) &&
+            question.difficulty != null && (
+              <p className="mt-2 text-xs text-stone-500">
+                难度：{getDifficultyLabel(question.difficulty)}
+              </p>
+            )}
         </div>
       </div>
 
