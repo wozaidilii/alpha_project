@@ -1,0 +1,55 @@
+.result-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 48rpx;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 56rpx 1fr 116rpx;
+  gap: 18rpx;
+  align-items: center;
+  padding: 22rpx 0;
+  border-bottom: 2rpx solid #d6ccb8;
+}
+
+.result-mark {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  color: #f9f5ea;
+  font-size: 24rpx;
+  font-weight: 800;
+  line-height: 56rpx;
+  text-align: center;
+}
+
+.mark-correct {
+  background: #2e7d58;
+}
+
+.mark-wrong {
+  background: #9d3124;
+}
+
+.result-title {
+  overflow: hidden;
+  color: #24312f;
+  font-size: 26rpx;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-score {
+  color: #15332f;
+  font-size: 26rpx;
+  font-weight: 800;
+  text-align: right;
+}

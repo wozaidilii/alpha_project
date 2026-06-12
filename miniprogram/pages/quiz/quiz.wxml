@@ -1,0 +1,37 @@
+<view class="page quiz-page">
+  <view class="quiz-header">
+    <view class="eyebrow">第 {{roundIndex + 1}} / {{total}} 题</view>
+    <view class="score-pill">得分 {{score}}</view>
+  </view>
+
+  <view class="question-title">{{question.title}}</view>
+  <view class="question-stem">{{question.stem}}</view>
+
+  <view class="option-list">
+    <button
+      wx:for="{{question.options}}"
+      wx:key="*this"
+      class="option {{selectedIndex === index ? 'option-selected' : ''}} {{phase === 'result' && question.correctIndex === index ? 'option-correct' : ''}} {{phase === 'result' && selectedIndex === index && selectedIndex !== question.correctIndex ? 'option-wrong' : ''}}"
+      data-index="{{index}}"
+      disabled="{{phase === 'result'}}"
+      bindtap="selectOption"
+    >
+      {{item}}
+    </button>
+  </view>
+
+  <view wx:if="{{phase === 'result'}}" class="answer-panel">
+    <view class="answer-title">{{isCorrect ? '回答正确' : '回答错误'}}</view>
+    <view class="answer-text">{{question.explanation || '本题暂无解析。'}}</view>
+    <view wx:if="{{funfactText}}" class="answer-text funfact">{{funfactText}}</view>
+  </view>
+
+  <button wx:if="{{phase === 'answering'}}" class="primary-button" bindtap="submitAnswer" disabled="{{selectedIndex === null}}">
+    提交答案
+  </button>
+  <button wx:else class="primary-button" bindtap="nextQuestion" loading="{{saving}}">
+    {{roundIndex + 1 === total ? '查看成绩' : '下一题'}}
+  </button>
+
+  <view wx:if="{{error}}" class="status-text">{{error}}</view>
+</view>

@@ -6,6 +6,7 @@ create table if not exists players (
   avatar_color char(7) not null,
   profile_completed boolean not null default false,
   solo_high_score integer not null default 0 check (solo_high_score >= 0),
+  wechat_openid text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -19,8 +20,14 @@ alter table players
 alter table players
   add column if not exists solo_high_score integer not null default 0;
 
+alter table players
+  add column if not exists wechat_openid text;
+
 create unique index if not exists players_email_idx
   on players(email);
+
+create unique index if not exists players_wechat_openid_idx
+  on players(wechat_openid);
 
 create table if not exists player_sessions (
   token text primary key,
@@ -84,9 +91,6 @@ create index if not exists historical_events_category_idx
 create index if not exists historical_events_difficulty_idx
   on historical_events(difficulty);
 
-create index if not exists funfact_questions_difficulty_idx
-  on funfact_questions(difficulty);
-
 -- 历史冷知识答题：每条 raw 记录拆成选择题 + 判断题两行
 create table if not exists funfact_questions (
   id text primary key,
@@ -122,3 +126,6 @@ create index if not exists funfact_questions_format_idx
 
 create index if not exists funfact_questions_source_id_idx
   on funfact_questions(source_id);
+
+create index if not exists funfact_questions_difficulty_idx
+  on funfact_questions(difficulty);

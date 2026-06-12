@@ -111,6 +111,14 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function normalizeWechatOpenId(openId: string) {
+  const normalized = openId.trim();
+  if (normalized.length === 0) {
+    throw new Error("Invalid WeChat openid");
+  }
+  return normalized;
+}
+
 async function getPlayerByToken(token: string): Promise<PlayerRow | null> {
   const [row] = await sql<PlayerRow[]>`
     select
@@ -200,6 +208,66 @@ export async function loginPlayerByEmail(
         ${now}
       )
       on conflict (email) do update
+      set updated_at = players.updated_at
+      returning
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        created_at,
+        updated_at
+    `;
+
+    const token = await createSessionForPlayer(tx, player!.id, now);
+
+    return {
+      token,
+      user: toPublicPlayer(player!),
+    };
+  });
+
+  return { token, user };
+}
+
+export async function loginPlayerByWechatOpenId(
+  openIdInput: string,
+): Promise<PlayerSession> {
+  const now = new Date();
+  const openId = normalizeWechatOpenId(openIdInput);
+  const id = randomUUID();
+  const avatar = normalizeAvatar();
+  const name = normalizeName("微信玩家");
+
+  const { token, user } = await sql.begin(async (tx) => {
+    const [player] = await tx<PlayerRow[]>`
+      insert into players (
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        wechat_openid,
+        created_at,
+        updated_at
+      )
+      values (
+        ${id},
+        null,
+        ${name},
+        ${avatar.icon},
+        ${avatar.color},
+        true,
+        0,
+        ${openId},
+        ${now},
+        ${now}
+      )
+      on conflict (wechat_openid) do update
       set updated_at = players.updated_at
       returning
         id,

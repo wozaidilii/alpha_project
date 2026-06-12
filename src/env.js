@@ -9,6 +9,8 @@ export const env = createEnv({
     PUSHER_KEY: z.string(),
     PUSHER_SECRET: z.string(),
     PUSHER_CLUSTER: z.string(),
+    WECHAT_MINIPROGRAM_APP_ID: z.string().optional(),
+    WECHAT_MINIPROGRAM_APP_SECRET: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_PUSHER_KEY: z.string(),
@@ -22,6 +24,8 @@ export const env = createEnv({
     PUSHER_KEY: process.env.PUSHER_KEY,
     PUSHER_SECRET: process.env.PUSHER_SECRET,
     PUSHER_CLUSTER: process.env.PUSHER_CLUSTER,
+    WECHAT_MINIPROGRAM_APP_ID: process.env.WECHAT_MINIPROGRAM_APP_ID,
+    WECHAT_MINIPROGRAM_APP_SECRET: process.env.WECHAT_MINIPROGRAM_APP_SECRET,
     NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
     NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     NEXT_PUBLIC_BAIDU_MAP_AK: process.env.NEXT_PUBLIC_BAIDU_MAP_AK,

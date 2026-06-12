@@ -1,0 +1,27 @@
+<view class="page home-page">
+  <view class="hero">
+    <view class="eyebrow">单人冷知识答题</view>
+    <view class="title">Histroguessr</view>
+    <view class="subtitle">5 题一局，答完保存最高分。题目来自历史冷知识题库。</view>
+  </view>
+
+  <view class="score-band">
+    <view>
+      <view class="score-label">当前玩家</view>
+      <view class="score-value">{{userName}}</view>
+    </view>
+    <view>
+      <view class="score-label">最高分</view>
+      <view class="score-value">{{bestScore}}</view>
+    </view>
+  </view>
+
+  <button class="primary-button" bindtap="startGame" loading="{{starting}}" disabled="{{starting || loggingIn}}">
+    开始答题
+  </button>
+  <button class="secondary-button" bindtap="login" loading="{{loggingIn}}" disabled="{{loggingIn}}">
+    重新登录
+  </button>
+
+  <view wx:if="{{error}}" class="status-text">{{error}}</view>
+</view>

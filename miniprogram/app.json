@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/quiz/quiz",
+    "pages/result/result"
+  ],
+  "window": {
+    "navigationBarTitleText": "Histroguessr",
+    "navigationBarBackgroundColor": "#15332f",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#f5f1e8"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

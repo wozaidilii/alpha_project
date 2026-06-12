@@ -1,0 +1,18 @@
+<view class="page result-page">
+  <view class="eyebrow">本局完成</view>
+  <view class="title">{{totalScore}}</view>
+  <view class="subtitle">最高分 {{bestScore}}</view>
+
+  <view class="result-list">
+    <view wx:for="{{results}}" wx:key="questionId" class="result-row">
+      <view class="result-mark {{item.isCorrect ? 'mark-correct' : 'mark-wrong'}}">
+        {{item.isCorrect ? '对' : '错'}}
+      </view>
+      <view class="result-title">{{item.title}}</view>
+      <view class="result-score">+{{item.score}}</view>
+    </view>
+  </view>
+
+  <button class="primary-button" bindtap="playAgain">再来一局</button>
+  <button class="secondary-button" open-type="share">分享成绩</button>
+</view>

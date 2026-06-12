@@ -1,0 +1,31 @@
+.home-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.hero {
+  padding-top: 72rpx;
+}
+
+.score-band {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-top: 64rpx;
+  padding: 28rpx;
+  border: 2rpx solid #d6ccb8;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.score-label {
+  color: #60706d;
+  font-size: 24rpx;
+}
+
+.score-value {
+  margin-top: 10rpx;
+  color: #15332f;
+  font-size: 34rpx;
+  font-weight: 800;
+}
