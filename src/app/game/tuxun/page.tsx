@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { GameMap } from "~/app/game/_components/GameMap";
+import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import {
   haversineDistance,
   locationScore,
@@ -318,12 +318,12 @@ export default function TuxunGamePage() {
         </span>
       </header>
 
-      <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_360px]">
-        <section className="min-h-0">
+      <div className="relative flex-1 overflow-hidden">
+        <section className="h-full min-h-0">
           {current && <BaiduPanorama key={current.id} location={current} />}
         </section>
 
-        <aside className="flex flex-col gap-4 overflow-y-auto border-l border-stone-700 bg-stone-950/75 p-4">
+        <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),360px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/85 p-4 shadow-lg shadow-black/30">
           {locationLoadMessage && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200">
               {locationLoadMessage}
@@ -338,37 +338,16 @@ export default function TuxunGamePage() {
               和原版 GeoGuessr 一样，先从街景/全景里找线索，再在地图上点选位置。
             </p>
           </div>
-
-          <div className="min-h-80 flex-1 overflow-hidden rounded-xl border border-stone-700 bg-stone-800">
-            <GameMap
-              guessLat={guess?.lat ?? null}
-              guessLng={guess?.lng ?? null}
-              onGuess={(lat, lng) => setGuess({ lat, lng })}
-            />
-          </div>
-
-          <div className="rounded-xl bg-stone-800 px-4 py-3 text-sm text-stone-400">
-            {guess ? (
-              <>
-                已选位置：
-                <span className="font-mono text-stone-200">
-                  {guess.lat.toFixed(3)}, {guess.lng.toFixed(3)}
-                </span>
-              </>
-            ) : (
-              "先在地图上点击你猜测的位置"
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!guess}
-            className="rounded-xl bg-sky-400 py-3 font-bold text-stone-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            提交猜测
-          </button>
         </aside>
+
+        <FloatingGuessMap
+          guessLat={guess?.lat ?? null}
+          guessLng={guess?.lng ?? null}
+          onGuess={(lat, lng) => setGuess({ lat, lng })}
+          onSubmit={handleSubmit}
+          disabled={!guess}
+          title="图寻猜点"
+        />
       </div>
     </main>
   );

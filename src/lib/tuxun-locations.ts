@@ -9,7 +9,7 @@ export interface TuxunLocation {
   heading: number;
   pitch: number;
   hint: string;
-  source?: "baidu-random" | "fallback";
+  source?: "baidu-random" | "fallback" | "historical-event";
 }
 
 export const TUXUN_ROUNDS = 5;

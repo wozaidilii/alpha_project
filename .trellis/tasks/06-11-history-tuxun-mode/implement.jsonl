@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend layer entry point for implementation guidance."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides for choosing applicable implementation checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "The task reuses existing tuxun and map components; avoid duplicating behavior unnecessarily."}

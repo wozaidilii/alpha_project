@@ -51,6 +51,26 @@ export function GameMap({ guessLat, guessLng, onGuess }: Props) {
   }, []);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    let frameId = 0;
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(() => {
+        mapRef.current?.invalidateSize();
+      });
+    });
+
+    observer.observe(container);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
     mapRef.current?.setMarker(
       guessLat !== null && guessLng !== null
         ? { lat: guessLat, lng: guessLng }

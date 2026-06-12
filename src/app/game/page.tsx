@@ -66,6 +66,24 @@ export default function GameModePage() {
               </div>
             </div>
           </Link>
+
+          <Link
+            href="/game/history-tuxun"
+            className="group flex items-center gap-4 rounded-2xl border border-stone-700 bg-stone-800 px-6 py-5 transition hover:border-amber-500 hover:bg-stone-700"
+          >
+            <span className="text-4xl">🏛️</span>
+            <div className="text-left">
+              <div className="text-xl font-bold text-amber-300">
+                历史图寻模式
+              </div>
+              <div className="text-sm text-stone-300">
+                根据历史线索观察现代街景，猜它对应的地点
+              </div>
+              <div className="mt-1 text-xs text-stone-500">
+                历史线索 + 百度全景 + 中国地图猜点
+              </div>
+            </div>
+          </Link>
         </div>
       </div>
     </main>

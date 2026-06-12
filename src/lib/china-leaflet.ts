@@ -11,6 +11,7 @@ type LeafletMapInstance = LeafletMap & { _leaflet_id?: number };
 
 export interface ChinaGuessMapHandle {
   setMarker: (point: LatLng | null) => void;
+  invalidateSize: () => void;
   destroy: () => void;
 }
 
@@ -33,6 +34,7 @@ export interface ChinaResultMapHandle {
 
 const noopGuessHandle: ChinaGuessMapHandle = {
   setMarker: () => undefined,
+  invalidateSize: () => undefined,
   destroy: () => undefined,
 };
 
@@ -171,6 +173,10 @@ export async function mountGuessMap(
       marker = null;
       if (!point) return;
       marker = addCircleMarker(map, L, point, "#f59e0b", 10);
+    },
+    invalidateSize() {
+      if (destroyed) return;
+      map.invalidateSize();
     },
     destroy() {
       if (destroyed) return;

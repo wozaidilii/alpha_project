@@ -360,7 +360,14 @@ function getPanoramaByLocation(
   if (!ServiceCtor) return Promise.resolve(null);
 
   return new Promise((resolve) => {
-    const service = new ServiceCtor();
+    let service: BaiduPanoramaService;
+    try {
+      service = new ServiceCtor();
+    } catch {
+      resolve(null);
+      return;
+    }
+
     let settled = false;
 
     const timer = window.setTimeout(() => {
@@ -369,16 +376,23 @@ function getPanoramaByLocation(
       resolve(null);
     }, 2200);
 
-    service.getPanoramaByLocation(
-      new api.Point(candidate.lng, candidate.lat),
-      radius,
-      (data) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timer);
-        resolve(extractPanoramaResult(data));
-      },
-    );
+    try {
+      service.getPanoramaByLocation(
+        new api.Point(candidate.lng, candidate.lat),
+        radius,
+        (data) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(extractPanoramaResult(data));
+        },
+      );
+    } catch {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(null);
+    }
   });
 }
 
@@ -436,7 +450,9 @@ export async function generateRandomTuxunLocations(
     const batchResults = await Promise.all(
       candidates.map(async (candidate) => ({
         candidate,
-        result: await getPanoramaByLocation(api, candidate.point, 1800),
+        result: await getPanoramaByLocation(api, candidate.point, 1800).catch(
+          () => null,
+        ),
       })),
     );
 
