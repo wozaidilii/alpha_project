@@ -11,3 +11,10 @@
 - 根因：迁移命令会直接修改远程数据库状态，未先确认该库是否为可写入的开发环境。
 - 修复：本次停止执行远程迁移，只保留代码和 schema 变更，并在交付说明中标记迁移验证未完成。
 - 预防：涉及数据库 schema 的任务，执行迁移前先确认 `DATABASE_URL` 指向本地或明确授权的开发数据库；远程共享库迁移需要用户显式确认。
+
+## 微信小程序 TypeScript 页面需要启用编译插件
+
+- 问题：微信开发者工具编译 `app.json` 时提示 `pages/index/index.js` 不存在，无法识别同名 `.ts` 页面文件。
+- 根因：`miniprogram/project.config.json` 中 `setting.useCompilerPlugins` 被开发者工具写成 `false`，且部分开发者工具版本会在 `app.json` 页面校验阶段先寻找实体 `.js` 文件。
+- 修复：为 `app.ts` 与页面 `.ts` 补齐等价 `.js` 运行入口，确保开发者工具无需等待 TS 插件也能通过页面文件校验。
+- 预防：新增原生微信小程序工程时，如果开发者工具提示缺少 `pages/**.js`，优先补齐 `.js` 运行入口；`project.private.config.json` 属于本地 IDE 配置，应加入忽略列表。

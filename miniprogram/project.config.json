@@ -1,5 +1,5 @@
 {
-  "appid": "touristappid",
+  "appid": "wxe6e55aeb6f04b21d",
   "compileType": "miniprogram",
   "miniprogramRoot": "./",
   "projectname": "histroguessr-solo-mvp",
@@ -7,6 +7,30 @@
     "es6": true,
     "minified": true,
     "postcss": true,
-    "enhance": true
-  }
+    "enhance": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
 }

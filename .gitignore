@@ -56,3 +56,6 @@ yarn-error.log*
 # idea files
 .idea
 .env*
+
+# WeChat Mini Program local IDE settings
+miniprogram/project.private.config.json
