@@ -2,51 +2,45 @@
 
 ## Goal
 
-Add a new historical street-view guessing mode and update the existing street-view guessing map interaction so the guessing map behaves like a compact bottom-right mini-map that expands when the pointer approaches or it receives focus.
+Build a focused historical map-finding demo that starts immediately when the player opens the history tuxun route.
 
 ## What I Already Know
 
-- The existing `/game/tuxun` page loads random Baidu panorama-capable locations with `generateRandomTuxunLocations`.
-- The current tuxun layout shows the panorama in the main area and the guess map in a fixed right sidebar.
-- Historical questions already come from `api.event.random`, and historical event records include title, description, year, location, lat, and lng.
-- Baidu Panorama rendering is encapsulated in `src/app/game/tuxun/_components/BaiduPanorama.tsx`.
-- The map picker is currently `GameMap`, shared by normal historical play and tuxun play.
+- Baidu static panorama images are available through `https://api.map.baidu.com/panorama/v2`.
+- The demo should avoid backend/database dependence and use local historical clue data.
+- The map picker for this demo must use the Baidu Maps JS API instead of the existing Leaflet picker.
 
 ## Requirements
 
-- Add a new "历史图寻模式" entry from the mode selection screen.
-- In historical tuxun rounds, show historical clues on the far left.
-- Show the corresponding modern location street view in the center by using the Baidu panorama API.
-- Keep the player guessing the location on the China map.
-- Change the existing tuxun guess selection UI to a bottom-right compact map that expands on pointer hover/nearby interaction and keyboard focus.
-- Use the same bottom-right compact/expanded guess map pattern in historical tuxun mode.
+- `/game/history-tuxun` starts a random historical map-finding question immediately.
+- Show the modern street-view area with Baidu static panorama images.
+- Show the map selection area with the Baidu Maps JS API.
+- Reveal one historical clue at the start and then one additional clue every 10 seconds.
+- Let the player click the map, submit an answer, see distance/score, and continue to another random question.
 
 ## Acceptance Criteria
 
-- [ ] `/game` exposes a navigable "历史图寻模式" entry.
-- [ ] `/game/history-tuxun` loads historical events and renders a playable round flow.
-- [ ] The left panel in historical tuxun contains the event clue, year context, and location-related prompt without occupying the center street-view area.
-- [ ] The center area uses the Baidu panorama component for the event's modern location.
-- [ ] Normal tuxun no longer reserves a permanent right sidebar for the guess map while playing.
-- [ ] The guess map is fixed in the bottom-right, compact by default, expands on hover/focus, and preserves touch/click usability.
-- [ ] Existing final/result scoring for tuxun-style location guesses remains usable.
+- [ ] `/game/history-tuxun` starts directly without requiring setup or backend event loading.
+- [ ] The page displays a historical clue section, Baidu static street-view image section, and Baidu map selection section.
+- [ ] A new clue appears every 10 seconds until all clues are visible.
+- [ ] The player can click the Baidu map, submit the guess, and see answer, distance, and score.
+- [ ] Starting the next question randomly chooses a different local historical puzzle when possible.
 
 ## Out Of Scope
 
-- Do not add a new backend API unless the existing historical event random endpoint is insufficient.
+- Do not add a backend API or database dependency for the demo.
 - Do not add new external dependencies.
 - Do not change battle mode.
 - Do not modify database schema.
+- Do not change the normal tuxun mode unless required by shared code.
 
 ## Technical Notes
 
 - Relevant frontend files:
-  - `src/app/game/page.tsx`
-  - `src/app/game/tuxun/page.tsx`
-  - `src/app/game/tuxun/_components/BaiduPanorama.tsx`
-  - `src/app/game/_components/GameMap.tsx`
+  - `src/app/game/history-tuxun/page.tsx`
+  - `src/app/game/history-tuxun/_components/BaiduGuessMap.tsx`
   - `src/lib/baidu-panorama.ts`
-  - `src/types/event.ts`
+  - `src/lib/history-tuxun-demo.ts`
 - Relevant specs:
   - `.trellis/spec/frontend/index.md`
   - `.trellis/spec/guides/index.md`
@@ -56,4 +50,4 @@ Add a new historical street-view guessing mode and update the existing street-vi
 
 - TypeScript typecheck passes.
 - Relevant tests pass or skipped checks are documented.
-- UI is checked in browser at a desktop viewport.
+- UI is checked in browser at a desktop viewport when the dev server can run.

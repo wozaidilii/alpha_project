@@ -12,7 +12,7 @@
   "assignee": "Kai",
   "createdAt": "2026-06-11",
   "completedAt": null,
-  "branch": null,
+  "branch": "codex/history-xuntu-demo",
   "base_branch": "main",
   "worktree_path": null,
   "commit": null,

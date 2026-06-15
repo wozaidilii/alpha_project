@@ -17,6 +17,30 @@ export interface BaiduPanoramaInstance {
   setPov?: (pov: { heading: number; pitch: number }) => void;
 }
 
+export interface BaiduMapClickEvent {
+  point: BaiduPoint;
+}
+
+export interface BaiduMapInstance {
+  centerAndZoom: (point: BaiduPoint, zoom: number) => void;
+  enableScrollWheelZoom?: (enabled?: boolean) => void;
+  addEventListener: (
+    type: "click",
+    handler: (event: BaiduMapClickEvent) => void,
+  ) => void;
+  removeEventListener?: (
+    type: "click",
+    handler: (event: BaiduMapClickEvent) => void,
+  ) => void;
+  addOverlay: (overlay: BaiduMarkerInstance) => void;
+  clearOverlays: () => void;
+  checkResize?: () => void;
+}
+
+export interface BaiduMarkerInstance {
+  setPosition?: (point: BaiduPoint) => void;
+}
+
 interface BaiduPanoramaService {
   getPanoramaByLocation: (
     point: BaiduPoint,
@@ -27,6 +51,8 @@ interface BaiduPanoramaService {
 
 export interface BaiduMapApi {
   Point: new (lng: number, lat: number) => BaiduPoint;
+  Map: new (container: HTMLElement) => BaiduMapInstance;
+  Marker: new (point: BaiduPoint) => BaiduMarkerInstance;
   Panorama: new (container: HTMLElement) => BaiduPanoramaInstance;
   PanoramaService?: new () => BaiduPanoramaService;
 }
@@ -61,6 +87,17 @@ export interface TuxunLocationGenerationResult {
   locations: TuxunLocation[];
   usedFallback: boolean;
   message?: string;
+}
+
+interface StaticPanoramaUrlOptions {
+  lng: number;
+  lat: number;
+  width?: number;
+  height?: number;
+  heading?: number;
+  pitch?: number;
+  fov?: number;
+  coordtype?: "bd09ll" | "wgs84ll";
 }
 
 const RANDOM_REGIONS: RandomRegion[] = [
@@ -218,6 +255,32 @@ export function loadBaiduMapScript(ak: string): Promise<void> {
   });
 
   return window.__histoguessrBaiduMapPromise;
+}
+
+export function buildBaiduStaticPanoramaUrl({
+  lng,
+  lat,
+  width = 1024,
+  height = 512,
+  heading = 0,
+  pitch = 0,
+  fov = 90,
+  coordtype = "bd09ll",
+}: StaticPanoramaUrlOptions): string | null {
+  if (!BAIDU_MAP_AK) return null;
+
+  const params = new URLSearchParams({
+    ak: BAIDU_MAP_AK,
+    width: String(width),
+    height: String(height),
+    location: `${lng},${lat}`,
+    coordtype,
+    heading: String(heading),
+    pitch: String(pitch),
+    fov: String(fov),
+  });
+
+  return `https://api.map.baidu.com/panorama/v2?${params.toString()}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
