@@ -14,6 +14,7 @@ Build a focused historical map-finding demo that starts immediately when the pla
 
 - `/game/history-tuxun` starts a random historical map-finding question immediately.
 - Demo entry routes go straight to `/game/history-tuxun`; homepage, login, onboarding, character, profile, mode selection, battle entry, and other game-mode pages are not shown in this demo.
+- The demo build must not require Pusher environment variables because battle entry points are hidden during the demo.
 - Show the modern street-view area with Baidu static panorama images.
 - If panorama/static street-view service is unavailable, fall back to Baidu's basic static map image, then to a basic JS map preview, so the demo can still run.
 - Show the map selection area with the Baidu Maps JS API.
@@ -24,6 +25,7 @@ Build a focused historical map-finding demo that starts immediately when the pla
 
 - [ ] `/game/history-tuxun` starts directly without requiring setup or backend event loading.
 - [ ] `/`, `/game`, `/login`, `/onboarding`, `/character`, `/profile`, `/battle`, `/battle/:roomId`, `/game/tuxun`, and `/game/:mode` redirect to `/game/history-tuxun`.
+- [ ] `next build` can load `next.config.js` without `NEXT_PUBLIC_PUSHER_KEY` or `NEXT_PUBLIC_PUSHER_CLUSTER`.
 - [ ] The page displays a historical clue section, Baidu static street-view image or basic map fallback section, and Baidu map selection section.
 - [ ] A new clue appears every 10 seconds until all clues are visible.
 - [ ] The player can click the Baidu map, submit the guess, and see answer, distance, and score.

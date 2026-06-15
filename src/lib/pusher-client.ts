@@ -5,8 +5,15 @@ import PusherJs from "pusher-js";
 let _client: PusherJs | null = null;
 
 export function getPusherClient(): PusherJs {
-  _client ??= new PusherJs(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
-    cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
+  const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
+  const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
+
+  if (!key || !cluster) {
+    throw new Error("Pusher 客户端配置缺失，无法启动对战模式");
+  }
+
+  _client ??= new PusherJs(key, {
+    cluster,
   });
   return _client;
 }

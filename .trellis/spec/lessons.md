@@ -32,3 +32,10 @@
 - 根因：Turbopack dev 的 endpoint 写入或增量编译路径可能出现工具链级 panic，不能直接等同于页面代码错误。
 - 修复：保留 `next build` 作为生产编译验证；浏览器验证遇到 Turbopack panic 时，停掉 turbo dev，改用普通 `next dev` 复核页面行为。
 - 预防：前端页面验证报告中区分“生产构建失败”和“Turbopack dev 工具链失败”；只有两者都失败或错误指向源码时才按代码缺陷处理。
+
+## Demo 构建不要依赖隐藏功能的环境变量
+
+- 问题：历史寻图 demo 已隐藏登录、对战和模式选择入口，但 `next build` 仍因缺少 `NEXT_PUBLIC_PUSHER_KEY` / `NEXT_PUBLIC_PUSHER_CLUSTER` 在加载 `next.config.js` 阶段失败。
+- 根因：全局 env schema 把 Pusher 配置设为构建期必填，即使当前 demo 入口不会加载对战模式，也会在配置校验阶段阻断部署。
+- 修复：将 Pusher env 改为可选，并在 Pusher client/server 实际运行时做局部校验和清晰失败。
+- 预防：临时 demo 或灰度入口隐藏某个功能时，该功能的第三方密钥不应保持全局构建必填；改成运行到对应功能边界时校验。
