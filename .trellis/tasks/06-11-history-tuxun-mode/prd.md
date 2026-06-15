@@ -13,8 +13,10 @@ Build a focused historical map-finding demo that starts immediately when the pla
 ## Requirements
 
 - `/game/history-tuxun` starts a random historical map-finding question immediately.
-- Demo entry routes go straight to `/game/history-tuxun`; homepage, login, onboarding, character, profile, mode selection, battle entry, and other game-mode pages are not shown in this demo.
-- The demo build must not require Pusher environment variables because battle entry points are hidden during the demo.
+- `/` goes straight to `/game` so the player sees the original game mode selection first.
+- Login, onboarding, character, and profile pages are not shown in the demo; those routes redirect back to `/game`.
+- Game mode routes are not locked to history tuxun. The original mode selection can open normal historical/funfact routes, normal tuxun, and history tuxun.
+- The demo build must not require Pusher environment variables because battle is not part of the primary mode-selection flow.
 - Show the modern street-view area with Baidu static panorama images.
 - If panorama/static street-view service is unavailable, fall back to Baidu's basic static map image, then to a basic JS map preview, so the demo can still run.
 - Show the map selection area with the Baidu Maps JS API.
@@ -24,7 +26,9 @@ Build a focused historical map-finding demo that starts immediately when the pla
 ## Acceptance Criteria
 
 - [ ] `/game/history-tuxun` starts directly without requiring setup or backend event loading.
-- [ ] `/`, `/game`, `/login`, `/onboarding`, `/character`, `/profile`, `/battle`, `/battle/:roomId`, `/game/tuxun`, and `/game/:mode` redirect to `/game/history-tuxun`.
+- [ ] `/` redirects to `/game`, and `/game` renders the mode selection page.
+- [ ] `/login`, `/onboarding`, `/character`, and `/profile` redirect to `/game`.
+- [ ] `/game/tuxun`, `/game/:mode`, and `/game/history-tuxun` are directly accessible from the mode selection page.
 - [ ] `next build` can load `next.config.js` without `NEXT_PUBLIC_PUSHER_KEY` or `NEXT_PUBLIC_PUSHER_CLUSTER`.
 - [ ] The page displays a historical clue section, Baidu static street-view image or basic map fallback section, and Baidu map selection section.
 - [ ] A new clue appears every 10 seconds until all clues are visible.
@@ -35,7 +39,7 @@ Build a focused historical map-finding demo that starts immediately when the pla
 
 - Do not add a backend API or database dependency for the demo.
 - Do not add new external dependencies.
-- Do not change battle mode internals beyond redirecting its route entry during the demo.
+- Do not make battle mode part of the primary demo flow.
 - Do not modify database schema.
 - Do not change the normal tuxun mode unless required by shared code.
 
@@ -46,7 +50,10 @@ Build a focused historical map-finding demo that starts immediately when the pla
   - `src/app/game/history-tuxun/_components/BaiduGuessMap.tsx`
   - `src/app/game/history-tuxun/_components/BaiduSceneMap.tsx`
   - `src/app/game/page.tsx`
+  - `src/app/game/[mode]/page.tsx`
+  - `src/app/game/tuxun/page.tsx`
   - `src/app/game/tuxun/_components/BaiduPanorama.tsx`
+  - `src/lib/player-session-guard.tsx`
   - `src/lib/baidu-panorama.ts`
   - `src/lib/history-tuxun-demo.ts`
 - Relevant specs:

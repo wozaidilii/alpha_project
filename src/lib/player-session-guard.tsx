@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { type PlayerSession } from "~/types/player";
-import { getStoredPlayerSession } from "~/lib/player-session";
+import {
+  getDemoPlayerSession,
+  getStoredPlayerSession,
+} from "~/lib/player-session";
 
 interface GuardState {
   ready: boolean;
@@ -11,46 +13,33 @@ interface GuardState {
 }
 
 export function useEmailSession(): GuardState {
-  const router = useRouter();
   const [state, setState] = useState<GuardState>({
     ready: false,
     session: null,
   });
 
   useEffect(() => {
-    const stored = getStoredPlayerSession();
-    if (!stored) {
-      router.replace("/login");
-      return;
-    }
-
-    setState({ ready: true, session: stored });
-  }, [router]);
+    setState({
+      ready: true,
+      session: getStoredPlayerSession() ?? getDemoPlayerSession(),
+    });
+  }, []);
 
   return state;
 }
 
 export function useCompletedPlayerSession(): GuardState {
-  const router = useRouter();
   const [state, setState] = useState<GuardState>({
     ready: false,
     session: null,
   });
 
   useEffect(() => {
-    const stored = getStoredPlayerSession();
-    if (!stored) {
-      router.replace("/login");
-      return;
-    }
-
-    if (!stored.user.profileCompleted) {
-      router.replace("/onboarding");
-      return;
-    }
-
-    setState({ ready: true, session: stored });
-  }, [router]);
+    setState({
+      ready: true,
+      session: getStoredPlayerSession() ?? getDemoPlayerSession(),
+    });
+  }, []);
 
   return state;
 }

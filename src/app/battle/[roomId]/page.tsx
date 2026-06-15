@@ -1,5 +1,42 @@
-import { redirect } from "next/navigation";
+import { BattleGame } from "./_components/BattleGame";
+import { DEFAULT_AVATAR, normalizeAvatar } from "~/types/player";
+import { getGameMode, isQuestionType } from "~/lib/game-mode";
 
-export default function BattleRoomPage() {
-  redirect("/game/history-tuxun");
+interface Props {
+  params: Promise<{ roomId: string }>;
+  searchParams: Promise<Record<string, string>>;
+}
+
+export default async function BattleRoomPage({ params, searchParams }: Props) {
+  const { roomId } = await params;
+  const sp = await searchParams;
+
+  const isHost = sp.host === "1";
+  const name = sp.name ?? "玩家";
+  const userId = sp.userId;
+  const avatar = normalizeAvatar({
+    icon: sp.avatarIcon ?? DEFAULT_AVATAR.icon,
+    color: sp.avatarColor ?? DEFAULT_AVATAR.color,
+  });
+  const modeSlug = isQuestionType(sp.mode ?? "") ? sp.mode! : "historical";
+  const gameMode = getGameMode(modeSlug);
+  const settings = isHost
+    ? {
+        rounds: Number(sp.rounds ?? 5),
+        timePerRound: Number(sp.time ?? 60),
+        startingHp: Number(sp.hp ?? 100),
+        questionType: gameMode?.type ?? "historical",
+      }
+    : null;
+
+  return (
+    <BattleGame
+      roomId={roomId}
+      isHost={isHost}
+      playerName={name}
+      playerUserId={userId}
+      playerAvatar={avatar}
+      hostSettings={settings}
+    />
+  );
 }

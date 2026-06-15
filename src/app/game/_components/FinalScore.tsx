@@ -62,10 +62,10 @@ export function FinalScore({ rounds, gameMode, onRestart }: Props) {
           {gameMode.emoji} {gameMode.title}
         </h1>
         <Link
-          href="/"
+          href="/game"
           className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700"
         >
-          退出
+          返回模式选择
         </Link>
       </div>
 
@@ -130,10 +130,10 @@ export function FinalScore({ rounds, gameMode, onRestart }: Props) {
             🔄 再来一局
           </button>
           <Link
-            href="/"
+            href="/game"
             className="flex-1 rounded-xl bg-stone-700 py-3 text-center font-bold text-stone-300 transition hover:bg-stone-600"
           >
-            退出
+            返回模式选择
           </Link>
         </div>
       </div>

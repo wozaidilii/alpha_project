@@ -132,10 +132,10 @@ export function RoundResult({
           第 {roundNumber} / {totalRounds} 轮结果
         </span>
         <Link
-          href="/"
+          href="/game"
           className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700"
         >
-          退出
+          返回模式选择
         </Link>
       </div>
 
