@@ -4,6 +4,8 @@ import {
   scoreRound,
   yearScore,
   locationScore,
+  locationRoundScore,
+  LOCATION_ROUND_SCORE_MAX,
   getTargetYear,
   formatAnswerYear,
   quizScore,
@@ -129,5 +131,48 @@ describe("yearScore / locationScore", () => {
   it("中国地图一千公里误差只保留少量地点分", () => {
     expect(locationScore(1000)).toBeGreaterThan(0);
     expect(locationScore(1000)).toBeLessThan(1000);
+  });
+});
+
+describe("locationRoundScore", () => {
+  it("地点重合时每题满分 100，速度补偿不突破满分", () => {
+    const result = locationRoundScore({
+      distanceKm: 0,
+      elapsedSeconds: 0,
+    });
+
+    expect(result.distancePts).toBe(LOCATION_ROUND_SCORE_MAX);
+    expect(result.speedCompensationPts).toBe(0);
+    expect(result.total).toBe(LOCATION_ROUND_SCORE_MAX);
+  });
+
+  it("仅按距离给基础分，速度越快补偿越高", () => {
+    const fast = locationRoundScore({
+      distanceKm: 600,
+      elapsedSeconds: 0,
+      speedCompensationWindowSeconds: 60,
+    });
+    const slow = locationRoundScore({
+      distanceKm: 600,
+      elapsedSeconds: 60,
+      speedCompensationWindowSeconds: 60,
+    });
+
+    expect(fast.distancePts).toBe(slow.distancePts);
+    expect(fast.speedCompensationPts).toBeGreaterThan(
+      slow.speedCompensationPts,
+    );
+    expect(fast.total).toBeGreaterThan(slow.total);
+    expect(fast.total).toBeLessThanOrEqual(LOCATION_ROUND_SCORE_MAX);
+  });
+
+  it("超过计分距离后仍只可能获得少量速度补偿", () => {
+    const result = locationRoundScore({
+      distanceKm: CHINA_LOCATION_SCORE_ZERO_KM,
+      elapsedSeconds: 0,
+    });
+
+    expect(result.distancePts).toBe(0);
+    expect(result.total).toBeLessThan(LOCATION_ROUND_SCORE_MAX);
   });
 });

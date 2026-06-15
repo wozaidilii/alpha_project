@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import {
   haversineDistance,
-  locationScore,
-  LOCATION_SCORE_MAX,
+  locationRoundScore,
+  LOCATION_ROUND_SCORE_MAX,
 } from "~/lib/scoring";
 import { generateRandomTuxunLocations } from "~/lib/baidu-panorama";
 import { TUXUN_ROUNDS, type TuxunLocation } from "~/lib/tuxun-locations";
@@ -24,6 +24,9 @@ interface TuxunRoundResult {
   location: TuxunLocation;
   guess: { lat: number; lng: number };
   distanceKm: number;
+  distancePts: number;
+  speedCompensationPts: number;
+  elapsedSeconds: number;
   score: number;
 }
 
@@ -32,11 +35,15 @@ function formatDistance(distanceKm: number): string {
   return `${Math.round(distanceKm).toLocaleString()} 公里`;
 }
 
+function formatElapsed(seconds: number): string {
+  return `${Math.max(0, Math.round(seconds))} 秒`;
+}
+
 function getRank(score: number) {
-  if (score >= 22000) return { label: "街景猎手", emoji: "🏆" };
-  if (score >= 18000) return { label: "城市达人", emoji: "🥇" };
-  if (score >= 12000) return { label: "方向感不错", emoji: "🥈" };
-  if (score >= 6000) return { label: "还在认路", emoji: "🥉" };
+  if (score >= 450) return { label: "街景猎手", emoji: "🏆" };
+  if (score >= 360) return { label: "城市达人", emoji: "🥇" };
+  if (score >= 240) return { label: "方向感不错", emoji: "🥈" };
+  if (score >= 120) return { label: "还在认路", emoji: "🥉" };
   return { label: "地图新手", emoji: "🧭" };
 }
 
@@ -51,6 +58,7 @@ export default function TuxunGamePage() {
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [results, setResults] = useState<TuxunRoundResult[]>([]);
+  const roundStartedAtRef = useRef(Date.now());
 
   const current = locations[round];
   const latestResult = results[results.length - 1];
@@ -70,6 +78,7 @@ export default function TuxunGamePage() {
     setGuess(null);
     setResults([]);
     setPhase("playing");
+    roundStartedAtRef.current = Date.now();
 
     void generateRandomTuxunLocations(TUXUN_ROUNDS)
       .then((result) => {
@@ -89,6 +98,11 @@ export default function TuxunGamePage() {
     };
   }, [ready, reloadKey]);
 
+  useEffect(() => {
+    if (phase !== "playing" || !current) return;
+    roundStartedAtRef.current = Date.now();
+  }, [current, phase]);
+
   function handleSubmit() {
     if (!current || !guess) return;
 
@@ -98,14 +112,18 @@ export default function TuxunGamePage() {
       guess.lat,
       guess.lng,
     );
-    const score = locationScore(distanceKm);
+    const elapsedSeconds = (Date.now() - roundStartedAtRef.current) / 1000;
+    const score = locationRoundScore({ distanceKm, elapsedSeconds });
     setResults((prev) => [
       ...prev,
       {
         location: current,
         guess,
         distanceKm,
-        score,
+        distancePts: score.distancePts,
+        speedCompensationPts: score.speedCompensationPts,
+        elapsedSeconds,
+        score: score.total,
       },
     ]);
     setPhase("result");
@@ -161,7 +179,7 @@ export default function TuxunGamePage() {
   }
 
   if (phase === "final") {
-    const maxScore = results.length * LOCATION_SCORE_MAX;
+    const maxScore = results.length * LOCATION_ROUND_SCORE_MAX;
     const rank = getRank(totalScore);
 
     return (
@@ -205,7 +223,8 @@ export default function TuxunGamePage() {
                   </div>
                   <div className="text-xs text-stone-400">
                     {result.location.province} · {result.location.city} · 偏差{" "}
-                    {formatDistance(result.distanceKm)}
+                    {formatDistance(result.distanceKm)} · 用时{" "}
+                    {formatElapsed(result.elapsedSeconds)}
                   </div>
                 </div>
                 <div className="text-right text-xl font-extrabold text-white">
@@ -270,7 +289,28 @@ export default function TuxunGamePage() {
                 {latestResult.score.toLocaleString()}
               </div>
               <div className="text-sm text-stone-500">
-                / {LOCATION_SCORE_MAX.toLocaleString()}
+                / {LOCATION_ROUND_SCORE_MAX}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">距离分</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {latestResult.distancePts}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">速度补偿</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  +{latestResult.speedCompensationPts}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">用时</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {formatElapsed(latestResult.elapsedSeconds)}
+                </div>
               </div>
             </div>
 
@@ -279,7 +319,8 @@ export default function TuxunGamePage() {
               <span className="font-bold text-white">
                 {formatDistance(latestResult.distanceKm)}
               </span>
-              。{latestResult.location.hint}
+              ，本轮满分 100 分，分数只按距离计算，提交越快可获得少量补偿。
+              {latestResult.location.hint}
             </div>
 
             <button

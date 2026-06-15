@@ -21,6 +21,9 @@ export function haversineDistance(
 export const LOCATION_SCORE_MAX = 5000;
 export const CHINA_LOCATION_SCORE_DECAY_KM = 600;
 export const CHINA_LOCATION_SCORE_ZERO_KM = 2500;
+export const LOCATION_ROUND_SCORE_MAX = 100;
+export const LOCATION_SPEED_COMPENSATION_RATIO = 0.15;
+export const LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS = 60;
 
 // 中国地图模式使用更紧的距离分曲线；跨大半个中国的误差应接近 0 分。
 export function locationScore(distanceKm: number): number {
@@ -29,6 +32,54 @@ export function locationScore(distanceKm: number): number {
   return Math.round(
     LOCATION_SCORE_MAX * Math.exp(-distanceKm / CHINA_LOCATION_SCORE_DECAY_KM),
   );
+}
+
+export interface LocationRoundScoreInput {
+  distanceKm: number;
+  elapsedSeconds?: number;
+  speedCompensationWindowSeconds?: number;
+}
+
+export interface LocationRoundScoreResult {
+  distancePts: number;
+  speedCompensationPts: number;
+  total: number;
+}
+
+export function locationDistanceScore(distanceKm: number): number {
+  if (distanceKm <= 0) return LOCATION_ROUND_SCORE_MAX;
+  if (distanceKm >= CHINA_LOCATION_SCORE_ZERO_KM) return 0;
+  return Math.round(
+    LOCATION_ROUND_SCORE_MAX *
+      Math.exp(-distanceKm / CHINA_LOCATION_SCORE_DECAY_KM),
+  );
+}
+
+export function locationRoundScore({
+  distanceKm,
+  elapsedSeconds,
+  speedCompensationWindowSeconds = LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS,
+}: LocationRoundScoreInput): LocationRoundScoreResult {
+  const distancePts = locationDistanceScore(distanceKm);
+  const windowSeconds = Math.max(1, speedCompensationWindowSeconds);
+  const elapsed = Math.max(0, elapsedSeconds ?? windowSeconds);
+  const speedRatio = Math.max(
+    0,
+    1 - Math.min(elapsed, windowSeconds) / windowSeconds,
+  );
+  const availableCompensation = LOCATION_ROUND_SCORE_MAX - distancePts;
+  const speedCompensationPts = Math.round(
+    availableCompensation * LOCATION_SPEED_COMPENSATION_RATIO * speedRatio,
+  );
+
+  return {
+    distancePts,
+    speedCompensationPts,
+    total: Math.min(
+      LOCATION_ROUND_SCORE_MAX,
+      distancePts + speedCompensationPts,
+    ),
+  };
 }
 
 // Max year score: 5000. Score decays with year difference.

@@ -13,15 +13,24 @@ import {
   buildHistoryTuxunPlayState,
   type HistoryTuxunPlayState,
 } from "~/lib/history-tuxun-puzzle";
-import { haversineDistance, locationScore } from "~/lib/scoring";
+import {
+  haversineDistance,
+  locationRoundScore,
+  LOCATION_ROUND_SCORE_MAX,
+} from "~/lib/scoring";
 import { api } from "~/trpc/react";
 
 type Phase = "playing" | "result";
 type SceneImageMode = "panorama" | "static-map" | "base-map" | "error";
+const CLUE_INTERVAL_SECONDS = 10;
 
 function formatDistance(distanceKm: number) {
   if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
   return `${Math.round(distanceKm).toLocaleString()} 公里`;
+}
+
+function formatElapsed(seconds: number) {
+  return `${Math.max(0, Math.round(seconds))} 秒`;
 }
 
 function useElapsedSeconds(active: boolean, resetKey: string) {
@@ -49,6 +58,7 @@ export default function HistoryTuxunPage() {
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [imageMode, setImageMode] = useState<SceneImageMode>("panorama");
+  const [submittedElapsed, setSubmittedElapsed] = useState<number | null>(null);
   const elapsed = useElapsedSeconds(
     phase === "playing" && playState != null,
     playState?.puzzleId ?? "loading",
@@ -126,14 +136,27 @@ export default function HistoryTuxunPage() {
       guess.lat,
       guess.lng,
     );
+    const elapsedSeconds = submittedElapsed ?? elapsed;
+    const score = locationRoundScore({
+      distanceKm,
+      elapsedSeconds,
+      speedCompensationWindowSeconds: Math.max(
+        CLUE_INTERVAL_SECONDS,
+        playState.clues.length * CLUE_INTERVAL_SECONDS,
+      ),
+    });
     return {
       distanceKm,
-      score: locationScore(distanceKm),
+      distancePts: score.distancePts,
+      speedCompensationPts: score.speedCompensationPts,
+      elapsedSeconds,
+      score: score.total,
     };
-  }, [guess, playState]);
+  }, [elapsed, guess, playState, submittedElapsed]);
 
   function handleSubmit() {
     if (!guess) return;
+    setSubmittedElapsed(elapsed);
     setPhase("result");
   }
 
@@ -143,6 +166,7 @@ export default function HistoryTuxunPage() {
     }
     setGuess(null);
     setImageMode("panorama");
+    setSubmittedElapsed(null);
     setPhase("playing");
     void puzzleQuery.refetch();
   }
@@ -260,14 +284,39 @@ export default function HistoryTuxunPage() {
               <div className="text-6xl font-extrabold text-white">
                 {result.score.toLocaleString()}
               </div>
-              <div className="text-sm text-stone-500">/ 10,000</div>
+              <div className="text-sm text-stone-500">
+                / {LOCATION_ROUND_SCORE_MAX}
+              </div>
             </div>
+
+            <p className="rounded-xl bg-stone-800 p-4 text-sm leading-6 text-stone-300">
+              本题不猜年份，满分 100
+              分；基础分只看答案距离，提交越快可获得少量速度补偿。
+            </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-stone-800 p-4">
                 <div className="text-xs text-stone-500">偏差</div>
                 <div className="mt-1 font-bold text-stone-100">
                   {formatDistance(result.distanceKm)}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">用时</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {formatElapsed(result.elapsedSeconds)}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">距离分</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {result.distancePts}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">速度补偿</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  +{result.speedCompensationPts}
                 </div>
               </div>
               <div className="rounded-xl bg-stone-800 p-4">
