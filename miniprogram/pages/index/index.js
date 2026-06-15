@@ -1,6 +1,11 @@
 // @ts-nocheck
 
+const { USE_LOCAL_DEMO } = require("../../config");
 const { loginWithWeChatCode, startFunfactRound } = require("../../utils/api");
+const {
+  getLocalBestScore,
+  startLocalRound,
+} = require("../../utils/local-game");
 
 const app = getApp();
 
@@ -9,15 +14,37 @@ Page({
     loggingIn: false,
     starting: false,
     error: "",
-    userName: "未登录",
+    userName: "游客",
     bestScore: 0,
   },
 
   onLoad() {
+    if (USE_LOCAL_DEMO) {
+      this.useGuestSession();
+      return;
+    }
+
     this.login();
   },
 
+  useGuestSession() {
+    app.globalData.token = "";
+    app.globalData.user = null;
+    app.globalData.bestScore = getLocalBestScore();
+    this.setData({
+      loggingIn: false,
+      error: "",
+      userName: "游客",
+      bestScore: app.globalData.bestScore,
+    });
+  },
+
   login() {
+    if (USE_LOCAL_DEMO) {
+      this.useGuestSession();
+      return;
+    }
+
     this.setData({ loggingIn: true, error: "" });
 
     wx.login({
@@ -65,7 +92,7 @@ Page({
   },
 
   async startGame() {
-    if (!app.globalData.token) {
+    if (!USE_LOCAL_DEMO && !app.globalData.token) {
       this.login();
       return;
     }
@@ -73,7 +100,9 @@ Page({
     this.setData({ starting: true, error: "" });
 
     try {
-      const result = await startFunfactRound(app.globalData.token);
+      const result = USE_LOCAL_DEMO
+        ? startLocalRound()
+        : await startFunfactRound(app.globalData.token);
       if (result.questions.length === 0) {
         throw new Error("题库暂无可用题目");
       }

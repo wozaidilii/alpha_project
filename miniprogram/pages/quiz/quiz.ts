@@ -1,4 +1,6 @@
+import { USE_LOCAL_DEMO } from "../../config";
 import { updateHighScore } from "../../utils/api";
+import { updateLocalBestScore } from "../../utils/local-game";
 import { answerScore } from "../../utils/scoring";
 import type { AppInstance, FunfactQuestion, QuizResult } from "../../types";
 
@@ -99,7 +101,9 @@ Page({
     this.setData({ saving: true, error: "" });
 
     try {
-      if (app.globalData.token) {
+      if (USE_LOCAL_DEMO) {
+        app.globalData.bestScore = updateLocalBestScore(score);
+      } else if (app.globalData.token) {
         const result = await updateHighScore(app.globalData.token, score);
         app.globalData.user = result.user;
         app.globalData.bestScore = result.soloHighScore;

@@ -17,6 +17,8 @@ declare const wx: {
   }): void;
   navigateTo(options: { url: string }): void;
   redirectTo(options: { url: string }): void;
+  getStorageSync(key: string): unknown;
+  setStorageSync(key: string, data: unknown): void;
   showToast(options: {
     title: string;
     icon?: "success" | "error" | "loading" | "none";

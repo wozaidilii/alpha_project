@@ -18,3 +18,17 @@
 - 根因：`miniprogram/project.config.json` 中 `setting.useCompilerPlugins` 被开发者工具写成 `false`，且部分开发者工具版本会在 `app.json` 页面校验阶段先寻找实体 `.js` 文件。
 - 修复：为 `app.ts` 与页面 `.ts` 补齐等价 `.js` 运行入口，确保开发者工具无需等待 TS 插件也能通过页面文件校验。
 - 预防：新增原生微信小程序工程时，如果开发者工具提示缺少 `pages/**.js`，优先补齐 `.js` 运行入口；`project.private.config.json` 属于本地 IDE 配置，应加入忽略列表。
+
+## 微信小程序真机预览不能依赖 localhost
+
+- 问题：小程序在其他 device 上打开时报 `request fail url not in domain list`，即使开发者工具本机已关闭合法域名校验。
+- 根因：真机预览无法访问开发电脑的 `localhost`，且微信 request 需要 HTTPS 合法域名；本地 Next API 只适合开发者工具模拟器调试。
+- 修复：本地演示模式默认关闭登录和后端请求，内置少量题目并用本机缓存保存最高分，确保任何 device 都能先跑通单人答题。
+- 预防：小程序 MVP 在正式 HTTPS 域名配置完成前，不要把启动路径依赖后端登录或 localhost API；远程模式应通过显式开关启用。
+
+## Next 页面浏览器验证不要只依赖 Turbopack dev
+
+- 问题：`next dev --turbo` 在浏览器验证 `/game/history-tuxun` 时出现 Turbopack panic 并返回 500，但 `next build` 和非 Turbopack `next dev` 都能正常编译页面。
+- 根因：Turbopack dev 的 endpoint 写入或增量编译路径可能出现工具链级 panic，不能直接等同于页面代码错误。
+- 修复：保留 `next build` 作为生产编译验证；浏览器验证遇到 Turbopack panic 时，停掉 turbo dev，改用普通 `next dev` 复核页面行为。
+- 预防：前端页面验证报告中区分“生产构建失败”和“Turbopack dev 工具链失败”；只有两者都失败或错误指向源码时才按代码缺陷处理。

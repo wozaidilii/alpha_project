@@ -1,6 +1,8 @@
 // @ts-nocheck
 
+const { USE_LOCAL_DEMO } = require("../../config");
 const { updateHighScore } = require("../../utils/api");
+const { updateLocalBestScore } = require("../../utils/local-game");
 const { answerScore } = require("../../utils/scoring");
 
 const app = getApp();
@@ -100,7 +102,9 @@ Page({
     this.setData({ saving: true, error: "" });
 
     try {
-      if (app.globalData.token) {
+      if (USE_LOCAL_DEMO) {
+        app.globalData.bestScore = updateLocalBestScore(score);
+      } else if (app.globalData.token) {
         const result = await updateHighScore(app.globalData.token, score);
         app.globalData.user = result.user;
         app.globalData.bestScore = result.soloHighScore;
