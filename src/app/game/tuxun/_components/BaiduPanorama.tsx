@@ -30,7 +30,10 @@ export function BaiduPanorama({ location }: Props) {
 
     void loadBaiduMapScript(BAIDU_MAP_AK)
       .then(() => {
-        if (!active || !containerRef.current || !window.BMap) return;
+        if (!active || !containerRef.current || !window.BMap?.Panorama) {
+          if (active) setState("error");
+          return;
+        }
 
         const panorama =
           panoramaRef.current ?? new window.BMap.Panorama(containerRef.current);

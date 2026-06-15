@@ -2,16 +2,8 @@
 
 import Link from "next/link";
 import { GAME_MODE_LIST } from "~/lib/game-mode";
-import {
-  AuthLoading,
-  useCompletedPlayerSession,
-} from "~/lib/player-session-guard";
 
 export default function GameModePage() {
-  const { ready } = useCompletedPlayerSession();
-
-  if (!ready) return <AuthLoading />;
-
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
       <div className="flex w-full max-w-lg flex-col gap-6 px-4">

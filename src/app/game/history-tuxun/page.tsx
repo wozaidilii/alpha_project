@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BaiduGuessMap } from "~/app/game/history-tuxun/_components/BaiduGuessMap";
-import { buildBaiduStaticPanoramaUrl } from "~/lib/baidu-panorama";
+import { BaiduSceneMap } from "~/app/game/history-tuxun/_components/BaiduSceneMap";
+import {
+  buildBaiduStaticMapUrl,
+  buildBaiduStaticPanoramaUrl,
+} from "~/lib/baidu-panorama";
 import {
   DEFAULT_HISTORY_TUXUN_PUZZLE,
   pickHistoryTuxunPuzzle,
@@ -11,6 +15,7 @@ import {
 import { haversineDistance, locationScore } from "~/lib/scoring";
 
 type Phase = "playing" | "result";
+type SceneImageMode = "panorama" | "static-map" | "base-map" | "error";
 
 function formatDistance(distanceKm: number) {
   if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
@@ -40,7 +45,7 @@ export default function HistoryTuxunDemoPage() {
   );
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
-  const [imageFailed, setImageFailed] = useState(false);
+  const [imageMode, setImageMode] = useState<SceneImageMode>("panorama");
   const elapsed = useElapsedSeconds(phase === "playing", puzzle.id);
 
   useEffect(() => {
@@ -66,6 +71,20 @@ export default function HistoryTuxunDemoPage() {
       }),
     [puzzle],
   );
+  const staticMapUrl = useMemo(
+    () =>
+      buildBaiduStaticMapUrl({
+        lng: puzzle.lng,
+        lat: puzzle.lat,
+      }),
+    [puzzle.lat, puzzle.lng],
+  );
+  const sceneImageUrl =
+    imageMode === "panorama"
+      ? panoramaUrl
+      : imageMode === "static-map"
+        ? staticMapUrl
+        : null;
 
   const result = useMemo(() => {
     if (!guess) return null;
@@ -89,9 +108,48 @@ export default function HistoryTuxunDemoPage() {
   function handleNextPuzzle() {
     setPuzzle((current) => pickHistoryTuxunPuzzle(current.id));
     setGuess(null);
-    setImageFailed(false);
+    setImageMode("panorama");
     setPhase("playing");
   }
+
+  const handleSceneImageError = useCallback(() => {
+    if (imageMode === "panorama" && staticMapUrl) {
+      setImageMode("static-map");
+      return;
+    }
+
+    if (imageMode === "static-map") {
+      setImageMode("base-map");
+      return;
+    }
+
+    setImageMode("error");
+  }, [imageMode, staticMapUrl]);
+
+  useEffect(() => {
+    if (!sceneImageUrl || imageMode === "error") return;
+
+    let active = true;
+    const image = new Image();
+    const fail = () => {
+      if (!active) return;
+      handleSceneImageError();
+    };
+    const timer = window.setTimeout(() => {
+      if (image.complete && image.naturalWidth === 0) fail();
+    }, 2500);
+
+    image.onload = () => {
+      if (image.naturalWidth === 0) fail();
+    };
+    image.onerror = fail;
+    image.src = sceneImageUrl;
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [handleSceneImageError, imageMode, sceneImageUrl]);
 
   return (
     <main className="min-h-screen bg-stone-950 text-stone-100">
@@ -140,38 +198,54 @@ export default function HistoryTuxunDemoPage() {
             <section className="mt-auto rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
               <div className="text-sm font-semibold text-amber-100">任务</div>
               <p className="mt-2 text-sm leading-6 text-stone-300">
-                根据左侧逐步出现的历史线索和中间的百度街景静态图，在右侧地图中选出对应地点。
+                根据左侧逐步出现的历史线索和中间的百度地图图像，在右侧地图中选出对应地点。
               </p>
             </section>
           </aside>
 
           <section className="relative min-h-[420px] overflow-hidden bg-black">
-            {panoramaUrl && !imageFailed ? (
+            {imageMode === "base-map" ? (
+              <BaiduSceneMap center={{ lat: puzzle.lat, lng: puzzle.lng }} />
+            ) : sceneImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                key={puzzle.id}
-                src={panoramaUrl}
-                alt="待猜地点的百度全景静态图"
+                key={`${puzzle.id}-${imageMode}`}
+                src={sceneImageUrl}
+                alt={
+                  imageMode === "panorama"
+                    ? "待猜地点的百度全景静态图"
+                    : "待猜地点附近的百度静态地图"
+                }
                 className="h-full min-h-[420px] w-full object-cover"
-                onError={() => setImageFailed(true)}
+                onError={handleSceneImageError}
               />
             ) : (
               <div className="grid h-full min-h-[420px] place-items-center px-6 text-center">
                 <div className="max-w-md">
                   <div className="text-lg font-bold text-stone-100">
-                    无法加载百度全景静态图
+                    无法加载百度地图图像
                   </div>
                   <p className="mt-2 text-sm leading-6 text-stone-400">
                     请确认 NEXT_PUBLIC_BAIDU_MAP_AK 已配置，并且该 AK
-                    开通了百度全景静态图服务。
+                    至少开通了基础静态图服务。
                   </p>
                 </div>
               </div>
             )}
 
             <div className="absolute top-4 left-4 rounded-md border border-black/40 bg-stone-950/80 px-3 py-2 text-xs font-semibold text-stone-200 shadow-lg shadow-black/30">
-              百度全景静态图
+              {imageMode === "base-map"
+                ? "百度 JS 底图占位"
+                : imageMode === "static-map"
+                  ? "百度静态图占位"
+                  : "百度全景静态图"}
             </div>
+            {(imageMode === "static-map" || imageMode === "base-map") && (
+              <div className="absolute right-4 bottom-4 max-w-xs rounded-md border border-amber-500/40 bg-stone-950/85 px-3 py-2 text-xs leading-5 text-amber-100 shadow-lg shadow-black/30">
+                当前 AK
+                未返回可用全景图，已降级为基础地图服务；这不是街景等价替代。
+              </div>
+            )}
           </section>
 
           <aside className="grid min-h-[420px] grid-rows-[1fr_auto] border-t border-stone-800 bg-stone-900 lg:border-t-0 lg:border-l">

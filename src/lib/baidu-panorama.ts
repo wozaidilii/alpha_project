@@ -53,7 +53,7 @@ export interface BaiduMapApi {
   Point: new (lng: number, lat: number) => BaiduPoint;
   Map: new (container: HTMLElement) => BaiduMapInstance;
   Marker: new (point: BaiduPoint) => BaiduMarkerInstance;
-  Panorama: new (container: HTMLElement) => BaiduPanoramaInstance;
+  Panorama?: new (container: HTMLElement) => BaiduPanoramaInstance;
   PanoramaService?: new () => BaiduPanoramaService;
 }
 
@@ -99,6 +99,17 @@ interface StaticPanoramaUrlOptions {
   fov?: number;
   coordtype?: "bd09ll" | "wgs84ll";
 }
+
+interface StaticMapUrlOptions {
+  lng: number;
+  lat: number;
+  width?: number;
+  height?: number;
+  zoom?: number;
+  scale?: 1 | 2;
+}
+
+type BaiduMapFeature = "map" | "panorama";
 
 const RANDOM_REGIONS: RandomRegion[] = [
   {
@@ -215,13 +226,35 @@ const RANDOM_REGIONS: RandomRegion[] = [
   },
 ];
 
-export function loadBaiduMapScript(ak: string): Promise<void> {
+function hasBaiduFeature(
+  api: BaiduMapApi | undefined,
+  feature: BaiduMapFeature,
+) {
+  if (!api?.Point) return false;
+  if (feature === "map") return Boolean(api.Map);
+  return Boolean(api.Panorama);
+}
+
+function assertBaiduFeature(feature: BaiduMapFeature) {
+  if (hasBaiduFeature(window.BMap, feature)) return;
+
+  throw new Error(
+    feature === "map" ? "百度地图 JS API 未加载" : "百度地图全景 API 未加载",
+  );
+}
+
+export function loadBaiduMapScript(
+  ak: string,
+  feature: BaiduMapFeature = "panorama",
+): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("浏览器环境不可用"));
   }
-  if (window.BMap?.Panorama) return Promise.resolve();
+  if (hasBaiduFeature(window.BMap, feature)) return Promise.resolve();
   if (window.__histoguessrBaiduMapPromise) {
-    return window.__histoguessrBaiduMapPromise;
+    return window.__histoguessrBaiduMapPromise.then(() =>
+      assertBaiduFeature(feature),
+    );
   }
 
   window.__histoguessrBaiduMapPromise = new Promise((resolve, reject) => {
@@ -232,10 +265,10 @@ export function loadBaiduMapScript(ak: string): Promise<void> {
 
     window.__histoguessrBaiduMapReady = () => {
       window.clearTimeout(timer);
-      if (window.BMap?.Panorama) {
+      if (window.BMap?.Map || window.BMap?.Panorama) {
         resolve();
       } else {
-        reject(new Error("百度地图全景 API 未加载"));
+        reject(new Error("百度地图 JS API 未加载"));
       }
     };
 
@@ -254,7 +287,9 @@ export function loadBaiduMapScript(ak: string): Promise<void> {
     document.head.appendChild(script);
   });
 
-  return window.__histoguessrBaiduMapPromise;
+  return window.__histoguessrBaiduMapPromise.then(() =>
+    assertBaiduFeature(feature),
+  );
 }
 
 export function buildBaiduStaticPanoramaUrl({
@@ -281,6 +316,28 @@ export function buildBaiduStaticPanoramaUrl({
   });
 
   return `https://api.map.baidu.com/panorama/v2?${params.toString()}`;
+}
+
+export function buildBaiduStaticMapUrl({
+  lng,
+  lat,
+  width = 1024,
+  height = 512,
+  zoom = 16,
+  scale = 2,
+}: StaticMapUrlOptions): string | null {
+  if (!BAIDU_MAP_AK) return null;
+
+  const params = new URLSearchParams({
+    ak: BAIDU_MAP_AK,
+    width: String(width),
+    height: String(height),
+    center: `${lng},${lat}`,
+    zoom: String(zoom),
+    scale: String(scale),
+  });
+
+  return `https://api.map.baidu.com/staticimage/v2?${params.toString()}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

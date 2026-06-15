@@ -13,7 +13,9 @@ Build a focused historical map-finding demo that starts immediately when the pla
 ## Requirements
 
 - `/game/history-tuxun` starts a random historical map-finding question immediately.
+- `/game` mode selection stays accessible without login so the demo entry is reachable.
 - Show the modern street-view area with Baidu static panorama images.
+- If panorama/static street-view service is unavailable, fall back to Baidu's basic static map image, then to a basic JS map preview, so the demo can still run.
 - Show the map selection area with the Baidu Maps JS API.
 - Reveal one historical clue at the start and then one additional clue every 10 seconds.
 - Let the player click the map, submit an answer, see distance/score, and continue to another random question.
@@ -21,7 +23,8 @@ Build a focused historical map-finding demo that starts immediately when the pla
 ## Acceptance Criteria
 
 - [ ] `/game/history-tuxun` starts directly without requiring setup or backend event loading.
-- [ ] The page displays a historical clue section, Baidu static street-view image section, and Baidu map selection section.
+- [ ] The `/game` entry page does not require login before the user can open the demo.
+- [ ] The page displays a historical clue section, Baidu static street-view image or basic map fallback section, and Baidu map selection section.
 - [ ] A new clue appears every 10 seconds until all clues are visible.
 - [ ] The player can click the Baidu map, submit the guess, and see answer, distance, and score.
 - [ ] Starting the next question randomly chooses a different local historical puzzle when possible.
@@ -39,6 +42,9 @@ Build a focused historical map-finding demo that starts immediately when the pla
 - Relevant frontend files:
   - `src/app/game/history-tuxun/page.tsx`
   - `src/app/game/history-tuxun/_components/BaiduGuessMap.tsx`
+  - `src/app/game/history-tuxun/_components/BaiduSceneMap.tsx`
+  - `src/app/game/page.tsx`
+  - `src/app/game/tuxun/_components/BaiduPanorama.tsx`
   - `src/lib/baidu-panorama.ts`
   - `src/lib/history-tuxun-demo.ts`
 - Relevant specs:

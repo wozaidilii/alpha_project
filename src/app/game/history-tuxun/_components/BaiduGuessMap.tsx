@@ -72,7 +72,7 @@ export function BaiduGuessMap({ guess, answer, disabled, onGuess }: Props) {
       onGuessRef.current({ lat: event.point.lat, lng: event.point.lng });
     };
 
-    void loadBaiduMapScript(BAIDU_MAP_AK)
+    void loadBaiduMapScript(BAIDU_MAP_AK, "map")
       .then(() => {
         if (!active || !containerRef.current || !window.BMap) return;
 
