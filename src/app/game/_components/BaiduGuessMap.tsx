@@ -13,6 +13,7 @@ interface Props {
   guess: { lat: number; lng: number } | null;
   answer: { lat: number; lng: number } | null;
   disabled?: boolean;
+  minHeightClass?: string;
   onGuess: (point: { lat: number; lng: number }) => void;
 }
 
@@ -20,7 +21,13 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 
 const CHINA_CENTER = { lng: 104.1954, lat: 35.8617 };
 
-export function BaiduGuessMap({ guess, answer, disabled, onGuess }: Props) {
+export function BaiduGuessMap({
+  guess,
+  answer,
+  disabled,
+  minHeightClass = "min-h-[360px]",
+  onGuess,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<BaiduMapInstance | null>(null);
   const guessMarkerRef = useRef<BaiduMarkerInstance | null>(null);
@@ -144,7 +151,9 @@ export function BaiduGuessMap({ guess, answer, disabled, onGuess }: Props) {
   }, []);
 
   return (
-    <div className="relative h-full min-h-[360px] overflow-hidden bg-stone-950">
+    <div
+      className={`relative h-full ${minHeightClass} overflow-hidden bg-stone-950`}
+    >
       <div ref={containerRef} className="h-full w-full" />
 
       {state !== "ready" && (

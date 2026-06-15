@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { GameMap } from "./GameMap";
+import { BaiduGuessMap } from "./BaiduGuessMap";
 
 interface FloatingGuessMapProps {
   guessLat: number | null;
@@ -22,10 +22,11 @@ export function FloatingGuessMap({
   disabled,
   submitLabel = "提交猜测",
   title = "猜点地图",
-  helper = "靠近展开，点击地图选择位置",
+  helper = "靠近展开，点击百度地图选择位置",
 }: FloatingGuessMapProps) {
   const [expanded, setExpanded] = useState(false);
   const hasGuess = guessLat !== null && guessLng !== null;
+  const guess = hasGuess ? { lat: guessLat, lng: guessLng } : null;
 
   return (
     <div
@@ -71,7 +72,12 @@ export function FloatingGuessMap({
         </div>
 
         <div className="min-h-0 flex-1 bg-stone-900">
-          <GameMap guessLat={guessLat} guessLng={guessLng} onGuess={onGuess} />
+          <BaiduGuessMap
+            guess={guess}
+            answer={null}
+            minHeightClass="min-h-0"
+            onGuess={(point) => onGuess(point.lat, point.lng)}
+          />
         </div>
 
         <div

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
 import { BaiduSceneMap } from "~/app/game/_components/BaiduSceneMap";
-import { BaiduGuessMap } from "~/app/game/history-tuxun/_components/BaiduGuessMap";
+import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import {
   buildBaiduStaticMapUrl,
   buildBaiduStaticPanoramaUrl,
@@ -265,7 +266,7 @@ export default function HistoryTuxunDemoPage() {
           </button>
         </header>
 
-        <div className="grid min-h-0 lg:grid-cols-[340px_minmax(0,1fr)_420px]">
+        <div className="grid min-h-0 lg:grid-cols-[340px_minmax(0,1fr)]">
           <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-b border-stone-800 bg-stone-900 px-4 py-5 sm:px-6 lg:border-r lg:border-b-0">
             <section>
               <div className="text-sm font-semibold text-amber-200">
@@ -289,7 +290,7 @@ export default function HistoryTuxunDemoPage() {
             <section className="mt-auto rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
               <div className="text-sm font-semibold text-amber-100">任务</div>
               <p className="mt-2 text-sm leading-6 text-stone-300">
-                根据左侧逐步出现的历史线索和中间的百度地图图像，在右侧地图中选出对应地点。
+                根据左侧逐步出现的历史线索和中间的百度地图图像，在右下角百度地图中选出对应地点。
               </p>
             </section>
           </aside>
@@ -339,32 +340,16 @@ export default function HistoryTuxunDemoPage() {
             )}
           </section>
 
-          <aside className="grid min-h-[420px] grid-rows-[1fr_auto] border-t border-stone-800 bg-stone-900 lg:border-t-0 lg:border-l">
-            <BaiduGuessMap
-              guess={guess}
-              answer={null}
-              disabled={false}
-              onGuess={setGuess}
-            />
-
-            <section className="border-t border-stone-800 px-4 py-4">
-              <div className="space-y-3">
-                <div className="text-sm leading-6 text-stone-300">
-                  {guess
-                    ? `已选择：${guess.lat.toFixed(3)}, ${guess.lng.toFixed(3)}`
-                    : "还未选择地点"}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={!guess}
-                  className="min-h-11 w-full rounded-lg bg-amber-400 px-4 font-bold text-stone-950 transition hover:bg-amber-300 focus:ring-2 focus:ring-amber-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  提交答案
-                </button>
-              </div>
-            </section>
-          </aside>
+          <FloatingGuessMap
+            guessLat={guess?.lat ?? null}
+            guessLng={guess?.lng ?? null}
+            onGuess={(lat, lng) => setGuess({ lat, lng })}
+            onSubmit={handleSubmit}
+            disabled={!guess}
+            submitLabel="提交答案"
+            title="历史图寻猜点"
+            helper="靠近展开，点击百度地图选择位置"
+          />
         </div>
       </div>
     </main>
