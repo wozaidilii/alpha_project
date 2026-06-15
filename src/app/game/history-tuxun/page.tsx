@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BaiduSceneMap } from "~/app/game/_components/BaiduSceneMap";
 import { BaiduGuessMap } from "~/app/game/history-tuxun/_components/BaiduGuessMap";
-import { BaiduSceneMap } from "~/app/game/history-tuxun/_components/BaiduSceneMap";
 import {
   buildBaiduStaticMapUrl,
   buildBaiduStaticPanoramaUrl,
