@@ -1,5 +1,6 @@
 import { eventRouter } from "~/server/api/routers/event";
 import { funfactRouter } from "~/server/api/routers/funfact";
+import { locationTuxunRouter } from "~/server/api/routers/location-tuxun";
 import { postRouter } from "~/server/api/routers/post";
 import { playerRouter } from "~/server/api/routers/player";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
@@ -12,6 +13,7 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 export const appRouter = createTRPCRouter({
   event: eventRouter,
   funfact: funfactRouter,
+  locationTuxun: locationTuxunRouter,
   post: postRouter,
   player: playerRouter,
 });

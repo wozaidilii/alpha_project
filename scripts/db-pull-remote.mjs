@@ -29,7 +29,11 @@ import {
 } from "./event-image-paths.mjs";
 import { loadEnvFiles } from "./load-env.mjs";
 
-const CONTENT_TABLES = ["historical_events", "funfact_questions"];
+const CONTENT_TABLES = [
+  "historical_events",
+  "funfact_questions",
+  "location_tuxun_questions",
+];
 const BATCH_SIZE = 200;
 const IMAGE_CONCURRENCY = 5;
 
@@ -67,7 +71,7 @@ function assertLocalDatabaseUrl(url) {
   if (isNeonUrl(url)) {
     throw new Error(
       "DATABASE_URL 指向 Neon 远程库。请在 .env.local 中把 DATABASE_URL 设为本地库，例如：\n" +
-        'DATABASE_URL="postgresql://postgres:postgres@localhost:5432/histoguessr"',
+        'DATABASE_URL="postgresql://postgres:postgres@localhost:5433/histoguessr"',
     );
   }
 }

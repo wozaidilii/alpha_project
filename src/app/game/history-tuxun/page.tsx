@@ -8,11 +8,11 @@ import {
   buildBaiduStaticPanoramaUrl,
 } from "~/lib/baidu-panorama";
 import {
-  DEFAULT_HISTORY_TUXUN_PUZZLE,
-  pickHistoryTuxunPuzzle,
-  type HistoryTuxunPuzzle,
-} from "~/lib/history-tuxun-demo";
+  buildHistoryTuxunPlayState,
+  type HistoryTuxunPlayState,
+} from "~/lib/history-tuxun-puzzle";
 import { haversineDistance, locationScore } from "~/lib/scoring";
+import { api } from "~/trpc/react";
 
 type Phase = "playing" | "result";
 type SceneImageMode = "panorama" | "static-map" | "base-map" | "error";
@@ -26,9 +26,9 @@ function useElapsedSeconds(active: boolean, resetKey: string) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    setElapsed(0);
     if (!active) return;
 
+    setElapsed(0);
     const timer = window.setInterval(() => {
       setElapsed((value) => value + 1);
     }, 1000);
@@ -39,45 +39,75 @@ function useElapsedSeconds(active: boolean, resetKey: string) {
   return elapsed;
 }
 
-export default function HistoryTuxunDemoPage() {
-  const [puzzle, setPuzzle] = useState<HistoryTuxunPuzzle>(
-    DEFAULT_HISTORY_TUXUN_PUZZLE,
+export default function HistoryTuxunPage() {
+  const [playState, setPlayState] = useState<HistoryTuxunPlayState | null>(
+    null,
   );
+  const [excludeLocation, setExcludeLocation] = useState<string | undefined>();
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [imageMode, setImageMode] = useState<SceneImageMode>("panorama");
-  const elapsed = useElapsedSeconds(phase === "playing", puzzle.id);
+  const elapsed = useElapsedSeconds(
+    phase === "playing" && playState != null,
+    playState?.puzzleId ?? "loading",
+  );
+
+  const puzzleQuery = api.locationTuxun.random.useQuery(
+    { excludeLocation },
+    {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  );
 
   useEffect(() => {
-    setPuzzle(pickHistoryTuxunPuzzle());
-  }, []);
+    if (puzzleQuery.isLoading || puzzleQuery.isFetching) return;
+    if (!puzzleQuery.data) return;
+    setPlayState(buildHistoryTuxunPlayState(puzzleQuery.data));
+  }, [puzzleQuery.data, puzzleQuery.isFetching, puzzleQuery.isLoading]);
 
-  const revealedClueCount = Math.min(
-    puzzle.clues.length,
-    Math.floor(elapsed / 10) + 1,
-  );
-  const visibleClues = puzzle.clues.slice(0, revealedClueCount);
+  const loadError =
+    !puzzleQuery.isLoading &&
+    !puzzleQuery.isFetching &&
+    (puzzleQuery.isError || puzzleQuery.data === null)
+      ? "历史寻图题库未就绪，请先执行 npm run db:migrate 与 npm run db:import-location"
+      : null;
+
+  const revealedClueCount = playState
+    ? phase === "result"
+      ? playState.clues.length
+      : Math.min(playState.clues.length, Math.floor(elapsed / 10) + 1)
+    : 0;
+  const visibleClues = playState?.clues.slice(0, revealedClueCount) ?? [];
   const nextClueIn =
-    revealedClueCount < puzzle.clues.length ? 10 - (elapsed % 10) : null;
+    phase === "playing" &&
+    playState &&
+    revealedClueCount < playState.clues.length
+      ? 10 - (elapsed % 10)
+      : null;
 
   const panoramaUrl = useMemo(
     () =>
-      buildBaiduStaticPanoramaUrl({
-        lng: puzzle.lng,
-        lat: puzzle.lat,
-        heading: puzzle.heading,
-        pitch: puzzle.pitch,
-        fov: puzzle.fov,
-      }),
-    [puzzle],
+      playState
+        ? buildBaiduStaticPanoramaUrl({
+            lng: playState.sceneLng,
+            lat: playState.sceneLat,
+            heading: playState.heading,
+            pitch: playState.pitch,
+            fov: playState.fov,
+          })
+        : null,
+    [playState],
   );
   const staticMapUrl = useMemo(
     () =>
-      buildBaiduStaticMapUrl({
-        lng: puzzle.lng,
-        lat: puzzle.lat,
-      }),
-    [puzzle.lat, puzzle.lng],
+      playState
+        ? buildBaiduStaticMapUrl({
+            lng: playState.sceneLng,
+            lat: playState.sceneLat,
+          })
+        : null,
+    [playState],
   );
   const sceneImageUrl =
     imageMode === "panorama"
@@ -87,10 +117,10 @@ export default function HistoryTuxunDemoPage() {
         : null;
 
   const result = useMemo(() => {
-    if (!guess) return null;
+    if (!guess || !playState) return null;
     const distanceKm = haversineDistance(
-      puzzle.lat,
-      puzzle.lng,
+      playState.centerLat,
+      playState.centerLng,
       guess.lat,
       guess.lng,
     );
@@ -98,7 +128,7 @@ export default function HistoryTuxunDemoPage() {
       distanceKm,
       score: locationScore(distanceKm),
     };
-  }, [guess, puzzle.lat, puzzle.lng]);
+  }, [guess, playState]);
 
   function handleSubmit() {
     if (!guess) return;
@@ -106,10 +136,13 @@ export default function HistoryTuxunDemoPage() {
   }
 
   function handleNextPuzzle() {
-    setPuzzle((current) => pickHistoryTuxunPuzzle(current.id));
+    if (playState) {
+      setExcludeLocation(playState.location);
+    }
     setGuess(null);
     setImageMode("panorama");
     setPhase("playing");
+    void puzzleQuery.refetch();
   }
 
   const handleSceneImageError = useCallback(() => {
@@ -151,6 +184,35 @@ export default function HistoryTuxunDemoPage() {
     };
   }, [handleSceneImageError, imageMode, sceneImageUrl]);
 
+  if (loadError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-stone-950 px-6 text-stone-100">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-black text-amber-200">历史寻图题</h1>
+          <p className="mt-4 text-sm leading-7 text-stone-300">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void puzzleQuery.refetch()}
+            className="mt-6 min-h-11 rounded-lg bg-amber-400 px-5 font-bold text-stone-950 transition hover:bg-amber-300"
+          >
+            重试加载
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!playState || puzzleQuery.isLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-stone-950 text-stone-100">
+        <div className="text-center">
+          <h1 className="text-xl font-black text-amber-200">历史寻图题</h1>
+          <p className="mt-3 text-sm text-stone-400">正在从题库加载题目...</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-stone-950 text-stone-100">
       <div className="grid min-h-screen grid-rows-[auto_1fr]">
@@ -158,17 +220,21 @@ export default function HistoryTuxunDemoPage() {
           <div>
             <h1 className="text-xl font-black text-amber-200">历史寻图题</h1>
             <p className="mt-0.5 text-sm text-stone-400">
-              第 {revealedClueCount} 条线索已解锁
-              {nextClueIn
-                ? `，下一条 ${nextClueIn} 秒后出现`
-                : "，线索已全部给出"}
+              {phase === "result"
+                ? `全部 ${revealedClueCount} 条线索已保留`
+                : `第 ${revealedClueCount} 条线索已解锁${
+                    nextClueIn
+                      ? `，下一条 ${nextClueIn} 秒后出现`
+                      : "，线索已全部给出"
+                  }`}
             </p>
           </div>
 
           <button
             type="button"
             onClick={handleNextPuzzle}
-            className="min-h-11 rounded-lg border border-stone-700 px-4 text-sm font-semibold text-stone-200 transition hover:border-amber-300 hover:text-amber-100 focus:ring-2 focus:ring-amber-300 focus:outline-none"
+            disabled={puzzleQuery.isFetching}
+            className="min-h-11 rounded-lg border border-stone-700 px-4 text-sm font-semibold text-stone-200 transition hover:border-amber-300 hover:text-amber-100 focus:ring-2 focus:ring-amber-300 focus:outline-none disabled:cursor-wait disabled:opacity-60"
           >
             换一题
           </button>
@@ -183,7 +249,7 @@ export default function HistoryTuxunDemoPage() {
               <ol className="mt-4 space-y-3">
                 {visibleClues.map((clue, index) => (
                   <li
-                    key={clue}
+                    key={`${playState.puzzleId}-${index}`}
                     className="rounded-lg border border-stone-700 bg-stone-950 px-4 py-3 text-sm leading-6 text-stone-200"
                   >
                     <span className="mr-2 font-mono text-amber-300">
@@ -198,18 +264,20 @@ export default function HistoryTuxunDemoPage() {
             <section className="mt-auto rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
               <div className="text-sm font-semibold text-amber-100">任务</div>
               <p className="mt-2 text-sm leading-6 text-stone-300">
-                根据左侧逐步出现的历史线索和中间的百度地图图像，在右侧地图中选出对应地点。
+                根据左侧逐步出现的历史线索和中间的百度全景图，在右侧地图中选出对应城市的位置。
               </p>
             </section>
           </aside>
 
           <section className="relative min-h-[420px] overflow-hidden bg-black">
             {imageMode === "base-map" ? (
-              <BaiduSceneMap center={{ lat: puzzle.lat, lng: puzzle.lng }} />
+              <BaiduSceneMap
+                center={{ lat: playState.sceneLat, lng: playState.sceneLng }}
+              />
             ) : sceneImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                key={`${puzzle.id}-${imageMode}`}
+                key={`${playState.puzzleId}-${imageMode}`}
                 src={sceneImageUrl}
                 alt={
                   imageMode === "panorama"
@@ -252,8 +320,12 @@ export default function HistoryTuxunDemoPage() {
             <BaiduGuessMap
               guess={guess}
               answer={
-                phase === "result" ? { lat: puzzle.lat, lng: puzzle.lng } : null
+                phase === "result"
+                  ? { lat: playState.centerLat, lng: playState.centerLng }
+                  : null
               }
+              answerLabel={playState.answerName}
+              distanceKm={result?.distanceKm}
               disabled={phase === "result"}
               onGuess={setGuess}
             />
@@ -264,12 +336,25 @@ export default function HistoryTuxunDemoPage() {
                   <div>
                     <div className="text-sm text-stone-400">答案</div>
                     <div className="mt-1 text-xl font-black text-amber-200">
-                      {puzzle.answerName}
+                      {playState.answerName}
                     </div>
                     <p className="mt-1 text-sm leading-6 text-stone-300">
-                      {puzzle.answerContext}
+                      {playState.answerContext}
                     </p>
                   </div>
+
+                  {playState.funfact.length > 0 ? (
+                    <div className="rounded-lg border border-stone-700 bg-stone-950 px-3 py-3">
+                      <div className="text-xs font-semibold text-amber-200">
+                        冷知识
+                      </div>
+                      <ul className="mt-2 space-y-2 text-sm leading-6 text-stone-300">
+                        {playState.funfact.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-stone-950 px-3 py-3">
