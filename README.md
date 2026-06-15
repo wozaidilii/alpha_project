@@ -19,7 +19,7 @@ npm run db:seed
 For local development, the included Docker Compose config matches this URL:
 
 ```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/histoguessr"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/histoguessr"
 ```
 
 Start the local database with:

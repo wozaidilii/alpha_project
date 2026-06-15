@@ -129,3 +129,43 @@ create index if not exists funfact_questions_source_id_idx
 
 create index if not exists funfact_questions_difficulty_idx
   on funfact_questions(difficulty);
+
+-- 历史寻图题：按城市聚合 hint / funfact，出题时在城内随机选百度全景坐标
+create table if not exists location_tuxun_questions (
+  id text primary key,
+  source_id text not null,
+  location text not null,
+  modern_name text not null,
+  center_lat double precision not null,
+  center_lng double precision not null,
+  radius_km double precision not null default 20 check (radius_km > 0),
+  title text not null,
+  aspect text,
+  hint text not null,
+  funfact jsonb not null default '[]'::jsonb,
+  difficulty integer check (difficulty is null or (difficulty >= 1 and difficulty <= 5)),
+  quality_flags text[] not null default '{}',
+  year integer,
+  year_end integer,
+  year_note text,
+  category text not null,
+  subject_note text,
+  location_scope text,
+  location_note text,
+  ancient_names jsonb not null default '[]'::jsonb,
+  enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists location_tuxun_questions_location_idx
+  on location_tuxun_questions(location);
+
+create index if not exists location_tuxun_questions_source_id_idx
+  on location_tuxun_questions(source_id);
+
+create index if not exists location_tuxun_questions_difficulty_idx
+  on location_tuxun_questions(difficulty);
+
+create index if not exists location_tuxun_questions_enabled_idx
+  on location_tuxun_questions(enabled);
