@@ -32,14 +32,19 @@ export interface BaiduMapInstance {
     type: "click",
     handler: (event: BaiduMapClickEvent) => void,
   ) => void;
-  addOverlay: (overlay: BaiduMarkerInstance) => void;
+  addOverlay: (overlay: BaiduOverlayInstance) => void;
   clearOverlays: () => void;
   checkResize?: () => void;
+  setViewport?: (points: BaiduPoint[]) => void;
 }
+
+export type BaiduOverlayInstance = object;
 
 export interface BaiduMarkerInstance {
   setPosition?: (point: BaiduPoint) => void;
 }
+
+export type BaiduPolylineInstance = object;
 
 interface BaiduPanoramaService {
   getPanoramaByLocation: (
@@ -53,6 +58,14 @@ export interface BaiduMapApi {
   Point: new (lng: number, lat: number) => BaiduPoint;
   Map: new (container: HTMLElement) => BaiduMapInstance;
   Marker: new (point: BaiduPoint) => BaiduMarkerInstance;
+  Polyline?: new (
+    points: BaiduPoint[],
+    options?: {
+      strokeColor?: string;
+      strokeWeight?: number;
+      strokeOpacity?: number;
+    },
+  ) => BaiduPolylineInstance;
   Panorama?: new (container: HTMLElement) => BaiduPanoramaInstance;
   PanoramaService?: new () => BaiduPanoramaService;
 }

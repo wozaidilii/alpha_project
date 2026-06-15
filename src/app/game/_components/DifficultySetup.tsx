@@ -26,15 +26,17 @@ export function DifficultySetup({
     <main className="flex min-h-screen flex-col items-center justify-center bg-stone-900 px-4 text-white">
       <div className="flex w-full max-w-lg flex-col gap-6">
         <Link
-          href="/game"
+          href="/game/solo"
           className="text-sm text-stone-400 transition hover:text-white"
         >
-          ← 返回模式选择
+          ← 返回个人模式
         </Link>
 
         <div className="text-center">
           <div className="text-4xl">{gameMode.emoji}</div>
-          <h1 className={`mt-2 text-3xl font-extrabold ${gameMode.accentClass}`}>
+          <h1
+            className={`mt-2 text-3xl font-extrabold ${gameMode.accentClass}`}
+          >
             {gameMode.title}
           </h1>
           <p className="mt-2 text-stone-400">{gameMode.description}</p>
@@ -106,12 +108,16 @@ function DifficultyOption({
       }`}
     >
       <div className="flex items-center justify-between gap-3">
-        <span className={`font-medium ${selected ? accentClass : "text-stone-100"}`}>
+        <span
+          className={`font-medium ${selected ? accentClass : "text-stone-100"}`}
+        >
           难度 {level} · {DIFFICULTY_LABELS[level]}
         </span>
         <span className="text-xs text-stone-500">{"★".repeat(level)}</span>
       </div>
-      <div className="text-sm text-stone-400">{DIFFICULTY_DESCRIPTIONS[level]}</div>
+      <div className="text-sm text-stone-400">
+        {DIFFICULTY_DESCRIPTIONS[level]}
+      </div>
     </button>
   );
 }

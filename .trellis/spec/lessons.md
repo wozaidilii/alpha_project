@@ -39,3 +39,10 @@
 - 根因：全局 env schema 把 Pusher 配置设为构建期必填，即使当前 demo 入口不会加载对战模式，也会在配置校验阶段阻断部署。
 - 修复：将 Pusher env 改为可选，并在 Pusher client/server 实际运行时做局部校验和清晰失败。
 - 预防：临时 demo 或灰度入口隐藏某个功能时，该功能的第三方密钥不应保持全局构建必填；改成运行到对应功能边界时校验。
+
+## 第三方地图 Overlay 类型不要用空接口
+
+- 问题：为百度地图 Marker / Polyline 抽象共享 Overlay 类型时使用了空 `interface`，`next lint` 触发 `@typescript-eslint/no-empty-object-type` 并阻断验证。
+- 根因：空接口在 TypeScript 中等价于允许任意非 nullish 值，不能准确表达“第三方 SDK 返回的不透明对象”。
+- 修复：将共享 Overlay 类型改成 `object` 类型别名，具体 Marker 继续保留实际使用到的可选方法。
+- 预防：为第三方 SDK 建模时，如果代码不读取对象成员，用 `object` / `unknown` 等不透明类型；只有真实访问成员时才声明接口。

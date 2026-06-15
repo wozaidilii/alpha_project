@@ -233,7 +233,7 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
             href="/game"
             className="flex-1 rounded-xl bg-stone-700 py-3 text-center font-bold text-stone-300 transition hover:bg-stone-600"
           >
-            返回模式选择
+            返回首页
           </Link>
         </div>
       </div>

@@ -88,7 +88,7 @@ export default function BattleLobby() {
           href="/game"
           className="mb-6 inline-flex items-center gap-1 text-sm text-stone-400 hover:text-white"
         >
-          ← 返回模式选择
+          ← 返回首页
         </Link>
 
         <h1 className="mb-2 text-3xl font-extrabold text-red-400">

@@ -405,8 +405,8 @@ export default function GamePlayPage({ params }: PageProps) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-stone-900 text-white">
         <p className="text-stone-400">未知的游戏类型</p>
-        <Link href="/game" className="text-amber-400 hover:underline">
-          返回选择页面
+        <Link href="/game/solo" className="text-amber-400 hover:underline">
+          返回个人模式
         </Link>
       </div>
     );
@@ -444,8 +444,8 @@ export default function GamePlayPage({ params }: PageProps) {
                 ? "冷知识题库加载失败，请检查数据库连接"
                 : "题库为空，请先导入题目")}
         </p>
-        <Link href="/game" className="text-amber-400 hover:underline">
-          返回选择页面
+        <Link href="/game/solo" className="text-amber-400 hover:underline">
+          返回个人模式
         </Link>
       </div>
     );
@@ -488,16 +488,16 @@ export default function GamePlayPage({ params }: PageProps) {
             {mode.emoji} {mode.title}
           </h1>
           <Link
-            href="/game"
+            href="/game/solo"
             className="text-xs text-stone-500 transition hover:text-stone-300"
           >
             换类型
           </Link>
           <Link
-            href="/game"
+            href="/game/solo"
             className="text-xs text-stone-500 transition hover:text-stone-300"
           >
-            返回模式选择
+            返回个人模式
           </Link>
         </div>
         <div className="flex items-center gap-4 text-stone-400">

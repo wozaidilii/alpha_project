@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { BaiduGuessMap } from "~/app/game/history-tuxun/_components/BaiduGuessMap";
 import { BaiduSceneMap } from "~/app/game/history-tuxun/_components/BaiduSceneMap";
 import {
@@ -151,6 +152,96 @@ export default function HistoryTuxunDemoPage() {
     };
   }, [handleSceneImageError, imageMode, sceneImageUrl]);
 
+  if (phase === "result" && guess && result) {
+    return (
+      <main className="flex min-h-screen flex-col bg-stone-900 text-white">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-700 px-4 py-3 sm:px-6">
+          <div>
+            <h1 className="text-xl font-bold text-amber-300">历史图寻模式</h1>
+            <p className="mt-0.5 text-sm text-stone-400">本题结算</p>
+          </div>
+
+          <Link
+            href="/game/solo"
+            className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700 focus:ring-2 focus:ring-amber-300 focus:outline-none"
+          >
+            返回个人模式
+          </Link>
+        </header>
+
+        <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_400px]">
+          <section className="min-h-[420px]">
+            <BaiduGuessMap
+              guess={guess}
+              answer={{ lat: puzzle.lat, lng: puzzle.lng }}
+              disabled
+              onGuess={setGuess}
+            />
+          </section>
+
+          <aside className="flex flex-col gap-4 overflow-y-auto border-t border-stone-700 bg-stone-950/70 p-5 lg:border-t-0 lg:border-l">
+            <div>
+              <div className="text-sm text-stone-500">实际地点</div>
+              <h2 className="mt-1 text-2xl font-extrabold text-amber-300">
+                {puzzle.answerName}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-stone-300">
+                {puzzle.answerContext}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-gradient-to-br from-amber-500/20 to-stone-800 p-5 text-center">
+              <div className="text-sm text-stone-400">本题得分</div>
+              <div className="text-6xl font-extrabold text-white">
+                {result.score.toLocaleString()}
+              </div>
+              <div className="text-sm text-stone-500">/ 10,000</div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">偏差</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {formatDistance(result.distanceKm)}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">已解锁线索</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {visibleClues.length} / {puzzle.clues.length}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-800 p-4">
+              <div className="mb-3 text-sm font-semibold text-amber-300">
+                本题线索
+              </div>
+              <ol className="space-y-2 text-sm leading-6 text-stone-300">
+                {puzzle.clues.map((clue, index) => (
+                  <li key={clue} className="flex gap-2">
+                    <span className="font-mono text-xs text-amber-300">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span>{clue}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextPuzzle}
+              className="mt-auto min-h-11 rounded-xl bg-amber-400 py-3 font-bold text-stone-950 transition hover:bg-amber-300 focus:ring-2 focus:ring-amber-200 focus:outline-none"
+            >
+              下一题
+            </button>
+          </aside>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-stone-950 text-stone-100">
       <div className="grid min-h-screen grid-rows-[auto_1fr]">
@@ -251,66 +342,27 @@ export default function HistoryTuxunDemoPage() {
           <aside className="grid min-h-[420px] grid-rows-[1fr_auto] border-t border-stone-800 bg-stone-900 lg:border-t-0 lg:border-l">
             <BaiduGuessMap
               guess={guess}
-              answer={
-                phase === "result" ? { lat: puzzle.lat, lng: puzzle.lng } : null
-              }
-              disabled={phase === "result"}
+              answer={null}
+              disabled={false}
               onGuess={setGuess}
             />
 
             <section className="border-t border-stone-800 px-4 py-4">
-              {phase === "result" && result ? (
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-sm text-stone-400">答案</div>
-                    <div className="mt-1 text-xl font-black text-amber-200">
-                      {puzzle.answerName}
-                    </div>
-                    <p className="mt-1 text-sm leading-6 text-stone-300">
-                      {puzzle.answerContext}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-stone-950 px-3 py-3">
-                      <div className="text-xs text-stone-500">偏差</div>
-                      <div className="mt-1 font-bold text-stone-100">
-                        {formatDistance(result.distanceKm)}
-                      </div>
-                    </div>
-                    <div className="rounded-lg bg-stone-950 px-3 py-3">
-                      <div className="text-xs text-stone-500">得分</div>
-                      <div className="mt-1 font-bold text-stone-100">
-                        {result.score.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleNextPuzzle}
-                    className="min-h-11 w-full rounded-lg bg-amber-400 px-4 font-bold text-stone-950 transition hover:bg-amber-300 focus:ring-2 focus:ring-amber-200 focus:outline-none"
-                  >
-                    下一题
-                  </button>
+              <div className="space-y-3">
+                <div className="text-sm leading-6 text-stone-300">
+                  {guess
+                    ? `已选择：${guess.lat.toFixed(3)}, ${guess.lng.toFixed(3)}`
+                    : "还未选择地点"}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="text-sm leading-6 text-stone-300">
-                    {guess
-                      ? `已选择：${guess.lat.toFixed(3)}, ${guess.lng.toFixed(3)}`
-                      : "还未选择地点"}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={!guess}
-                    className="min-h-11 w-full rounded-lg bg-amber-400 px-4 font-bold text-stone-950 transition hover:bg-amber-300 focus:ring-2 focus:ring-amber-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    提交答案
-                  </button>
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!guess}
+                  className="min-h-11 w-full rounded-lg bg-amber-400 px-4 font-bold text-stone-950 transition hover:bg-amber-300 focus:ring-2 focus:ring-amber-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  提交答案
+                </button>
+              </div>
             </section>
           </aside>
         </div>

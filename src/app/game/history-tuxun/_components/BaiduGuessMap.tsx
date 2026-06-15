@@ -48,6 +48,22 @@ export function BaiduGuessMap({ guess, answer, disabled, onGuess }: Props) {
     guessMarkerRef.current = null;
     answerMarkerRef.current = null;
 
+    if (answer && guess && api.Polyline) {
+      map.addOverlay(
+        new api.Polyline(
+          [
+            new api.Point(guess.lng, guess.lat),
+            new api.Point(answer.lng, answer.lat),
+          ],
+          {
+            strokeColor: "#f59e0b",
+            strokeWeight: 3,
+            strokeOpacity: 0.85,
+          },
+        ),
+      );
+    }
+
     if (answer) {
       const marker = new api.Marker(new api.Point(answer.lng, answer.lat));
       map.addOverlay(marker);
@@ -58,6 +74,13 @@ export function BaiduGuessMap({ guess, answer, disabled, onGuess }: Props) {
       const marker = new api.Marker(new api.Point(guess.lng, guess.lat));
       map.addOverlay(marker);
       guessMarkerRef.current = marker;
+    }
+
+    if (answer && guess) {
+      map.setViewport?.([
+        new api.Point(answer.lng, answer.lat),
+        new api.Point(guess.lng, guess.lat),
+      ]);
     }
   }, [answer, guess]);
 

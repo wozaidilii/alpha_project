@@ -152,8 +152,8 @@ export default function TuxunGamePage() {
           >
             重新生成
           </button>
-          <Link href="/game" className="rounded-lg bg-stone-800 px-4 py-2">
-            返回模式选择
+          <Link href="/game/solo" className="rounded-lg bg-stone-800 px-4 py-2">
+            返回个人模式
           </Link>
         </div>
       </main>
@@ -169,10 +169,10 @@ export default function TuxunGamePage() {
         <header className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
           <h1 className="text-xl font-bold text-sky-300">🔭 图寻模式</h1>
           <Link
-            href="/game"
+            href="/game/solo"
             className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700"
           >
-            返回模式选择
+            返回个人模式
           </Link>
         </header>
 
@@ -224,7 +224,7 @@ export default function TuxunGamePage() {
               再来一局
             </button>
             <Link
-              href="/game"
+              href="/game/solo"
               className="flex-1 rounded-xl bg-stone-700 py-3 text-center font-bold text-stone-300 transition hover:bg-stone-600"
             >
               换模式
@@ -301,16 +301,16 @@ export default function TuxunGamePage() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-sky-300">🔭 图寻模式</h1>
           <Link
-            href="/game"
+            href="/game/solo"
             className="text-xs text-stone-500 transition hover:text-stone-300"
           >
             换类型
           </Link>
           <Link
-            href="/game"
+            href="/game/solo"
             className="text-xs text-stone-500 transition hover:text-stone-300"
           >
-            返回模式选择
+            返回个人模式
           </Link>
         </div>
         <span className="text-stone-400">
