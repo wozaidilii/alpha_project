@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   yearOnlyScore,
+  historyYearRoundScore,
   scoreRound,
   yearScore,
   locationScore,
@@ -38,6 +39,58 @@ describe("yearOnlyScore", () => {
     const near = yearOnlyScore(1998, 2001, 2003);
     const far = yearOnlyScore(1998, 2010, 2003);
     expect(near).toBeGreaterThan(far);
+  });
+});
+
+describe("historyYearRoundScore", () => {
+  it("满分年份在第一条线索提交时不扣线索分", () => {
+    const result = historyYearRoundScore({
+      actualYear: 1945,
+      guessedYear: 1945,
+      revealedClueCount: 1,
+      totalClues: 4,
+    });
+
+    expect(result.accuracyPts).toBe(10000);
+    expect(result.cluePenaltyPts).toBe(0);
+    expect(result.total).toBe(10000);
+  });
+
+  it("同样年份准确度下，使用线索越多总分越低", () => {
+    const early = historyYearRoundScore({
+      actualYear: 1945,
+      guessedYear: 1944,
+      revealedClueCount: 1,
+      totalClues: 4,
+    });
+    const late = historyYearRoundScore({
+      actualYear: 1945,
+      guessedYear: 1944,
+      revealedClueCount: 4,
+      totalClues: 4,
+    });
+
+    expect(early.accuracyPts).toBe(late.accuracyPts);
+    expect(early.total).toBeGreaterThan(late.total);
+    expect(late.cluePenaltyPts).toBeGreaterThan(0);
+  });
+
+  it("线索数量越界时按有效范围计分", () => {
+    const beforeFirst = historyYearRoundScore({
+      actualYear: 1945,
+      guessedYear: 1945,
+      revealedClueCount: 0,
+      totalClues: 3,
+    });
+    const afterLast = historyYearRoundScore({
+      actualYear: 1945,
+      guessedYear: 1945,
+      revealedClueCount: 99,
+      totalClues: 3,
+    });
+
+    expect(beforeFirst.total).toBe(10000);
+    expect(afterLast.total).toBe(4000);
   });
 });
 

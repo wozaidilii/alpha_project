@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  getRandomHistoryYearPuzzle,
   getRandomLocationTuxunPuzzle,
   markLocationTuxunStreetViewUnavailable,
   saveLocationTuxunStreetViewScene,
@@ -24,6 +25,16 @@ export const locationTuxunRouter = createTRPCRouter({
     )
     .query(({ input }) => {
       return getRandomLocationTuxunPuzzle(input);
+    }),
+  randomYear: publicProcedure
+    .input(
+      z.object({
+        excludePuzzleId: z.string().min(1).optional(),
+        difficulty: difficultyInput,
+      }),
+    )
+    .query(({ input }) => {
+      return getRandomHistoryYearPuzzle(input);
     }),
   saveStreetViewScene: publicProcedure.input(sceneInput).mutation(({ input }) =>
     saveLocationTuxunStreetViewScene({

@@ -2,6 +2,7 @@ import "server-only";
 
 import { sql } from "~/server/db/client";
 import {
+  type HistoryYearPuzzle,
   type LocationTuxunPuzzle,
   type LocationTuxunQuestion,
   type LocationTuxunStreetViewScene,
@@ -43,6 +44,11 @@ interface TableExistsRow {
 
 export interface LocationTuxunQuery {
   excludeLocation?: string;
+  difficulty?: number;
+}
+
+export interface HistoryYearQuery {
+  excludePuzzleId?: string;
   difficulty?: number;
 }
 
@@ -158,6 +164,67 @@ function mergeFunfacts(rows: LocationTuxunRow[]): string[] {
   return merged;
 }
 
+function pushUniqueClue(clues: string[], value: string | null | undefined) {
+  const clue = value?.trim();
+  if (!clue || clues.includes(clue)) return;
+  clues.push(clue);
+}
+
+function buildHistoryYearClues(row: LocationTuxunRow): string[] {
+  const clues: string[] = [];
+  pushUniqueClue(clues, row.hint);
+  pushUniqueClue(
+    clues,
+    row.location_note ? `地点线索：${row.location_note}` : undefined,
+  );
+  pushUniqueClue(clues, row.subject_note);
+  pushUniqueClue(clues, row.aspect ? `主题线索：${row.aspect}` : undefined);
+  pushUniqueClue(clues, `事件名：${row.title}`);
+  return clues;
+}
+
+function firstNonEmptyText(
+  ...values: Array<string | null | undefined>
+): string | undefined {
+  return values
+    .map((value) => value?.trim())
+    .find((value): value is string => value !== undefined && value.length > 0);
+}
+
+function buildHistoryYearAnswerContext(row: LocationTuxunRow): string {
+  return (
+    firstNonEmptyText(row.year_note, row.subject_note, row.location_note) ??
+    "根据逐步解锁的历史线索，判断这一事件对应的年份。"
+  );
+}
+
+function buildHistoryYearPuzzle(
+  row: LocationTuxunRow,
+): HistoryYearPuzzle | null {
+  if (row.year == null) return null;
+
+  const clues = buildHistoryYearClues(row);
+  if (clues.length === 0) return null;
+
+  const funfact = parseStringArray(row.funfact).slice(0, 3);
+
+  return {
+    puzzleId: row.id,
+    sourceId: row.source_id,
+    title: row.title,
+    location: row.location,
+    answerName: row.title,
+    answerContext: buildHistoryYearAnswerContext(row),
+    answerYear: row.year,
+    answerYearEnd: row.year_end ?? undefined,
+    yearNote: row.year_note ?? undefined,
+    clues,
+    funfact,
+    difficulty: row.difficulty ?? undefined,
+    category: row.category,
+  };
+}
+
 function buildPuzzle(rows: LocationTuxunRow[]): LocationTuxunPuzzle | null {
   if (rows.length === 0) return null;
 
@@ -184,6 +251,7 @@ function buildPuzzle(rows: LocationTuxunRow[]): LocationTuxunPuzzle | null {
     funfact: mergeFunfacts(rows),
     difficulty: difficulties.length > 0 ? Math.min(...difficulties) : undefined,
     year: primary.year ?? undefined,
+    yearEnd: primary.year_end ?? undefined,
     questionIds: rows.map((row) => row.id),
   };
 }
@@ -361,6 +429,56 @@ export async function getRandomLocationTuxunPuzzle(
   );
 
   return streetViewScene ? { ...puzzle, streetViewScene } : puzzle;
+}
+
+export async function getRandomHistoryYearPuzzle(
+  query: HistoryYearQuery = {},
+): Promise<HistoryYearPuzzle | null> {
+  const { excludePuzzleId, difficulty } = query;
+
+  const rows =
+    difficulty == null
+      ? excludePuzzleId
+        ? await sql<LocationTuxunRow[]>`
+            select ${LOCATION_TUXUN_COLUMNS}
+            from location_tuxun_questions
+            where enabled = true
+              and year is not null
+              and id <> ${excludePuzzleId}
+            order by random()
+            limit 1
+          `
+        : await sql<LocationTuxunRow[]>`
+            select ${LOCATION_TUXUN_COLUMNS}
+            from location_tuxun_questions
+            where enabled = true
+              and year is not null
+            order by random()
+            limit 1
+          `
+      : excludePuzzleId
+        ? await sql<LocationTuxunRow[]>`
+            select ${LOCATION_TUXUN_COLUMNS}
+            from location_tuxun_questions
+            where enabled = true
+              and year is not null
+              and difficulty = ${difficulty}
+              and id <> ${excludePuzzleId}
+            order by random()
+            limit 1
+          `
+        : await sql<LocationTuxunRow[]>`
+            select ${LOCATION_TUXUN_COLUMNS}
+            from location_tuxun_questions
+            where enabled = true
+              and year is not null
+              and difficulty = ${difficulty}
+            order by random()
+            limit 1
+          `;
+
+  const row = rows[0];
+  return row ? buildHistoryYearPuzzle(row) : null;
 }
 
 export async function getLocationTuxunQuestionsByLocation(

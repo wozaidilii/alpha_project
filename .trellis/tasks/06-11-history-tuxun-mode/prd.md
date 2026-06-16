@@ -22,6 +22,8 @@ Build a focused historical map-finding demo that starts immediately when the pla
 - Show the map selection area with the Baidu Maps JS API.
 - Reveal one historical clue at the start and then one additional clue every 10 seconds.
 - Let the player click the map, submit an answer, see distance/score, and continue to another random question.
+- Add a separate history year-guessing mode where the player guesses the event year from progressively revealed clues.
+- In the year-guessing mode, using more revealed clues lowers the final score.
 
 ## Acceptance Criteria
 
@@ -34,6 +36,10 @@ Build a focused historical map-finding demo that starts immediately when the pla
 - [ ] A new clue appears every 10 seconds until all clues are visible.
 - [ ] The player can click the Baidu map, submit the guess, and see answer, distance, and score.
 - [ ] Starting the next question randomly chooses a different local historical puzzle when possible.
+- [ ] `/game/history-year` starts a random historical year question with a timeline slider and no map requirement.
+- [ ] The year mode reveals one clue at the start and then one additional clue every 10 seconds.
+- [ ] Submitting in year mode shows the correct year, guessed year, accuracy score, clue penalty, and total score.
+- [ ] For the same year guess, using more clues produces a lower total score.
 
 ## Out Of Scope
 
@@ -47,6 +53,7 @@ Build a focused historical map-finding demo that starts immediately when the pla
 
 - Relevant frontend files:
   - `src/app/game/history-tuxun/page.tsx`
+  - `src/app/game/history-year/page.tsx`
   - `src/app/game/history-tuxun/_components/BaiduGuessMap.tsx`
   - `src/app/game/history-tuxun/_components/BaiduSceneMap.tsx`
   - `src/app/game/page.tsx`
@@ -56,6 +63,7 @@ Build a focused historical map-finding demo that starts immediately when the pla
   - `src/lib/player-session-guard.tsx`
   - `src/lib/baidu-panorama.ts`
   - `src/lib/history-tuxun-demo.ts`
+  - `src/lib/scoring.ts`
 - Relevant specs:
   - `.trellis/spec/frontend/index.md`
   - `.trellis/spec/guides/index.md`

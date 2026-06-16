@@ -1,6 +1,10 @@
 import { type QuestionType } from "~/types/question";
 
-export type GameModeSlug = QuestionType | "tuxun" | "history-tuxun";
+export type GameModeSlug =
+  | QuestionType
+  | "tuxun"
+  | "history-tuxun"
+  | "history-year";
 
 export interface GameModeConfig {
   type: GameModeSlug;
@@ -13,6 +17,8 @@ export interface GameModeConfig {
   borderHoverClass: string;
   /** 为 false 时不在选择页展示（暂时下线） */
   enabled?: boolean;
+  /** 为 false 时仅用于个人模式，不进入对战配置 */
+  battleEnabled?: boolean;
 }
 
 export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
@@ -82,10 +88,26 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     borderHoverClass: "hover:border-amber-500",
     enabled: true,
   },
+  "history-year": {
+    type: "history-year",
+    slug: "history-year",
+    title: "历史猜年份",
+    emoji: "⌛",
+    description: "根据逐步解锁的历史线索猜事件年份",
+    tagline: "线索越少 + 年份越准，分数越高",
+    accentClass: "text-fuchsia-300",
+    borderHoverClass: "hover:border-fuchsia-500",
+    enabled: true,
+    battleEnabled: false,
+  },
 };
 
 export const GAME_MODE_LIST = Object.values(GAME_MODES).filter(
   (mode) => mode.enabled !== false,
+);
+
+export const BATTLE_GAME_MODE_LIST = GAME_MODE_LIST.filter(
+  (mode) => mode.battleEnabled !== false,
 );
 
 export function isQuestionType(value: string): value is QuestionType {
@@ -99,10 +121,19 @@ export function isQuestionType(value: string): value is QuestionType {
 
 export function isGameModeSlug(value: string): value is GameModeSlug {
   return (
-    isQuestionType(value) || value === "tuxun" || value === "history-tuxun"
+    isQuestionType(value) ||
+    value === "tuxun" ||
+    value === "history-tuxun" ||
+    value === "history-year"
   );
 }
 
 export function getGameMode(slug: string): GameModeConfig | undefined {
   return isGameModeSlug(slug) ? GAME_MODES[slug] : undefined;
+}
+
+export function isBattleGameModeSlug(value: string): value is GameModeSlug {
+  if (!isGameModeSlug(value)) return false;
+  const mode = GAME_MODES[value];
+  return mode.enabled !== false && mode.battleEnabled !== false;
 }

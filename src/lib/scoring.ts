@@ -24,6 +24,8 @@ export const CHINA_LOCATION_SCORE_ZERO_KM = 2500;
 export const LOCATION_ROUND_SCORE_MAX = 100;
 export const LOCATION_SPEED_COMPENSATION_RATIO = 0.15;
 export const LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS = 60;
+export const HISTORY_YEAR_SCORE_MAX = 10000;
+export const HISTORY_YEAR_MIN_CLUE_MULTIPLIER = 0.4;
 
 // 中国地图模式使用更紧的距离分曲线；跨大半个中国的误差应接近 0 分。
 export function locationScore(distanceKm: number): number {
@@ -113,7 +115,51 @@ export function yearOnlyScore(
   yearEnd?: number,
 ): number {
   const targetYear = getTargetYear(actualYear, yearEnd);
-  return Math.min(10000, yearScore(targetYear, guessedYear) * 2);
+  return Math.min(
+    HISTORY_YEAR_SCORE_MAX,
+    yearScore(targetYear, guessedYear) * 2,
+  );
+}
+
+export interface HistoryYearRoundScoreInput {
+  actualYear: number;
+  guessedYear: number;
+  yearEnd?: number;
+  revealedClueCount: number;
+  totalClues: number;
+}
+
+export interface HistoryYearRoundScoreResult {
+  accuracyPts: number;
+  cluePenaltyPts: number;
+  clueMultiplier: number;
+  total: number;
+}
+
+export function historyYearRoundScore({
+  actualYear,
+  guessedYear,
+  yearEnd,
+  revealedClueCount,
+  totalClues,
+}: HistoryYearRoundScoreInput): HistoryYearRoundScoreResult {
+  const accuracyPts = yearOnlyScore(actualYear, guessedYear, yearEnd);
+  const clueTotal = Math.max(1, Math.round(totalClues));
+  const usedClues = Math.max(
+    1,
+    Math.min(clueTotal, Math.round(revealedClueCount)),
+  );
+  const clueProgress = clueTotal <= 1 ? 0 : (usedClues - 1) / (clueTotal - 1);
+  const clueMultiplier =
+    1 - clueProgress * (1 - HISTORY_YEAR_MIN_CLUE_MULTIPLIER);
+  const total = Math.round(accuracyPts * clueMultiplier);
+
+  return {
+    accuracyPts,
+    cluePenaltyPts: accuracyPts - total,
+    clueMultiplier,
+    total,
+  };
 }
 
 /** 结果页展示：单年或区间（附均值） */

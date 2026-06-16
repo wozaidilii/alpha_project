@@ -9,7 +9,7 @@ import {
   useCompletedPlayerSession,
 } from "~/lib/player-session-guard";
 import {
-  GAME_MODE_LIST,
+  BATTLE_GAME_MODE_LIST,
   type GameModeConfig,
   type GameModeSlug,
 } from "~/lib/game-mode";
@@ -125,7 +125,7 @@ export default function BattleLobby() {
                   游戏类型
                 </label>
                 <div className="flex flex-col gap-2">
-                  {GAME_MODE_LIST.map((mode: GameModeConfig) => (
+                  {BATTLE_GAME_MODE_LIST.map((mode: GameModeConfig) => (
                     <button
                       key={mode.slug}
                       type="button"

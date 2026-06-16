@@ -40,6 +40,23 @@ export interface LocationTuxunPuzzle {
   funfact: string[];
   difficulty?: number;
   year?: number;
+  yearEnd?: number;
   questionIds: string[];
   streetViewScene?: LocationTuxunStreetViewScene;
+}
+
+export interface HistoryYearPuzzle {
+  puzzleId: string;
+  sourceId: string;
+  title: string;
+  location: string;
+  answerName: string;
+  answerContext: string;
+  answerYear: number;
+  answerYearEnd?: number;
+  yearNote?: string;
+  clues: string[];
+  funfact: string[];
+  difficulty?: number;
+  category: string;
 }
