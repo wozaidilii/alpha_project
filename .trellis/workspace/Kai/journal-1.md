@@ -38,3 +38,36 @@ Implemented native WeChat Mini Program solo funfact quiz MVP with login, questio
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: History year guessing mode
+
+**Date**: 2026-06-16
+**Task**: History year guessing mode
+**Branch**: `main`
+
+### Summary
+
+Added a solo history-year mode with event-level year puzzles, clue-count scoring penalties, tRPC data contract, UI route, validation, and backend spec documentation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `46390a4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
