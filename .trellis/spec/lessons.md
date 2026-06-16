@@ -74,3 +74,10 @@
 - 根因：事件处理只在 `upsertPlayer` 内部忽略了当前玩家，但后续房主广播逻辑仍会执行；第三方实时通道可能把客户端触发的事件回送给同一页面。
 - 修复：在 `player-joined` 事件入口先判断 `data.playerId === myId.current` 并直接返回，再处理其他玩家加入后的同步。
 - 预防：Pusher / WebSocket 这类 presence 或广播事件处理器必须在入口层过滤本客户端回声；不要只在局部 state 更新函数里过滤，否则副作用仍可能重复触发。
+
+## 交互地图同步 marker 不要重置用户视角
+
+- 问题：右下角百度答题地图选点后，玩家手动放大到街道级时会被反复弹回默认比例尺，无法查看街道细节。
+- 根因：父组件计时器和 hover 状态会让浮动地图重渲染并新建 `guess` 对象，`BaiduGuessMap` 的 marker 同步 effect 随后对单个猜测点执行 `centerAndZoom(..., 7)`，覆盖了用户手动 zoom。
+- 修复：在 `FloatingGuessMap` 中 memoize `guess` 引用；答题阶段只有猜测点、没有答案点时只同步 marker，不再自动 center/zoom，也不绘制会遮挡街道的大范围圆形覆盖物。
+- 预防：第三方地图组件的 overlay 同步应和 viewport 同步分离；只有初始化、结果页 fit bounds 或明确用户动作才允许改变 center/zoom，普通 props 重渲染不能覆盖用户视角。

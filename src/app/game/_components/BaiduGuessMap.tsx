@@ -134,7 +134,7 @@ export function BaiduGuessMap({
 
     if (points.length === 2 && map.getViewport && map.setViewport) {
       map.setViewport(map.getViewport(points, { margins: [72, 72, 72, 72] }));
-    } else if (points.length === 1) {
+    } else if (answer && points.length === 1) {
       map.centerAndZoom(points[0]!, 7);
     }
 
@@ -165,15 +165,17 @@ export function BaiduGuessMap({
     if (guess) {
       const guessPoint = new api.Point(guess.lng, guess.lat);
 
-      map.addOverlay(
-        new api.Circle(guessPoint, radius, {
-          strokeColor: "#f59e0b",
-          strokeWeight: 2,
-          strokeOpacity: 0.95,
-          fillColor: "#f59e0b",
-          fillOpacity: 0.24,
-        }),
-      );
+      if (answer) {
+        map.addOverlay(
+          new api.Circle(guessPoint, radius, {
+            strokeColor: "#f59e0b",
+            strokeWeight: 2,
+            strokeOpacity: 0.95,
+            fillColor: "#f59e0b",
+            fillOpacity: 0.24,
+          }),
+        );
+      }
       map.addOverlay(new api.Marker(guessPoint));
       map.addOverlay(
         new api.Label("你的猜测", {

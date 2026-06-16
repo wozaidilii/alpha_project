@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BaiduGuessMap } from "./BaiduGuessMap";
 
 interface FloatingGuessMapProps {
@@ -24,7 +24,10 @@ export function FloatingGuessMap({
 }: FloatingGuessMapProps) {
   const [expanded, setExpanded] = useState(false);
   const hasGuess = guessLat !== null && guessLng !== null;
-  const guess = hasGuess ? { lat: guessLat, lng: guessLng } : null;
+  const guess = useMemo(
+    () => (hasGuess ? { lat: guessLat, lng: guessLng } : null),
+    [guessLat, guessLng, hasGuess],
+  );
 
   return (
     <div
