@@ -1,6 +1,12 @@
 import { type LocationTuxunPuzzle } from "~/types/location-tuxun";
 
-const HISTORY_TUXUN_SCENE_RADIUS_KM = 5;
+export const HISTORY_TUXUN_SCENE_RADIUS_KM = 5;
+
+export interface HistoryTuxunScene {
+  lat: number;
+  lng: number;
+  panoId?: string;
+}
 
 export interface HistoryTuxunPlayState {
   puzzleId: string;
@@ -14,6 +20,7 @@ export interface HistoryTuxunPlayState {
   funfact: string[];
   sceneLat: number;
   sceneLng: number;
+  scenePanoId?: string;
   heading: number;
   pitch: number;
   fov: number;
@@ -38,12 +45,8 @@ export function randomPointAroundCenter(
 
 export function buildHistoryTuxunPlayState(
   puzzle: LocationTuxunPuzzle,
+  scene: HistoryTuxunScene,
 ): HistoryTuxunPlayState {
-  const scene = randomPointAroundCenter(
-    { lat: puzzle.centerLat, lng: puzzle.centerLng },
-    Math.min(puzzle.radiusKm, HISTORY_TUXUN_SCENE_RADIUS_KM),
-  );
-
   return {
     puzzleId: puzzle.puzzleId,
     location: puzzle.location,
@@ -56,6 +59,7 @@ export function buildHistoryTuxunPlayState(
     funfact: puzzle.funfact,
     sceneLat: scene.lat,
     sceneLng: scene.lng,
+    scenePanoId: scene.panoId,
     heading: Math.floor(Math.random() * 360),
     pitch: 0,
     fov: 90 + Math.floor(Math.random() * 8),

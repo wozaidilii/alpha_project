@@ -91,7 +91,7 @@ interface CandidatePoint {
   region: RandomRegion;
 }
 
-interface PanoramaLookupResult {
+export interface BaiduPanoramaLookupResult {
   point: BaiduPoint;
   panoId?: string;
 }
@@ -400,7 +400,9 @@ function extractPoint(value: unknown): BaiduPoint | null {
   return null;
 }
 
-function extractPanoramaResult(value: unknown): PanoramaLookupResult | null {
+function extractPanoramaResult(
+  value: unknown,
+): BaiduPanoramaLookupResult | null {
   const point = extractPoint(value);
   if (!point || !isPointInsideChina(point)) return null;
 
@@ -462,7 +464,7 @@ function isDistinctLocation(
 }
 
 function makeRandomLocation(
-  result: PanoramaLookupResult,
+  result: BaiduPanoramaLookupResult,
   region: RandomRegion,
   index: number,
 ): TuxunLocation {
@@ -488,7 +490,7 @@ function getPanoramaByLocation(
   api: BaiduMapApi,
   candidate: BaiduPoint,
   radius: number,
-): Promise<PanoramaLookupResult | null> {
+): Promise<BaiduPanoramaLookupResult | null> {
   const ServiceCtor = api.PanoramaService;
   if (!ServiceCtor) return Promise.resolve(null);
 
@@ -533,7 +535,7 @@ export async function findBaiduPanoramaNear(
   ak: string,
   point: BaiduPoint,
   radius = 1800,
-): Promise<PanoramaLookupResult | null> {
+): Promise<BaiduPanoramaLookupResult | null> {
   await loadBaiduMapScript(ak, "panorama");
   const api = window.BMap;
   if (!api?.PanoramaService) return null;

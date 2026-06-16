@@ -3,16 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BAIDU_MAP_AK,
-  findBaiduPanoramaNear,
+  loadBaiduMapScript,
   type BaiduPanoramaInstance,
   type BaiduPoint,
 } from "~/lib/baidu-panorama";
 
 interface Props {
   point: BaiduPoint;
+  panoId?: string;
   heading?: number;
   pitch?: number;
-  radius?: number;
   minHeightClass?: string;
   onUnavailable?: () => void;
 }
@@ -21,9 +21,9 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 
 export function BaiduPanoramaView({
   point,
+  panoId,
   heading = 0,
   pitch = 0,
-  radius = 1800,
   minHeightClass = "min-h-[420px]",
   onUnavailable,
 }: Props) {
@@ -54,26 +54,20 @@ export function BaiduPanoramaView({
     container.innerHTML = "";
 
     void (async () => {
-      const matched = await findBaiduPanoramaNear(
-        BAIDU_MAP_AK,
-        { lat: pointLat, lng: pointLng },
-        radius,
-      );
+      await loadBaiduMapScript(BAIDU_MAP_AK, "panorama");
       if (!active || !window.BMap?.Panorama) return;
-
-      if (!matched) {
-        throw new Error("百度 JS 全景未返回附近可用点位");
-      }
 
       const api = window.BMap;
       const PanoramaCtor = api.Panorama;
-      if (!PanoramaCtor) return;
+      if (!PanoramaCtor) {
+        throw new Error("百度 JS 全景构造器不可用");
+      }
 
       const panorama = new PanoramaCtor(container);
-      const panoramaPoint = new api.Point(matched.point.lng, matched.point.lat);
+      const panoramaPoint = new api.Point(pointLng, pointLat);
 
-      if (matched.panoId && panorama.setId) {
-        panorama.setId(matched.panoId);
+      if (panoId && panorama.setId) {
+        panorama.setId(panoId);
       } else {
         panorama.setPosition(panoramaPoint);
       }
@@ -92,7 +86,7 @@ export function BaiduPanoramaView({
       panoramaRef.current = null;
       container.innerHTML = "";
     };
-  }, [heading, pitch, pointLat, pointLng, radius]);
+  }, [heading, panoId, pitch, pointLat, pointLng]);
 
   return (
     <div className={`relative h-full ${minHeightClass} bg-stone-950`}>

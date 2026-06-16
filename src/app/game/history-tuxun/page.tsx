@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
 import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
-import { BaiduSceneMap } from "~/app/game/_components/BaiduSceneMap";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
-import {
-  buildBaiduStaticMapUrl,
-  buildBaiduStaticPanoramaUrl,
-} from "~/lib/baidu-panorama";
+import { BAIDU_MAP_AK, findBaiduPanoramaNear } from "~/lib/baidu-panorama";
 import {
   buildHistoryTuxunPlayState,
+  HISTORY_TUXUN_SCENE_RADIUS_KM,
+  randomPointAroundCenter,
+  type HistoryTuxunScene,
   type HistoryTuxunPlayState,
 } from "~/lib/history-tuxun-puzzle";
 import {
@@ -20,15 +19,14 @@ import {
   LOCATION_ROUND_SCORE_MAX,
 } from "~/lib/scoring";
 import { api } from "~/trpc/react";
+import { type LocationTuxunPuzzle } from "~/types/location-tuxun";
 
 type Phase = "playing" | "result";
-type SceneImageMode =
-  | "js-panorama"
-  | "static-panorama"
-  | "static-map"
-  | "base-map"
-  | "error";
 const CLUE_INTERVAL_SECONDS = 10;
+const PANORAMA_CANDIDATE_ATTEMPTS = 12;
+const PANORAMA_CANDIDATE_BATCH_SIZE = 4;
+const PANORAMA_LOOKUP_RADIUS_METERS = 1800;
+const MAX_PUZZLE_MATCH_FAILURES = 12;
 
 function formatDistance(distanceKm: number) {
   if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
@@ -37,6 +35,59 @@ function formatDistance(distanceKm: number) {
 
 function formatElapsed(seconds: number) {
   return `${Math.max(0, Math.round(seconds))} 秒`;
+}
+
+function panoramaSearchRadiusKm(puzzle: LocationTuxunPuzzle) {
+  return Math.min(puzzle.radiusKm, HISTORY_TUXUN_SCENE_RADIUS_KM);
+}
+
+async function findHistoryTuxunScene(
+  puzzle: LocationTuxunPuzzle,
+): Promise<HistoryTuxunScene | null> {
+  if (!BAIDU_MAP_AK) {
+    throw new Error("未配置百度地图 AK，无法匹配有街景的历史题。");
+  }
+
+  const baiduMapAk = BAIDU_MAP_AK;
+  const center = { lat: puzzle.centerLat, lng: puzzle.centerLng };
+  const searchRadiusKm = panoramaSearchRadiusKm(puzzle);
+  const candidates = [
+    ...Array.from({ length: PANORAMA_CANDIDATE_ATTEMPTS }, () =>
+      randomPointAroundCenter(center, searchRadiusKm),
+    ),
+    center,
+  ];
+
+  for (
+    let start = 0;
+    start < candidates.length;
+    start += PANORAMA_CANDIDATE_BATCH_SIZE
+  ) {
+    const batch = candidates.slice(
+      start,
+      start + PANORAMA_CANDIDATE_BATCH_SIZE,
+    );
+    const panoramas = await Promise.all(
+      batch.map((candidate) =>
+        findBaiduPanoramaNear(
+          baiduMapAk,
+          { lat: candidate.lat, lng: candidate.lng },
+          PANORAMA_LOOKUP_RADIUS_METERS,
+        ),
+      ),
+    );
+
+    const panorama = panoramas.find((item) => item !== null);
+    if (!panorama) continue;
+
+    return {
+      lat: panorama.point.lat,
+      lng: panorama.point.lng,
+      panoId: panorama.panoId,
+    };
+  }
+
+  return null;
 }
 
 function useElapsedSeconds(active: boolean, resetKey: string) {
@@ -63,8 +114,9 @@ export default function HistoryTuxunPage() {
   const [excludeLocation, setExcludeLocation] = useState<string | undefined>();
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
-  const [imageMode, setImageMode] = useState<SceneImageMode>("js-panorama");
   const [submittedElapsed, setSubmittedElapsed] = useState<number | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const streetViewFailureCountRef = useRef(0);
   const elapsed = useElapsedSeconds(
     phase === "playing" && playState != null,
     playState?.puzzleId ?? "loading",
@@ -81,7 +133,47 @@ export default function HistoryTuxunPage() {
   useEffect(() => {
     if (puzzleQuery.isLoading || puzzleQuery.isFetching) return;
     if (!puzzleQuery.data) return;
-    setPlayState(buildHistoryTuxunPlayState(puzzleQuery.data));
+
+    const puzzle = puzzleQuery.data;
+    let active = true;
+    setPlayState(null);
+    setGuess(null);
+    setSubmittedElapsed(null);
+    setPhase("playing");
+    setMatchError(null);
+
+    void findHistoryTuxunScene(puzzle)
+      .then((scene) => {
+        if (!active) return;
+
+        if (!scene) {
+          streetViewFailureCountRef.current += 1;
+          if (streetViewFailureCountRef.current >= MAX_PUZZLE_MATCH_FAILURES) {
+            setMatchError(
+              "连续多道历史题都没有匹配到百度街景，请稍后重试或检查题库点位覆盖。",
+            );
+            return;
+          }
+
+          setExcludeLocation(puzzle.location);
+          return;
+        }
+
+        streetViewFailureCountRef.current = 0;
+        setPlayState(buildHistoryTuxunPlayState(puzzle, scene));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setMatchError(
+          error instanceof Error
+            ? error.message
+            : "百度街景匹配失败，请稍后重试。",
+        );
+      });
+
+    return () => {
+      active = false;
+    };
   }, [puzzleQuery.data, puzzleQuery.isFetching, puzzleQuery.isLoading]);
 
   const loadError =
@@ -90,6 +182,7 @@ export default function HistoryTuxunPage() {
     (puzzleQuery.isError || puzzleQuery.data === null)
       ? "历史寻图题库未就绪，请先执行 npm run db:migrate 与 npm run db:import-location"
       : null;
+  const blockingError = loadError ?? matchError;
 
   const revealedClueCount = playState
     ? phase === "result"
@@ -103,36 +196,6 @@ export default function HistoryTuxunPage() {
     revealedClueCount < playState.clues.length
       ? 10 - (elapsed % 10)
       : null;
-
-  const panoramaUrl = useMemo(
-    () =>
-      playState
-        ? buildBaiduStaticPanoramaUrl({
-            lng: playState.sceneLng,
-            lat: playState.sceneLat,
-            heading: playState.heading,
-            pitch: playState.pitch,
-            fov: playState.fov,
-          })
-        : null,
-    [playState],
-  );
-  const staticMapUrl = useMemo(
-    () =>
-      playState
-        ? buildBaiduStaticMapUrl({
-            lng: playState.sceneLng,
-            lat: playState.sceneLat,
-          })
-        : null,
-    [playState],
-  );
-  const sceneImageUrl =
-    imageMode === "static-panorama"
-      ? panoramaUrl
-      : imageMode === "static-map"
-        ? staticMapUrl
-        : null;
 
   const result = useMemo(() => {
     if (!guess || !playState) return null;
@@ -171,68 +234,37 @@ export default function HistoryTuxunPage() {
       setExcludeLocation(playState.location);
     }
     setGuess(null);
-    setImageMode("js-panorama");
     setSubmittedElapsed(null);
     setPhase("playing");
-    void puzzleQuery.refetch();
   }
 
-  const handleSceneImageError = useCallback(() => {
-    if (imageMode === "js-panorama" && panoramaUrl) {
-      setImageMode("static-panorama");
-      return;
-    }
+  const handlePanoramaUnavailable = useCallback(() => {
+    if (!playState) return;
+    setPlayState(null);
+    setGuess(null);
+    setSubmittedElapsed(null);
+    setPhase("playing");
+    setExcludeLocation(playState.location);
+  }, [playState]);
 
-    if (imageMode === "static-panorama" && staticMapUrl) {
-      setImageMode("static-map");
-      return;
-    }
-
-    if (imageMode === "static-map") {
-      setImageMode("base-map");
-      return;
-    }
-
-    setImageMode("error");
-  }, [imageMode, panoramaUrl, staticMapUrl]);
-
-  useEffect(() => {
-    if (!sceneImageUrl || imageMode === "error") return;
-
-    let active = true;
-    const image = new Image();
-    const fail = () => {
-      if (!active) return;
-      handleSceneImageError();
-    };
-    const timer = window.setTimeout(() => {
-      if (image.complete && image.naturalWidth === 0) fail();
-    }, 2500);
-
-    image.onload = () => {
-      if (image.naturalWidth === 0) fail();
-    };
-    image.onerror = fail;
-    image.src = sceneImageUrl;
-
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [handleSceneImageError, imageMode, sceneImageUrl]);
-
-  if (loadError) {
+  if (blockingError) {
     return (
       <main className="grid min-h-screen place-items-center bg-stone-950 px-6 text-stone-100">
         <div className="max-w-md text-center">
           <h1 className="text-xl font-black text-amber-200">历史寻图题</h1>
-          <p className="mt-4 text-sm leading-7 text-stone-300">{loadError}</p>
+          <p className="mt-4 text-sm leading-7 text-stone-300">
+            {blockingError}
+          </p>
           <button
             type="button"
-            onClick={() => void puzzleQuery.refetch()}
+            onClick={() => {
+              streetViewFailureCountRef.current = 0;
+              setMatchError(null);
+              void puzzleQuery.refetch();
+            }}
             className="mt-6 min-h-11 rounded-lg bg-amber-400 px-5 font-bold text-stone-950 transition hover:bg-amber-300"
           >
-            重试加载
+            重新匹配
           </button>
         </div>
       </main>
@@ -244,7 +276,11 @@ export default function HistoryTuxunPage() {
       <main className="grid min-h-screen place-items-center bg-stone-950 text-stone-100">
         <div className="text-center">
           <h1 className="text-xl font-black text-amber-200">历史寻图题</h1>
-          <p className="mt-3 text-sm text-stone-400">正在从题库加载题目...</p>
+          <p className="mt-3 text-sm text-stone-400">
+            {puzzleQuery.isLoading || puzzleQuery.isFetching
+              ? "正在从题库加载题目..."
+              : "正在匹配有街景的历史题..."}
+          </p>
         </div>
       </main>
     );
@@ -434,66 +470,18 @@ export default function HistoryTuxunPage() {
           </aside>
 
           <section className="relative min-h-[420px] overflow-hidden bg-black">
-            {imageMode === "js-panorama" ? (
-              <BaiduPanoramaView
-                key={`${playState.puzzleId}-js-panorama`}
-                point={{ lat: playState.sceneLat, lng: playState.sceneLng }}
-                heading={playState.heading}
-                pitch={playState.pitch}
-                radius={Math.max(
-                  1800,
-                  Math.min(playState.radiusKm * 1000, 10000),
-                )}
-                onUnavailable={handleSceneImageError}
-              />
-            ) : imageMode === "base-map" ? (
-              <BaiduSceneMap
-                center={{ lat: playState.sceneLat, lng: playState.sceneLng }}
-              />
-            ) : sceneImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={`${playState.puzzleId}-${imageMode}`}
-                src={sceneImageUrl}
-                alt={
-                  imageMode === "static-panorama"
-                    ? "待猜地点的百度全景静态图"
-                    : "待猜地点附近的百度静态地图"
-                }
-                className="h-full min-h-[420px] w-full object-cover"
-                onError={handleSceneImageError}
-              />
-            ) : (
-              <div className="grid h-full min-h-[420px] place-items-center px-6 text-center">
-                <div className="max-w-md">
-                  <div className="text-lg font-bold text-stone-100">
-                    无法加载百度地图图像
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-stone-400">
-                    请确认 NEXT_PUBLIC_BAIDU_MAP_AK 已配置，并且该 AK
-                    至少开通了基础静态图服务。
-                  </p>
-                </div>
-              </div>
-            )}
+            <BaiduPanoramaView
+              key={`${playState.puzzleId}-${playState.scenePanoId ?? `${playState.sceneLat}-${playState.sceneLng}`}`}
+              point={{ lat: playState.sceneLat, lng: playState.sceneLng }}
+              panoId={playState.scenePanoId}
+              heading={playState.heading}
+              pitch={playState.pitch}
+              onUnavailable={handlePanoramaUnavailable}
+            />
 
             <div className="absolute top-4 left-4 rounded-md border border-black/40 bg-stone-950/80 px-3 py-2 text-xs font-semibold text-stone-200 shadow-lg shadow-black/30">
-              {imageMode === "js-panorama"
-                ? "百度 JS 全景图"
-                : imageMode === "base-map"
-                  ? "百度 JS 底图占位"
-                  : imageMode === "static-map"
-                    ? "百度静态图占位"
-                    : "百度全景静态图"}
+              百度 JS 全景图
             </div>
-            {(imageMode === "static-panorama" ||
-              imageMode === "static-map" ||
-              imageMode === "base-map") && (
-              <div className="absolute right-4 bottom-4 max-w-xs rounded-md border border-amber-500/40 bg-stone-950/85 px-3 py-2 text-xs leading-5 text-amber-100 shadow-lg shadow-black/30">
-                百度 JS
-                全景暂不可用，已按顺序降级到静态全景图、静态地图或基础底图。
-              </div>
-            )}
           </section>
 
           <FloatingGuessMap
