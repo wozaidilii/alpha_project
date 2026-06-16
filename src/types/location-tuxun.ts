@@ -22,6 +22,12 @@ export interface LocationTuxunQuestion {
   ancientNames: string[];
 }
 
+export interface LocationTuxunStreetViewScene {
+  lat: number;
+  lng: number;
+  panoId?: string;
+}
+
 export interface LocationTuxunPuzzle {
   puzzleId: string;
   location: string;
@@ -35,4 +41,5 @@ export interface LocationTuxunPuzzle {
   difficulty?: number;
   year?: number;
   questionIds: string[];
+  streetViewScene?: LocationTuxunStreetViewScene;
 }

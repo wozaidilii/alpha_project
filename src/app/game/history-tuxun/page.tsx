@@ -8,6 +8,7 @@ import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import {
   buildHistoryTuxunPlayState,
   findHistoryTuxunScene,
+  getCachedHistoryTuxunScene,
   HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
   type HistoryTuxunPlayState,
 } from "~/lib/history-tuxun-puzzle";
@@ -61,6 +62,10 @@ export default function HistoryTuxunPage() {
     phase === "playing" && playState != null,
     playState?.puzzleId ?? "loading",
   );
+  const { mutateAsync: saveStreetViewScene } =
+    api.locationTuxun.saveStreetViewScene.useMutation();
+  const { mutateAsync: markStreetViewUnavailable } =
+    api.locationTuxun.markStreetViewUnavailable.useMutation();
 
   const puzzleQuery = api.locationTuxun.random.useQuery(
     { excludeLocation },
@@ -82,12 +87,21 @@ export default function HistoryTuxunPage() {
     setPhase("playing");
     setMatchError(null);
 
-    void findHistoryTuxunScene(puzzle)
-      .then((scene) => {
+    const cachedScene = getCachedHistoryTuxunScene(puzzle);
+
+    void (
+      cachedScene ? Promise.resolve(cachedScene) : findHistoryTuxunScene(puzzle)
+    )
+      .then(async (scene) => {
         if (!active) return;
 
         if (!scene) {
           streetViewFailureCountRef.current += 1;
+          await markStreetViewUnavailable({
+            location: puzzle.location,
+          }).catch(() => undefined);
+          if (!active) return;
+
           if (streetViewFailureCountRef.current >= MAX_PUZZLE_MATCH_FAILURES) {
             setMatchError(
               "连续多道历史题都没有匹配到百度街景，请稍后重试或检查题库点位覆盖。",
@@ -100,6 +114,14 @@ export default function HistoryTuxunPage() {
         }
 
         streetViewFailureCountRef.current = 0;
+        if (!cachedScene) {
+          void saveStreetViewScene({
+            location: puzzle.location,
+            lat: scene.lat,
+            lng: scene.lng,
+            ...(scene.panoId ? { panoId: scene.panoId } : {}),
+          }).catch(() => undefined);
+        }
         setPlayState(buildHistoryTuxunPlayState(puzzle, scene));
       })
       .catch((error: unknown) => {
@@ -114,7 +136,13 @@ export default function HistoryTuxunPage() {
     return () => {
       active = false;
     };
-  }, [puzzleQuery.data, puzzleQuery.isFetching, puzzleQuery.isLoading]);
+  }, [
+    markStreetViewUnavailable,
+    puzzleQuery.data,
+    puzzleQuery.isFetching,
+    puzzleQuery.isLoading,
+    saveStreetViewScene,
+  ]);
 
   const loadError =
     !puzzleQuery.isLoading &&

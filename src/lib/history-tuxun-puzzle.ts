@@ -1,11 +1,13 @@
-import { type LocationTuxunPuzzle } from "~/types/location-tuxun";
+import {
+  type LocationTuxunPuzzle,
+  type LocationTuxunStreetViewScene,
+} from "~/types/location-tuxun";
 import { BAIDU_MAP_AK, findBaiduPanoramaNear } from "~/lib/baidu-panorama";
 
 export const HISTORY_TUXUN_SCENE_RADIUS_KM = 5;
 export const HISTORY_TUXUN_CLUE_INTERVAL_SECONDS = 10;
-const PANORAMA_CANDIDATE_ATTEMPTS = 12;
-const PANORAMA_CANDIDATE_BATCH_SIZE = 4;
-const PANORAMA_LOOKUP_RADIUS_METERS = 1800;
+const PANORAMA_CANDIDATE_ATTEMPTS = 5;
+const PANORAMA_LOOKUP_RADIUS_METERS = 1600;
 
 export interface HistoryTuxunScene {
   lat: number;
@@ -52,6 +54,32 @@ function panoramaSearchRadiusKm(puzzle: LocationTuxunPuzzle) {
   return Math.min(puzzle.radiusKm, HISTORY_TUXUN_SCENE_RADIUS_KM);
 }
 
+export function getCachedHistoryTuxunScene(
+  puzzle: LocationTuxunPuzzle,
+): HistoryTuxunScene | null {
+  if (!puzzle.streetViewScene) return null;
+
+  return {
+    lat: puzzle.streetViewScene.lat,
+    lng: puzzle.streetViewScene.lng,
+    panoId: puzzle.streetViewScene.panoId,
+  };
+}
+
+export function buildHistoryTuxunPanoramaCandidates(
+  puzzle: LocationTuxunPuzzle,
+): LocationTuxunStreetViewScene[] {
+  const center = { lat: puzzle.centerLat, lng: puzzle.centerLng };
+  const searchRadiusKm = panoramaSearchRadiusKm(puzzle);
+
+  return [
+    center,
+    ...Array.from({ length: PANORAMA_CANDIDATE_ATTEMPTS }, () =>
+      randomPointAroundCenter(center, searchRadiusKm),
+    ),
+  ];
+}
+
 export async function findHistoryTuxunScene(
   puzzle: LocationTuxunPuzzle,
 ): Promise<HistoryTuxunScene | null> {
@@ -60,35 +88,15 @@ export async function findHistoryTuxunScene(
   }
 
   const baiduMapAk = BAIDU_MAP_AK;
-  const center = { lat: puzzle.centerLat, lng: puzzle.centerLng };
-  const searchRadiusKm = panoramaSearchRadiusKm(puzzle);
-  const candidates = [
-    ...Array.from({ length: PANORAMA_CANDIDATE_ATTEMPTS }, () =>
-      randomPointAroundCenter(center, searchRadiusKm),
-    ),
-    center,
-  ];
+  const candidates = buildHistoryTuxunPanoramaCandidates(puzzle);
 
-  for (
-    let start = 0;
-    start < candidates.length;
-    start += PANORAMA_CANDIDATE_BATCH_SIZE
-  ) {
-    const batch = candidates.slice(
-      start,
-      start + PANORAMA_CANDIDATE_BATCH_SIZE,
-    );
-    const panoramas = await Promise.all(
-      batch.map((candidate) =>
-        findBaiduPanoramaNear(
-          baiduMapAk,
-          { lat: candidate.lat, lng: candidate.lng },
-          PANORAMA_LOOKUP_RADIUS_METERS,
-        ),
-      ),
+  for (const candidate of candidates) {
+    const panorama = await findBaiduPanoramaNear(
+      baiduMapAk,
+      { lat: candidate.lat, lng: candidate.lng },
+      PANORAMA_LOOKUP_RADIUS_METERS,
     );
 
-    const panorama = panoramas.find((item) => item !== null);
     if (!panorama) continue;
 
     return {

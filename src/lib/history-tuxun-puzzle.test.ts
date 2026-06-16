@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildHistoryTuxunPlayState } from "./history-tuxun-puzzle";
+import {
+  buildHistoryTuxunPanoramaCandidates,
+  buildHistoryTuxunPlayState,
+  getCachedHistoryTuxunScene,
+} from "./history-tuxun-puzzle";
 import { type LocationTuxunPuzzle } from "~/types/location-tuxun";
 
 const puzzle: LocationTuxunPuzzle = {
@@ -26,5 +30,40 @@ describe("buildHistoryTuxunPlayState", () => {
     expect(playState.sceneLat).toBe(30.123);
     expect(playState.sceneLng).toBe(120.456);
     expect(playState.scenePanoId).toBe("pano-1");
+  });
+});
+
+describe("getCachedHistoryTuxunScene", () => {
+  it("returns a prevalidated scene from the puzzle payload", () => {
+    expect(
+      getCachedHistoryTuxunScene({
+        ...puzzle,
+        streetViewScene: {
+          lat: 30.456,
+          lng: 120.789,
+          panoId: "cached-pano",
+        },
+      }),
+    ).toEqual({
+      lat: 30.456,
+      lng: 120.789,
+      panoId: "cached-pano",
+    });
+  });
+
+  it("returns null when the puzzle has no cached scene", () => {
+    expect(getCachedHistoryTuxunScene(puzzle)).toBeNull();
+  });
+});
+
+describe("buildHistoryTuxunPanoramaCandidates", () => {
+  it("checks the answer center first and caps candidate count", () => {
+    const candidates = buildHistoryTuxunPanoramaCandidates(puzzle);
+
+    expect(candidates).toHaveLength(6);
+    expect(candidates[0]).toEqual({
+      lat: puzzle.centerLat,
+      lng: puzzle.centerLng,
+    });
   });
 });

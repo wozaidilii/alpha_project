@@ -169,3 +169,22 @@ create index if not exists location_tuxun_questions_difficulty_idx
 
 create index if not exists location_tuxun_questions_enabled_idx
   on location_tuxun_questions(enabled);
+
+create table if not exists location_tuxun_street_view_scenes (
+  location text primary key,
+  status text not null check (status in ('available', 'unavailable')),
+  scene_lat double precision,
+  scene_lng double precision,
+  pano_id text,
+  last_checked_at timestamptz not null default now(),
+  lookup_failed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (
+    (status = 'available' and scene_lat is not null and scene_lng is not null)
+    or (status = 'unavailable')
+  )
+);
+
+create index if not exists location_tuxun_street_view_scenes_status_updated_idx
+  on location_tuxun_street_view_scenes(status, updated_at desc);

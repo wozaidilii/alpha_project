@@ -4,6 +4,7 @@ import { sql } from "~/server/db/client";
 import {
   type LocationTuxunPuzzle,
   type LocationTuxunQuestion,
+  type LocationTuxunStreetViewScene,
 } from "~/types/location-tuxun";
 
 interface LocationTuxunRow {
@@ -28,6 +29,16 @@ interface LocationTuxunRow {
   location_scope: string | null;
   location_note: string | null;
   ancient_names: string[] | null;
+}
+
+interface LocationTuxunStreetViewSceneRow {
+  scene_lat: number;
+  scene_lng: number;
+  pano_id: string | null;
+}
+
+interface TableExistsRow {
+  table_name: string | null;
 }
 
 export interface LocationTuxunQuery {
@@ -58,6 +69,24 @@ const LOCATION_TUXUN_COLUMNS = sql`
   location_note,
   ancient_names
 `;
+
+const RECENT_STREET_VIEW_FAILURE_FILTER = sql`
+  and not exists (
+    select 1
+    from location_tuxun_street_view_scenes cached_scene
+    where cached_scene.location = location_tuxun_questions.location
+      and cached_scene.status = 'unavailable'
+      and cached_scene.updated_at >= now() - interval '7 days'
+  )
+`;
+
+async function hasStreetViewSceneCacheTable(): Promise<boolean> {
+  const rows = await sql<TableExistsRow[]>`
+    select to_regclass('public.location_tuxun_street_view_scenes')::text as table_name
+  `;
+
+  return Boolean(rows[0]?.table_name);
+}
 
 function parseStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -153,17 +182,110 @@ function buildPuzzle(rows: LocationTuxunRow[]): LocationTuxunPuzzle | null {
     radiusKm: primary.radius_km,
     clues,
     funfact: mergeFunfacts(rows),
-    difficulty:
-      difficulties.length > 0 ? Math.min(...difficulties) : undefined,
+    difficulty: difficulties.length > 0 ? Math.min(...difficulties) : undefined,
     year: primary.year ?? undefined,
     questionIds: rows.map((row) => row.id),
   };
+}
+
+function toStreetViewScene(
+  row: LocationTuxunStreetViewSceneRow,
+): LocationTuxunStreetViewScene {
+  return {
+    lat: row.scene_lat,
+    lng: row.scene_lng,
+    panoId: row.pano_id ?? undefined,
+  };
+}
+
+export async function getLocationTuxunStreetViewScene(
+  location: string,
+): Promise<LocationTuxunStreetViewScene | null> {
+  if (!(await hasStreetViewSceneCacheTable())) return null;
+
+  const rows = await sql<LocationTuxunStreetViewSceneRow[]>`
+    select scene_lat, scene_lng, pano_id
+    from location_tuxun_street_view_scenes
+    where location = ${location}
+      and status = 'available'
+      and scene_lat is not null
+      and scene_lng is not null
+    limit 1
+  `;
+
+  const row = rows[0];
+  return row ? toStreetViewScene(row) : null;
+}
+
+export async function saveLocationTuxunStreetViewScene(input: {
+  location: string;
+  lat: number;
+  lng: number;
+  panoId?: string;
+}): Promise<void> {
+  if (!(await hasStreetViewSceneCacheTable())) return;
+
+  await sql`
+    insert into location_tuxun_street_view_scenes (
+      location,
+      status,
+      scene_lat,
+      scene_lng,
+      pano_id,
+      last_checked_at,
+      lookup_failed_at,
+      updated_at
+    )
+    values (
+      ${input.location},
+      'available',
+      ${input.lat},
+      ${input.lng},
+      ${input.panoId ?? null},
+      now(),
+      null,
+      now()
+    )
+    on conflict (location) do update set
+      status = 'available',
+      scene_lat = excluded.scene_lat,
+      scene_lng = excluded.scene_lng,
+      pano_id = excluded.pano_id,
+      last_checked_at = now(),
+      lookup_failed_at = null,
+      updated_at = now()
+  `;
+}
+
+export async function markLocationTuxunStreetViewUnavailable(
+  location: string,
+): Promise<void> {
+  if (!(await hasStreetViewSceneCacheTable())) return;
+
+  await sql`
+    insert into location_tuxun_street_view_scenes (
+      location,
+      status,
+      last_checked_at,
+      lookup_failed_at,
+      updated_at
+    )
+    values (${location}, 'unavailable', now(), now(), now())
+    on conflict (location) do update set
+      status = 'unavailable',
+      last_checked_at = now(),
+      lookup_failed_at = now(),
+      updated_at = now()
+  `;
 }
 
 export async function getRandomLocationTuxunPuzzle(
   query: LocationTuxunQuery = {},
 ): Promise<LocationTuxunPuzzle | null> {
   const { excludeLocation, difficulty } = query;
+  const streetViewFailureFilter = (await hasStreetViewSceneCacheTable())
+    ? RECENT_STREET_VIEW_FAILURE_FILTER
+    : sql``;
 
   const picked =
     difficulty == null
@@ -172,6 +294,7 @@ export async function getRandomLocationTuxunPuzzle(
             select location
             from location_tuxun_questions
             where enabled = true
+              ${streetViewFailureFilter}
               and location <> ${excludeLocation}
             group by location
             order by random()
@@ -181,6 +304,7 @@ export async function getRandomLocationTuxunPuzzle(
             select location
             from location_tuxun_questions
             where enabled = true
+              ${streetViewFailureFilter}
             group by location
             order by random()
             limit 1
@@ -190,6 +314,7 @@ export async function getRandomLocationTuxunPuzzle(
             select location
             from location_tuxun_questions
             where enabled = true
+              ${streetViewFailureFilter}
               and difficulty = ${difficulty}
               and location <> ${excludeLocation}
             group by location
@@ -200,6 +325,7 @@ export async function getRandomLocationTuxunPuzzle(
             select location
             from location_tuxun_questions
             where enabled = true
+              ${streetViewFailureFilter}
               and difficulty = ${difficulty}
             group by location
             order by random()
@@ -227,7 +353,14 @@ export async function getRandomLocationTuxunPuzzle(
           order by id asc
         `;
 
-  return buildPuzzle(rows);
+  const puzzle = buildPuzzle(rows);
+  if (!puzzle) return null;
+
+  const streetViewScene = await getLocationTuxunStreetViewScene(
+    puzzle.location,
+  );
+
+  return streetViewScene ? { ...puzzle, streetViewScene } : puzzle;
 }
 
 export async function getLocationTuxunQuestionsByLocation(

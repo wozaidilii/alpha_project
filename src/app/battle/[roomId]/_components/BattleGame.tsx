@@ -23,6 +23,7 @@ import {
 import {
   buildHistoryTuxunPlayState,
   findHistoryTuxunScene,
+  getCachedHistoryTuxunScene,
   HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
   type HistoryTuxunPlayState,
 } from "~/lib/history-tuxun-puzzle";
@@ -287,6 +288,10 @@ export function BattleGame({
   hostSettings,
 }: Props) {
   const utils = api.useUtils();
+  const { mutateAsync: saveStreetViewScene } =
+    api.locationTuxun.saveStreetViewScene.useMutation();
+  const { mutateAsync: markStreetViewUnavailable } =
+    api.locationTuxun.markStreetViewUnavailable.useMutation();
   const channel = `game-${roomId}`;
   const myId = useRef(getOrCreatePlayerId());
 
@@ -823,8 +828,23 @@ export function BattleGame({
       excludeLocation = puzzle.location;
       if (usedLocations.has(puzzle.location)) continue;
 
-      const scene = await findHistoryTuxunScene(puzzle);
-      if (!scene) continue;
+      const cachedScene = getCachedHistoryTuxunScene(puzzle);
+      const scene = cachedScene ?? (await findHistoryTuxunScene(puzzle));
+      if (!scene) {
+        await markStreetViewUnavailable({ location: puzzle.location }).catch(
+          () => undefined,
+        );
+        continue;
+      }
+
+      if (!cachedScene) {
+        await saveStreetViewScene({
+          location: puzzle.location,
+          lat: scene.lat,
+          lng: scene.lng,
+          ...(scene.panoId ? { panoId: scene.panoId } : {}),
+        }).catch(() => undefined);
+      }
 
       usedLocations.add(puzzle.location);
       questions.push(
