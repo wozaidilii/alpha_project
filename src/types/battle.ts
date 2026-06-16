@@ -1,12 +1,34 @@
 import { type PlayerAvatar } from "~/types/player";
 import { type CharacterConfig } from "~/types/character";
-import { type GameQuestion, type QuestionType } from "~/types/question";
+import { type GameQuestion } from "~/types/question";
+import { type GameModeSlug } from "~/lib/game-mode";
+import { type TuxunLocation } from "~/lib/tuxun-locations";
+import { type HistoryTuxunPlayState } from "~/lib/history-tuxun-puzzle";
+
+export interface BattleTuxunQuestion {
+  id: string;
+  type: "tuxun";
+  title: string;
+  location: TuxunLocation;
+}
+
+export interface BattleHistoryTuxunQuestion {
+  id: string;
+  type: "history-tuxun";
+  title: string;
+  playState: HistoryTuxunPlayState;
+}
+
+export type BattleQuestion =
+  | GameQuestion
+  | BattleTuxunQuestion
+  | BattleHistoryTuxunQuestion;
 
 export type BattlePhase =
-  | "lobby"        // waiting for 2nd player
-  | "playing"      // round in progress
+  | "lobby" // waiting for 2nd player
+  | "playing" // round in progress
   | "round-result" // showing results
-  | "game-over";   // game ended
+  | "game-over"; // game ended
 
 export interface BattlePlayer {
   id: string;
@@ -22,8 +44,8 @@ export interface BattleSettings {
   rounds: number;
   timePerRound: number; // seconds
   startingHp: number;
-  /** 与个人模式一致的题型 */
-  questionType: QuestionType;
+  /** 与个人模式一致的模式 */
+  questionType: GameModeSlug;
 }
 
 export interface PlayerGuess {
@@ -37,12 +59,15 @@ export interface PlayerGuess {
   total: number; // after speed multiplier
   distanceKm: number;
   speedMultiplier: number; // 1.0 – 2.0
+  speedCompensationPts?: number;
+  elapsedSeconds?: number;
+  submitted?: boolean;
   isCorrect?: boolean;
 }
 
 export interface BattleRoundResult {
   roundIndex: number;
-  question: GameQuestion;
+  question: BattleQuestion;
   guesses: Record<string, PlayerGuess>; // keyed by playerId
   hpAfter: Record<string, number>;
   damage: Record<string, number>; // hp lost this round per player
@@ -72,8 +97,10 @@ export interface PusherRequestRoomSettings {
 export interface PusherGameStarted {
   settings: BattleSettings;
   players: Record<string, BattlePlayer>;
-  /** 仅同步 ID，加入方本地拉取完整题目，避免 Pusher 消息过大 */
-  questionIds: string[];
+  /** 普通题库模式仅同步 ID，加入方本地拉取完整题目，避免 Pusher 消息过大 */
+  questionIds?: string[];
+  /** 随机街景题需要同步完整题目，保证双方看到同一处全景 */
+  questions?: BattleQuestion[];
   roundIndex: number;
   startTime: number;
 }

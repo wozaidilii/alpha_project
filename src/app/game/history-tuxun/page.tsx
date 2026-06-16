@@ -5,12 +5,10 @@ import Link from "next/link";
 import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
 import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
-import { BAIDU_MAP_AK, findBaiduPanoramaNear } from "~/lib/baidu-panorama";
 import {
   buildHistoryTuxunPlayState,
-  HISTORY_TUXUN_SCENE_RADIUS_KM,
-  randomPointAroundCenter,
-  type HistoryTuxunScene,
+  findHistoryTuxunScene,
+  HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
   type HistoryTuxunPlayState,
 } from "~/lib/history-tuxun-puzzle";
 import {
@@ -19,13 +17,8 @@ import {
   LOCATION_ROUND_SCORE_MAX,
 } from "~/lib/scoring";
 import { api } from "~/trpc/react";
-import { type LocationTuxunPuzzle } from "~/types/location-tuxun";
 
 type Phase = "playing" | "result";
-const CLUE_INTERVAL_SECONDS = 10;
-const PANORAMA_CANDIDATE_ATTEMPTS = 12;
-const PANORAMA_CANDIDATE_BATCH_SIZE = 4;
-const PANORAMA_LOOKUP_RADIUS_METERS = 1800;
 const MAX_PUZZLE_MATCH_FAILURES = 12;
 
 function formatDistance(distanceKm: number) {
@@ -35,59 +28,6 @@ function formatDistance(distanceKm: number) {
 
 function formatElapsed(seconds: number) {
   return `${Math.max(0, Math.round(seconds))} 秒`;
-}
-
-function panoramaSearchRadiusKm(puzzle: LocationTuxunPuzzle) {
-  return Math.min(puzzle.radiusKm, HISTORY_TUXUN_SCENE_RADIUS_KM);
-}
-
-async function findHistoryTuxunScene(
-  puzzle: LocationTuxunPuzzle,
-): Promise<HistoryTuxunScene | null> {
-  if (!BAIDU_MAP_AK) {
-    throw new Error("未配置百度地图 AK，无法匹配有街景的历史题。");
-  }
-
-  const baiduMapAk = BAIDU_MAP_AK;
-  const center = { lat: puzzle.centerLat, lng: puzzle.centerLng };
-  const searchRadiusKm = panoramaSearchRadiusKm(puzzle);
-  const candidates = [
-    ...Array.from({ length: PANORAMA_CANDIDATE_ATTEMPTS }, () =>
-      randomPointAroundCenter(center, searchRadiusKm),
-    ),
-    center,
-  ];
-
-  for (
-    let start = 0;
-    start < candidates.length;
-    start += PANORAMA_CANDIDATE_BATCH_SIZE
-  ) {
-    const batch = candidates.slice(
-      start,
-      start + PANORAMA_CANDIDATE_BATCH_SIZE,
-    );
-    const panoramas = await Promise.all(
-      batch.map((candidate) =>
-        findBaiduPanoramaNear(
-          baiduMapAk,
-          { lat: candidate.lat, lng: candidate.lng },
-          PANORAMA_LOOKUP_RADIUS_METERS,
-        ),
-      ),
-    );
-
-    const panorama = panoramas.find((item) => item !== null);
-    if (!panorama) continue;
-
-    return {
-      lat: panorama.point.lat,
-      lng: panorama.point.lng,
-      panoId: panorama.panoId,
-    };
-  }
-
-  return null;
 }
 
 function useElapsedSeconds(active: boolean, resetKey: string) {
@@ -187,14 +127,18 @@ export default function HistoryTuxunPage() {
   const revealedClueCount = playState
     ? phase === "result"
       ? playState.clues.length
-      : Math.min(playState.clues.length, Math.floor(elapsed / 10) + 1)
+      : Math.min(
+          playState.clues.length,
+          Math.floor(elapsed / HISTORY_TUXUN_CLUE_INTERVAL_SECONDS) + 1,
+        )
     : 0;
   const visibleClues = playState?.clues.slice(0, revealedClueCount) ?? [];
   const nextClueIn =
     phase === "playing" &&
     playState &&
     revealedClueCount < playState.clues.length
-      ? 10 - (elapsed % 10)
+      ? HISTORY_TUXUN_CLUE_INTERVAL_SECONDS -
+        (elapsed % HISTORY_TUXUN_CLUE_INTERVAL_SECONDS)
       : null;
 
   const result = useMemo(() => {
@@ -210,8 +154,8 @@ export default function HistoryTuxunPage() {
       distanceKm,
       elapsedSeconds,
       speedCompensationWindowSeconds: Math.max(
-        CLUE_INTERVAL_SECONDS,
-        playState.clues.length * CLUE_INTERVAL_SECONDS,
+        HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
+        playState.clues.length * HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
       ),
     });
     return {

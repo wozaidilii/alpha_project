@@ -8,8 +8,11 @@ import {
   AuthLoading,
   useCompletedPlayerSession,
 } from "~/lib/player-session-guard";
-import { GAME_MODE_LIST, type GameModeConfig } from "~/lib/game-mode";
-import { type QuestionType } from "~/types/question";
+import {
+  GAME_MODE_LIST,
+  type GameModeConfig,
+  type GameModeSlug,
+} from "~/lib/game-mode";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -24,7 +27,7 @@ export default function BattleLobby() {
   const [rounds, setRounds] = useState(5);
   const [timePerRound, setTimePerRound] = useState(60);
   const [startingHp, setStartingHp] = useState(100);
-  const [questionType, setQuestionType] = useState<QuestionType>("historical");
+  const [questionType, setQuestionType] = useState<GameModeSlug>("historical");
   const [message, setMessage] = useState("");
 
   useEffect(() => {

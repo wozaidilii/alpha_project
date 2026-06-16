@@ -43,40 +43,6 @@ export default function SoloGameModePage() {
               </div>
             </Link>
           ))}
-
-          <Link
-            href="/game/tuxun"
-            className="group flex items-center gap-4 rounded-2xl border border-stone-700 bg-stone-800 px-6 py-5 transition hover:border-sky-500 hover:bg-stone-700 focus:ring-2 focus:ring-sky-300 focus:outline-none"
-          >
-            <span className="text-4xl">🔭</span>
-            <div className="text-left">
-              <div className="text-xl font-bold text-sky-300">图寻模式</div>
-              <div className="text-sm text-stone-300">
-                百度全景中国版 GeoGuessr，观察街景猜位置
-              </div>
-              <div className="mt-1 text-xs text-stone-500">
-                全景线索 + 中国地图猜点
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/game/history-tuxun"
-            className="group flex items-center gap-4 rounded-2xl border border-stone-700 bg-stone-800 px-6 py-5 transition hover:border-amber-500 hover:bg-stone-700 focus:ring-2 focus:ring-amber-300 focus:outline-none"
-          >
-            <span className="text-4xl">🏛️</span>
-            <div className="text-left">
-              <div className="text-xl font-bold text-amber-300">
-                历史图寻模式
-              </div>
-              <div className="text-sm text-stone-300">
-                根据历史线索观察现代街景，猜它对应的地点
-              </div>
-              <div className="mt-1 text-xs text-stone-500">
-                历史线索 + 百度全景 + 中国地图猜点
-              </div>
-            </div>
-          </Link>
         </div>
       </div>
     </main>

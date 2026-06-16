@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { pickQuestions } from "~/data/questions";
-import { getGameMode } from "~/lib/game-mode";
+import { getGameMode, isQuestionType } from "~/lib/game-mode";
 import {
   toFunfactQuestions,
   toHistoricalQuestions,
@@ -68,7 +68,8 @@ export default function GamePlayPage({ params }: PageProps) {
   const resolvedRoundRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
 
-  const questionType = gameMode?.type;
+  const questionType =
+    gameMode && isQuestionType(gameMode.type) ? gameMode.type : undefined;
   const isHistorical = questionType === "historical";
   const isFunfact = questionType === "funfact";
   const needsDifficultySetup = isHistorical || isFunfact;
@@ -362,7 +363,7 @@ export default function GamePlayPage({ params }: PageProps) {
   }
 
   function handleRestart() {
-    if (!gameMode) return;
+    if (!questionType) return;
 
     setRound(0);
     setPhase("playing");
@@ -370,7 +371,7 @@ export default function GamePlayPage({ params }: PageProps) {
     setTimeLeft(ROUND_TIME_SECONDS);
     resolvedRoundRef.current = false;
     lastCountdownTickRef.current = null;
-    void loadQuestions(gameMode.type);
+    void loadQuestions(questionType);
   }
 
   function handleStartGame() {

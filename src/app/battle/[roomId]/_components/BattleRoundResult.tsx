@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import { type BattleRoundResult, type BattlePlayer } from "~/types/battle";
 import { formatAnswerYear, formatYear } from "~/lib/scoring";
-import { getQuestionResultSubtitle } from "~/lib/question-utils";
 import {
   mountResultMap,
   type ChinaResultLine,
@@ -12,21 +11,34 @@ import {
   type ChinaResultMarker,
 } from "~/lib/china-leaflet";
 import {
+  getBattleAnswerPoint,
+  getBattleQuestionSubtitle,
+  getBattleQuestionTitle,
+  isLocationOnlyBattleQuestion,
+  isStandardBattleQuestion,
+} from "~/lib/battle-question";
+import {
   getQuestionYearEnd,
   isFunfactQuestion,
   isHistoricalQuestion,
-  type QuestionType,
 } from "~/types/question";
+import { type GameModeSlug } from "~/lib/game-mode";
 import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
+import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
 
 interface Props {
   result: BattleRoundResult;
   players: Record<string, BattlePlayer>;
   myId: string;
-  questionType: QuestionType;
+  questionType: GameModeSlug;
   roundReady: Record<string, boolean>;
   isLastRound: boolean;
   onReady: () => void;
+}
+
+function formatDistance(distanceKm: number) {
+  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
+  return `${Math.round(distanceKm).toLocaleString()} 公里`;
 }
 
 export function BattleRoundResultView({
@@ -41,9 +53,24 @@ export function BattleRoundResultView({
   const mapRef = useRef<ChinaResultMapHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { question } = result;
-  const historicalQuestion = isHistoricalQuestion(question) ? question : null;
+  const standardQuestion = isStandardBattleQuestion(question) ? question : null;
+  const historicalQuestion =
+    standardQuestion && isHistoricalQuestion(standardQuestion)
+      ? standardQuestion
+      : null;
+  const locationOnlyAnswer = isLocationOnlyBattleQuestion(question)
+    ? getBattleAnswerPoint(question)
+    : null;
+  const myGuess = result.guesses[myId];
+  const locationOnlyGuess =
+    myGuess?.submitted && locationOnlyAnswer
+      ? { lat: myGuess.lat, lng: myGuess.lng }
+      : null;
   const showMap = questionType === "historical" && historicalQuestion !== null;
-  const yearEnd = getQuestionYearEnd(question);
+  const showLocationOnlyMap = locationOnlyAnswer !== null;
+  const yearEnd = standardQuestion
+    ? getQuestionYearEnd(standardQuestion)
+    : undefined;
   const playerIds = Object.keys(players);
   const iAmReady = roundReady[myId] === true;
   const allReady =
@@ -103,7 +130,7 @@ export function BattleRoundResultView({
   }, [showMap, result.roundIndex, historicalQuestion, players, result.guesses]);
 
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
-    if (isFunfactQuestion(question)) {
+    if (standardQuestion && isFunfactQuestion(standardQuestion)) {
       return (
         <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
           <div className="flex justify-between gap-2">
@@ -113,6 +140,40 @@ export function BattleRoundResultView({
             </span>
           </div>
           <div className="mt-1">{guess.isCorrect ? "答对" : "答错"}</div>
+        </div>
+      );
+    }
+    if (isLocationOnlyBattleQuestion(question)) {
+      if (!guess.submitted) {
+        return (
+          <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
+            本轮未提交答案
+          </div>
+        );
+      }
+
+      return (
+        <div className="mt-3 space-y-2 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
+          <div className="flex justify-between gap-2">
+            <span>距离分</span>
+            <span className="font-bold text-white">
+              {guess.locationPts.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex justify-between gap-2">
+            <span>速度补偿</span>
+            <span className="font-bold text-white">
+              +{(guess.speedCompensationPts ?? 0).toLocaleString()}
+            </span>
+          </div>
+          <div>
+            偏差 {formatDistance(guess.distanceKm)}
+            {guess.elapsedSeconds != null && (
+              <span className="ml-2">
+                用时 {Math.round(guess.elapsedSeconds)} 秒
+              </span>
+            )}
+          </div>
         </div>
       );
     }
@@ -179,16 +240,34 @@ export function BattleRoundResultView({
             style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           />
         )}
+        {showLocationOnlyMap && (
+          <div
+            className="w-full border-b border-stone-700"
+            style={{ height: "min(42vh, 420px)", minHeight: 320 }}
+          >
+            <BaiduGuessMap
+              guess={locationOnlyGuess}
+              answer={locationOnlyAnswer}
+              answerLabel={locationOnlyAnswer.label}
+              distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
+              disabled
+              minHeightClass="min-h-0"
+              onGuess={() => undefined}
+            />
+          </div>
+        )}
 
         <div className="mx-auto max-w-5xl px-5 py-4">
           <h2 className="mb-1 text-xl font-bold text-amber-400">
-            {question.title}
+            {getBattleQuestionTitle(question)}
           </h2>
           <p className="mb-5 text-sm text-stone-400">
-            {getQuestionResultSubtitle(question)}
-            {!isFunfactQuestion(question) && question.year !== 0 && (
-              <> · 实际 {formatAnswerYear(question.year, yearEnd)}</>
-            )}
+            {getBattleQuestionSubtitle(question)}
+            {standardQuestion &&
+              !isFunfactQuestion(standardQuestion) &&
+              standardQuestion.year !== 0 && (
+                <> · 实际 {formatAnswerYear(standardQuestion.year, yearEnd)}</>
+              )}
           </p>
 
           <div className="mb-5 grid grid-cols-2 gap-3">
@@ -234,16 +313,20 @@ export function BattleRoundResultView({
             })}
           </div>
 
-          {isFunfactQuestion(question) && question.explanation && (
-            <p className="mb-4 rounded-lg bg-stone-800 px-4 py-3 text-sm text-stone-300">
-              {question.explanation}
-            </p>
-          )}
+          {standardQuestion &&
+            isFunfactQuestion(standardQuestion) &&
+            standardQuestion.explanation && (
+              <p className="mb-4 rounded-lg bg-stone-800 px-4 py-3 text-sm text-stone-300">
+                {standardQuestion.explanation}
+              </p>
+            )}
 
-          {(question.type === "historical" || question.type === "funfact") &&
-            question.funfact &&
-            question.funfact.length > 0 && (
-              <FunfactPanel funfacts={question.funfact} />
+          {standardQuestion &&
+            (standardQuestion.type === "historical" ||
+              standardQuestion.type === "funfact") &&
+            standardQuestion.funfact &&
+            standardQuestion.funfact.length > 0 && (
+              <FunfactPanel funfacts={standardQuestion.funfact} />
             )}
 
           {(() => {

@@ -3,17 +3,43 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
-import { fetchQuestionsByType, fetchQuestionsByIds } from "~/lib/load-questions";
-import { getGameMode } from "~/lib/game-mode";
+import {
+  fetchQuestionsByType,
+  fetchQuestionsByIds,
+} from "~/lib/load-questions";
+import { getGameMode, isQuestionType } from "~/lib/game-mode";
 import { getTimelineBounds } from "~/lib/question-utils";
 import {
   calcSpeedMultiplier,
+  haversineDistance,
+  locationRoundScore,
   scoreRound,
 } from "~/lib/scoring";
+import { generateRandomTuxunLocations } from "~/lib/baidu-panorama";
+import {
+  isBaiduStreetViewTuxunLocation,
+  type TuxunLocation,
+} from "~/lib/tuxun-locations";
+import {
+  buildHistoryTuxunPlayState,
+  findHistoryTuxunScene,
+  HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
+  type HistoryTuxunPlayState,
+} from "~/lib/history-tuxun-puzzle";
+import {
+  getBattleAnswerPoint,
+  isHistoryTuxunBattleQuestion,
+  isLocationOnlyBattleQuestion,
+  isStandardBattleQuestion,
+  isTuxunBattleQuestion,
+} from "~/lib/battle-question";
 import {
   type BattlePhase,
   type BattlePlayer,
+  type BattleQuestion,
   type BattleSettings,
+  type BattleTuxunQuestion,
+  type BattleHistoryTuxunQuestion,
   type PlayerGuess,
   type BattleRoundResult,
   type PusherPlayerJoined,
@@ -30,11 +56,15 @@ import {
   type GameQuestion,
   getQuestionYearEnd,
   isFunfactQuestion,
+  type QuestionType,
 } from "~/types/question";
 import { GameMap } from "~/app/game/_components/GameMap";
 import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
 import { QuizPanel } from "~/app/game/_components/QuizPanel";
+import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
+import { BaiduPanorama } from "~/app/game/tuxun/_components/BaiduPanorama";
+import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
 import { type PlayerAvatar } from "~/types/player";
 import { type CharacterConfig } from "~/types/character";
 import { api } from "~/trpc/react";
@@ -45,9 +75,31 @@ import { GameOverView } from "./GameOver";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function calcPlayerGuess(
+function buildBattleTuxunQuestion(
+  location: TuxunLocation,
+): BattleTuxunQuestion {
+  return {
+    id: `tuxun:${location.id}`,
+    type: "tuxun",
+    title: location.title,
+    location,
+  };
+}
+
+function buildBattleHistoryTuxunQuestion(
+  playState: HistoryTuxunPlayState,
+): BattleHistoryTuxunQuestion {
+  return {
+    id: `history-tuxun:${playState.puzzleId}`,
+    type: "history-tuxun",
+    title: playState.answerName,
+    playState,
+  };
+}
+
+function calcStandardPlayerGuess(
   question: GameQuestion,
-  modeType: BattleSettings["questionType"],
+  modeType: QuestionType,
   raw: PusherGuessSubmitted | undefined,
   roundStartTime: number,
   timePerRound: number,
@@ -88,11 +140,110 @@ function calcPlayerGuess(
     total: Math.round(score.total * speedMult),
     distanceKm: score.distanceKm ?? 0,
     isCorrect: score.isCorrect,
+    elapsedSeconds: Math.max(0, (submittedAt - roundStartTime) / 1000),
+    submitted: raw !== undefined,
   };
 }
 
-function calcDamage(scoreA: number, scoreB: number): number {
-  return Math.floor(Math.abs(scoreA - scoreB) / 500);
+function calcLocationOnlyPlayerGuess(
+  question: BattleQuestion,
+  raw: PusherGuessSubmitted | undefined,
+  roundStartTime: number,
+  timePerRound: number,
+): PlayerGuess {
+  const submittedAt = raw?.submittedAt ?? roundStartTime + timePerRound * 1000;
+  const elapsedSeconds = Math.max(0, (submittedAt - roundStartTime) / 1000);
+  const answer = getBattleAnswerPoint(question);
+
+  if (!answer || raw === undefined) {
+    return {
+      lat: raw?.lat ?? 0,
+      lng: raw?.lng ?? 0,
+      year: 0,
+      guessIndex: null,
+      locationPts: 0,
+      yearPts: 0,
+      quizPts: 0,
+      speedMultiplier: 1,
+      speedCompensationPts: 0,
+      elapsedSeconds,
+      total: 0,
+      distanceKm: 0,
+      submitted: false,
+    };
+  }
+
+  const distanceKm = haversineDistance(
+    answer.lat,
+    answer.lng,
+    raw.lat,
+    raw.lng,
+  );
+  const score = locationRoundScore({
+    distanceKm,
+    elapsedSeconds,
+    speedCompensationWindowSeconds: timePerRound,
+  });
+
+  return {
+    lat: raw.lat,
+    lng: raw.lng,
+    year: 0,
+    guessIndex: null,
+    locationPts: score.distancePts,
+    yearPts: 0,
+    quizPts: 0,
+    speedMultiplier: 1,
+    speedCompensationPts: score.speedCompensationPts,
+    elapsedSeconds,
+    total: score.total,
+    distanceKm,
+    submitted: true,
+  };
+}
+
+function calcBattlePlayerGuess(
+  question: BattleQuestion,
+  modeType: BattleSettings["questionType"],
+  raw: PusherGuessSubmitted | undefined,
+  roundStartTime: number,
+  timePerRound: number,
+): PlayerGuess {
+  if (isLocationOnlyBattleQuestion(question)) {
+    return calcLocationOnlyPlayerGuess(
+      question,
+      raw,
+      roundStartTime,
+      timePerRound,
+    );
+  }
+  if (isStandardBattleQuestion(question) && isQuestionType(modeType)) {
+    return calcStandardPlayerGuess(
+      question,
+      modeType,
+      raw,
+      roundStartTime,
+      timePerRound,
+    );
+  }
+
+  return calcLocationOnlyPlayerGuess(
+    question,
+    raw,
+    roundStartTime,
+    timePerRound,
+  );
+}
+
+function calcDamage(
+  scoreA: number,
+  scoreB: number,
+  modeType: BattleSettings["questionType"],
+): number {
+  const diff = Math.abs(scoreA - scoreB);
+  return modeType === "tuxun" || modeType === "history-tuxun"
+    ? Math.floor(diff / 5)
+    : Math.floor(diff / 500);
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
@@ -108,6 +259,13 @@ interface Props {
 }
 
 const MY_ID_KEY = "histoguessr_player_id";
+const HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 8;
+
+interface BattleQuestionLoadResult {
+  questions: BattleQuestion[];
+  questionIds?: string[];
+  error?: string;
+}
 
 function getOrCreatePlayerId(): string {
   if (typeof window === "undefined") return "ssr";
@@ -152,7 +310,7 @@ export function BattleGame({
       questionType: "historical",
     },
   );
-  const [questions, setQuestions] = useState<GameQuestion[]>([]);
+  const [questions, setQuestions] = useState<BattleQuestion[]>([]);
   const [currentRound, setCurrentRound] = useState(0);
   const [roundStartTime, setRoundStartTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -166,6 +324,7 @@ export function BattleGame({
 
   const [results, setResults] = useState<BattleRoundResult[]>([]);
   const [lobbyError, setLobbyError] = useState("");
+  const [streetViewError, setStreetViewError] = useState("");
   const [lobbySynced, setLobbySynced] = useState(isHost);
   const [gameSyncing, setGameSyncing] = useState(false);
   const [roundReady, setRoundReady] = useState<Record<string, boolean>>({});
@@ -210,8 +369,15 @@ export function BattleGame({
   // 与个人模式一致：整局题型由房间设置决定，而非单题字段
   const needsMap = settings.questionType === "historical";
   const needsQuiz = settings.questionType === "funfact";
-  const timelineBounds = currentQuestion
-    ? getTimelineBounds(currentQuestion)
+  const needsLocationOnlyGuess =
+    currentQuestion !== undefined &&
+    isLocationOnlyBattleQuestion(currentQuestion);
+  const currentStandardQuestion =
+    currentQuestion && isStandardBattleQuestion(currentQuestion)
+      ? currentQuestion
+      : null;
+  const timelineBounds = currentStandardQuestion
+    ? getTimelineBounds(currentStandardQuestion)
     : { minYear: -3000, maxYear: 2026, defaultYear: 1900 };
 
   function applyRoomSettings(next: BattleSettings) {
@@ -274,7 +440,7 @@ export function BattleGame({
   function applyGameStarted(
     settings: BattleSettings,
     players: Record<string, BattlePlayer>,
-    questions: GameQuestion[],
+    questions: BattleQuestion[],
   ) {
     setSettings(settings);
     setQuestions(questions);
@@ -288,14 +454,23 @@ export function BattleGame({
     setLobbyError("");
     setGameSyncing(true);
     try {
+      if (data.questions?.length) {
+        applyGameStarted(data.settings, data.players, data.questions);
+        beginRound(data.roundIndex, data.startTime);
+        return;
+      }
+
+      if (!isQuestionType(data.settings.questionType) || !data.questionIds) {
+        setLobbyError("同步题目失败，请让房主重新开始");
+        return;
+      }
+
       const loaded = await fetchQuestionsByIds(
         data.settings.questionType,
         data.questionIds,
         {
-          fetchHistoricalByIds: (ids) =>
-            utils.event.byIds.fetch({ ids }),
-          fetchFunfactByIds: (ids) =>
-            utils.funfact.byIds.fetch({ ids }),
+          fetchHistoricalByIds: (ids) => utils.event.byIds.fetch({ ids }),
+          fetchFunfactByIds: (ids) => utils.funfact.byIds.fetch({ ids }),
         },
       );
       if (loaded.error || loaded.questions.length < data.questionIds.length) {
@@ -322,9 +497,10 @@ export function BattleGame({
     setTimeLeft(settingsRef.current.timePerRound);
 
     const question = questionsRef.current[roundIndex];
-    const bounds = question
-      ? getTimelineBounds(question)
-      : { defaultYear: 1900 };
+    const bounds =
+      question && isStandardBattleQuestion(question)
+        ? getTimelineBounds(question)
+        : { defaultYear: 1900 };
 
     setGuessLat(null);
     setGuessLng(null);
@@ -332,6 +508,7 @@ export function BattleGame({
     setGuessIndex(null);
     setSubmitted(false);
     setOpponentSubmitted(false);
+    setStreetViewError("");
     roundReadyRef.current = {};
     setRoundReady({});
     setPhase("playing");
@@ -408,7 +585,7 @@ export function BattleGame({
     const guesses: Record<string, PlayerGuess> = {};
     const modeType = settingsRef.current.questionType;
     for (const pid of Object.keys(currentPlayers)) {
-      guesses[pid] = calcPlayerGuess(
+      guesses[pid] = calcBattlePlayerGuess(
         question,
         modeType,
         collectedGuesses.current[pid],
@@ -429,7 +606,7 @@ export function BattleGame({
       const [a, b] = playerIds as [string, string];
       const scoreA = guesses[a]?.total ?? 0;
       const scoreB = guesses[b]?.total ?? 0;
-      const dmg = calcDamage(scoreA, scoreB);
+      const dmg = calcDamage(scoreA, scoreB, modeType);
       if (scoreA < scoreB) {
         damage[a] = dmg;
         hpAfter[a] = Math.max(0, (hpAfter[a] ?? 0) - dmg);
@@ -474,6 +651,7 @@ export function BattleGame({
 
     ch.bind("player-joined", (data: PusherPlayerJoined) => {
       if (phaseRef.current !== "lobby") return;
+      if (data.playerId === myId.current) return;
       upsertPlayer(data);
       if (isHost) {
         broadcastRoomSettings();
@@ -597,17 +775,110 @@ export function BattleGame({
     playCountdownTick(timeLeft);
   }, [phase, timeLeft]);
 
+  async function loadTuxunBattleQuestions(
+    count: number,
+  ): Promise<BattleQuestionLoadResult> {
+    const result = await generateRandomTuxunLocations(count);
+    const streetViewLocations = result.locations.filter(
+      isBaiduStreetViewTuxunLocation,
+    );
+
+    if (streetViewLocations.length < count) {
+      return {
+        questions: [],
+        error:
+          result.message ??
+          `只匹配到 ${streetViewLocations.length} / ${count} 个百度 JS 街景点，未开始本局；请重新生成。`,
+      };
+    }
+
+    return {
+      questions: streetViewLocations
+        .slice(0, count)
+        .map(buildBattleTuxunQuestion),
+    };
+  }
+
+  async function loadHistoryTuxunBattleQuestions(
+    count: number,
+  ): Promise<BattleQuestionLoadResult> {
+    const questions: BattleHistoryTuxunQuestion[] = [];
+    const usedLocations = new Set<string>();
+    let excludeLocation: string | undefined;
+    const maxAttempts = Math.max(
+      count * HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND,
+      HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND,
+    );
+
+    for (
+      let attempts = 0;
+      attempts < maxAttempts && questions.length < count;
+      attempts += 1
+    ) {
+      const puzzle = await utils.locationTuxun.random.fetch({
+        excludeLocation,
+      });
+      if (!puzzle) break;
+
+      excludeLocation = puzzle.location;
+      if (usedLocations.has(puzzle.location)) continue;
+
+      const scene = await findHistoryTuxunScene(puzzle);
+      if (!scene) continue;
+
+      usedLocations.add(puzzle.location);
+      questions.push(
+        buildBattleHistoryTuxunQuestion(
+          buildHistoryTuxunPlayState(puzzle, scene),
+        ),
+      );
+    }
+
+    if (questions.length < count) {
+      return {
+        questions: [],
+        error: `只匹配到 ${questions.length} / ${count} 道有百度街景的历史图寻题，未开始本局；请重新开始。`,
+      };
+    }
+
+    return { questions };
+  }
+
+  async function loadBattleQuestions(
+    nextSettings: BattleSettings,
+  ): Promise<BattleQuestionLoadResult> {
+    if (nextSettings.questionType === "tuxun") {
+      return loadTuxunBattleQuestions(nextSettings.rounds);
+    }
+
+    if (nextSettings.questionType === "history-tuxun") {
+      return loadHistoryTuxunBattleQuestions(nextSettings.rounds);
+    }
+
+    if (!isQuestionType(nextSettings.questionType)) {
+      return { questions: [], error: "暂不支持该对战模式" };
+    }
+
+    const loaded = await fetchQuestionsByType(
+      nextSettings.questionType,
+      nextSettings.rounds,
+      {
+        fetchHistorical: (count) => utils.event.random.fetch({ count }),
+        fetchFunfact: (count) => utils.funfact.random.fetch({ count }),
+      },
+    );
+
+    return {
+      questions: loaded.questions,
+      questionIds: loaded.questions.map((q) => q.id),
+      error: loaded.error,
+    };
+  }
+
   async function handleStartGame() {
     try {
       setLobbyError("");
-      const loaded = await fetchQuestionsByType(
-        settings.questionType,
-        settings.rounds,
-        {
-          fetchHistorical: (count) => utils.event.random.fetch({ count }),
-          fetchFunfact: (count) => utils.funfact.random.fetch({ count }),
-        },
-      );
+      const loaded = await loadBattleQuestions(settings);
       if (loaded.error || loaded.questions.length < settings.rounds) {
         setLobbyError(loaded.error ?? "题库题目不足");
         return;
@@ -622,7 +893,8 @@ export function BattleGame({
       const payload = {
         settings,
         players: initialPlayers,
-        questionIds: loaded.questions.map((q) => q.id),
+        questionIds: loaded.questionIds,
+        questions: loaded.questionIds ? undefined : loaded.questions,
         roundIndex: 0,
         startTime,
       } satisfies PusherGameStarted;
@@ -630,14 +902,23 @@ export function BattleGame({
       applyGameStarted(settings, initialPlayers, loaded.questions);
       beginRound(0, startTime);
       await sendPusherEvent(channel, "game-started", payload);
-    } catch {
-      setLobbyError("题库加载失败，请检查数据库连接");
+    } catch (error) {
+      setLobbyError(
+        error instanceof Error
+          ? error.message
+          : "题库加载失败，请检查数据库连接",
+      );
     }
   }
 
   function handleSubmitGuess() {
     if (submitted) return;
-    if (needsMap && (guessLat === null || guessLng === null)) return;
+    if (
+      (needsMap || needsLocationOnlyGuess) &&
+      (guessLat === null || guessLng === null)
+    ) {
+      return;
+    }
     if (needsQuiz && guessIndex === null) return;
 
     setSubmitted(true);
@@ -645,7 +926,7 @@ export function BattleGame({
       playerId: myId.current,
       lat: guessLat ?? 0,
       lng: guessLng ?? 0,
-      year: needsQuiz ? 0 : guessYear,
+      year: needsQuiz || needsLocationOnlyGuess ? 0 : guessYear,
       guessIndex: needsQuiz ? guessIndex : undefined,
       submittedAt: Date.now(),
     } satisfies PusherGuessSubmitted);
@@ -666,8 +947,8 @@ export function BattleGame({
 
   const canSubmit = needsQuiz
     ? guessIndex !== null
-    : needsMap
-      ? guessLat !== null
+    : needsMap || needsLocationOnlyGuess
+      ? guessLat !== null && guessLng !== null
       : true;
 
   const submitLabel = submitted
@@ -676,7 +957,7 @@ export function BattleGame({
       ? guessIndex === null
         ? "请先选择答案"
         : "提交答案"
-      : needsMap && guessLat === null
+      : (needsMap || needsLocationOnlyGuess) && guessLat === null
         ? "先在地图上选地点"
         : "提交猜测";
 
@@ -818,6 +1099,186 @@ export function BattleGame({
       : timerPct > 20
         ? "bg-amber-500"
         : "bg-red-500";
+  const roundElapsedSeconds = Math.max(0, settings.timePerRound - timeLeft);
+
+  if (
+    phase === "playing" &&
+    currentQuestion &&
+    isLocationOnlyBattleQuestion(currentQuestion)
+  ) {
+    const visibleHistoryClues = isHistoryTuxunBattleQuestion(currentQuestion)
+      ? currentQuestion.playState.clues.slice(
+          0,
+          Math.min(
+            currentQuestion.playState.clues.length,
+            Math.floor(
+              roundElapsedSeconds / HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
+            ) + 1,
+          ),
+        )
+      : [];
+    const nextClueIn =
+      isHistoryTuxunBattleQuestion(currentQuestion) &&
+      visibleHistoryClues.length < currentQuestion.playState.clues.length
+        ? HISTORY_TUXUN_CLUE_INTERVAL_SECONDS -
+          (roundElapsedSeconds % HISTORY_TUXUN_CLUE_INTERVAL_SECONDS)
+        : null;
+
+    return (
+      <div className="flex h-screen flex-col bg-stone-900 text-white">
+        <div className="flex items-center justify-between border-b border-stone-700 px-4 py-2">
+          <span className="font-bold text-red-400">
+            ⚔️ 对战 · {gameMode?.emoji} {gameMode?.title}
+          </span>
+          <span className="text-sm text-stone-400">
+            第 {currentRound + 1} / {settings.rounds} 轮
+          </span>
+          <div className="flex items-center gap-3">
+            {me && <HPBar player={me} flipped={false} />}
+            <span className="text-stone-500">VS</span>
+            {opponent && <HPBar player={opponent} flipped={true} />}
+          </div>
+        </div>
+
+        <div className="h-1.5 w-full bg-stone-700">
+          <div
+            className={`h-full transition-all ${timerColor}`}
+            style={{ width: `${timerPct}%` }}
+          />
+        </div>
+
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
+          {isTuxunBattleQuestion(currentQuestion) ? (
+            <BaiduPanorama
+              key={currentQuestion.id}
+              location={currentQuestion.location}
+              onUnavailable={() =>
+                setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
+              }
+            />
+          ) : (
+            <BaiduPanoramaView
+              key={currentQuestion.id}
+              point={{
+                lat: currentQuestion.playState.sceneLat,
+                lng: currentQuestion.playState.sceneLng,
+              }}
+              panoId={currentQuestion.playState.scenePanoId}
+              heading={currentQuestion.playState.heading}
+              pitch={currentQuestion.playState.pitch}
+              onUnavailable={() =>
+                setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
+              }
+            />
+          )}
+
+          <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/85 p-4 shadow-lg shadow-black/30">
+            <div className="flex items-center justify-between rounded-lg bg-stone-900 px-3 py-2">
+              <div>
+                <div className="text-xs text-stone-500">剩余时间</div>
+                <div className="text-sm text-amber-300">
+                  提交越快，速度补偿越高
+                </div>
+              </div>
+              <span
+                className={`text-2xl font-bold ${
+                  timeLeft <= 10 ? "text-red-400" : "text-white"
+                }`}
+              >
+                {timeLeft}s
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-lg bg-stone-900 px-3 py-2">
+              <span className="text-sm text-stone-400">对手：</span>
+              {opponentSubmitted ? (
+                <span className="text-sm font-medium text-green-400">
+                  ✓ 已提交
+                </span>
+              ) : (
+                <span className="text-sm text-stone-500">思考中…</span>
+              )}
+            </div>
+
+            {streetViewError && (
+              <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                {streetViewError}
+              </div>
+            )}
+
+            {isTuxunBattleQuestion(currentQuestion) ? (
+              <div className="rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2">
+                <div className="text-sm font-semibold text-sky-200">
+                  观察全景，猜它在中国哪里
+                </div>
+                <p className="mt-1 text-sm leading-6 text-stone-300">
+                  从道路、建筑、招牌和地形里找线索，在右下角百度地图中点选位置。
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
+                <div className="flex items-center justify-between gap-3 text-sm font-semibold text-amber-200">
+                  <span>历史线索</span>
+                  {nextClueIn ? (
+                    <span className="text-xs text-amber-100/70">
+                      下一条 {nextClueIn}s
+                    </span>
+                  ) : (
+                    <span className="text-xs text-amber-100/70">
+                      已全部给出
+                    </span>
+                  )}
+                </div>
+                <ol className="mt-3 space-y-2">
+                  {visibleHistoryClues.map((clue, index) => (
+                    <li
+                      key={`${currentQuestion.id}-${index}`}
+                      className="text-sm leading-6 text-stone-200"
+                    >
+                      <span className="mr-2 font-mono text-amber-300">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      {clue}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </aside>
+
+          <FloatingGuessMap
+            guessLat={guessLat}
+            guessLng={guessLng}
+            onGuess={(lat, lng) => {
+              if (!submitted) {
+                setGuessLat(lat);
+                setGuessLng(lng);
+              }
+            }}
+            onSubmit={handleSubmitGuess}
+            disabled={!canSubmit || submitted}
+            submitLabel={submitLabel}
+            title={
+              isTuxunBattleQuestion(currentQuestion)
+                ? "图寻猜点"
+                : "历史图寻猜点"
+            }
+          />
+
+          {submitted && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+              <div className="rounded-xl bg-green-800/85 px-6 py-3 text-center shadow-lg shadow-black/30 backdrop-blur-sm">
+                <div className="text-lg font-bold text-green-200">✓ 已锁定</div>
+                <div className="text-sm text-green-100/80">
+                  等待对手或计时结束…
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col bg-stone-900 text-white">
@@ -881,19 +1342,24 @@ export function BattleGame({
             )}
           </div>
 
-          {currentQuestion && (
-            <EventCard key={currentQuestion.id} question={currentQuestion} />
-          )}
-
-          {needsQuiz && currentQuestion && isFunfactQuestion(currentQuestion) && (
-            <QuizPanel
-              question={currentQuestion}
-              selectedIndex={guessIndex}
-              onSelect={(index) => {
-                if (!submitted) setGuessIndex(index);
-              }}
+          {currentStandardQuestion && (
+            <EventCard
+              key={currentStandardQuestion.id}
+              question={currentStandardQuestion}
             />
           )}
+
+          {needsQuiz &&
+            currentStandardQuestion &&
+            isFunfactQuestion(currentStandardQuestion) && (
+              <QuizPanel
+                question={currentStandardQuestion}
+                selectedIndex={guessIndex}
+                onSelect={(index) => {
+                  if (!submitted) setGuessIndex(index);
+                }}
+              />
+            )}
 
           {needsMap && (
             <TimelineSlider

@@ -1,8 +1,10 @@
 import { type QuestionType } from "~/types/question";
 
+export type GameModeSlug = QuestionType | "tuxun" | "history-tuxun";
+
 export interface GameModeConfig {
-  type: QuestionType;
-  slug: QuestionType;
+  type: GameModeSlug;
+  slug: GameModeSlug;
   title: string;
   emoji: string;
   description: string;
@@ -13,7 +15,7 @@ export interface GameModeConfig {
   enabled?: boolean;
 }
 
-export const GAME_MODES: Record<QuestionType, GameModeConfig> = {
+export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
   historical: {
     type: "historical",
     slug: "historical",
@@ -58,6 +60,28 @@ export const GAME_MODES: Record<QuestionType, GameModeConfig> = {
     borderHoverClass: "hover:border-violet-500",
     enabled: false,
   },
+  tuxun: {
+    type: "tuxun",
+    slug: "tuxun",
+    title: "图寻模式",
+    emoji: "🔭",
+    description: "百度全景中国版 GeoGuessr，观察街景猜位置",
+    tagline: "全景线索 + 中国地图猜点",
+    accentClass: "text-sky-300",
+    borderHoverClass: "hover:border-sky-500",
+    enabled: true,
+  },
+  "history-tuxun": {
+    type: "history-tuxun",
+    slug: "history-tuxun",
+    title: "历史图寻模式",
+    emoji: "🏛️",
+    description: "根据历史线索观察现代街景，猜它对应的地点",
+    tagline: "历史线索 + 百度全景 + 中国地图猜点",
+    accentClass: "text-amber-300",
+    borderHoverClass: "hover:border-amber-500",
+    enabled: true,
+  },
 };
 
 export const GAME_MODE_LIST = Object.values(GAME_MODES).filter(
@@ -73,6 +97,12 @@ export function isQuestionType(value: string): value is QuestionType {
   );
 }
 
+export function isGameModeSlug(value: string): value is GameModeSlug {
+  return (
+    isQuestionType(value) || value === "tuxun" || value === "history-tuxun"
+  );
+}
+
 export function getGameMode(slug: string): GameModeConfig | undefined {
-  return isQuestionType(slug) ? GAME_MODES[slug] : undefined;
+  return isGameModeSlug(slug) ? GAME_MODES[slug] : undefined;
 }

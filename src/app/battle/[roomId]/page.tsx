@@ -1,6 +1,6 @@
 import { BattleGame } from "./_components/BattleGame";
 import { DEFAULT_AVATAR, normalizeAvatar } from "~/types/player";
-import { getGameMode, isQuestionType } from "~/lib/game-mode";
+import { getGameMode, isGameModeSlug } from "~/lib/game-mode";
 
 interface Props {
   params: Promise<{ roomId: string }>;
@@ -18,7 +18,7 @@ export default async function BattleRoomPage({ params, searchParams }: Props) {
     icon: sp.avatarIcon ?? DEFAULT_AVATAR.icon,
     color: sp.avatarColor ?? DEFAULT_AVATAR.color,
   });
-  const modeSlug = isQuestionType(sp.mode ?? "") ? sp.mode! : "historical";
+  const modeSlug = isGameModeSlug(sp.mode ?? "") ? sp.mode! : "historical";
   const gameMode = getGameMode(modeSlug);
   const settings = isHost
     ? {

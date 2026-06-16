@@ -5,8 +5,11 @@ import Link from "next/link";
 import { type BattlePlayer, type BattleRoundResult } from "~/types/battle";
 import { type BattleOutcome } from "~/types/player";
 import { formatYear } from "~/lib/scoring";
-import { getQuestionResultSubtitle } from "~/lib/question-utils";
-import { isFunfactQuestion } from "~/types/question";
+import {
+  getBattleQuestionSubtitle,
+  getBattleQuestionTitle,
+  getBattleQuestionYear,
+} from "~/lib/battle-question";
 import { getStoredPlayerSession } from "~/lib/player-session";
 import { api } from "~/trpc/react";
 import { CharacterPortrait } from "~/components/CharacterPortrait";
@@ -190,17 +193,17 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
                   >
                     <div className="flex justify-between">
                       <span className="font-medium text-amber-300">
-                        {r.question.title}
+                        {getBattleQuestionTitle(r.question)}
                       </span>
-                      {!isFunfactQuestion(r.question) &&
-                        r.question.year !== 0 && (
+                      {getBattleQuestionYear(r.question) !== null &&
+                        getBattleQuestionYear(r.question) !== 0 && (
                           <span className="text-stone-400">
-                            {formatYear(r.question.year)}
+                            {formatYear(getBattleQuestionYear(r.question)!)}
                           </span>
                         )}
                     </div>
                     <div className="mt-0.5 text-xs text-stone-500">
-                      {getQuestionResultSubtitle(r.question)}
+                      {getBattleQuestionSubtitle(r.question)}
                     </div>
                     <div className="mt-1 flex gap-4 text-stone-400">
                       {playerIds.map((pid) => (
