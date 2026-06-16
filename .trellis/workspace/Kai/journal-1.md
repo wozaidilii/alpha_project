@@ -71,3 +71,36 @@ Added a solo history-year mode with event-level year puzzles, clue-count scoring
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Rename browser title
+
+**Date**: 2026-06-16
+**Task**: Rename browser title
+**Branch**: `main`
+
+### Summary
+
+Changed the root Next metadata title from the create-t3-app default to HIstroGuessr and validated with typecheck and next build.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `207f869` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
