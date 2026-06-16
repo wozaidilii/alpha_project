@@ -1,5 +1,7 @@
 import { type LocationTuxunPuzzle } from "~/types/location-tuxun";
 
+const HISTORY_TUXUN_SCENE_RADIUS_KM = 5;
+
 export interface HistoryTuxunPlayState {
   puzzleId: string;
   location: string;
@@ -39,7 +41,7 @@ export function buildHistoryTuxunPlayState(
 ): HistoryTuxunPlayState {
   const scene = randomPointAroundCenter(
     { lat: puzzle.centerLat, lng: puzzle.centerLng },
-    puzzle.radiusKm,
+    Math.min(puzzle.radiusKm, HISTORY_TUXUN_SCENE_RADIUS_KM),
   );
 
   return {

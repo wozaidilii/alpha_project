@@ -285,7 +285,7 @@ export function loadBaiduMapScript(
       }
     };
 
-    if (existing) return;
+    existing?.remove();
 
     const script = document.createElement("script");
     script.id = "baidu-map-jsapi";
@@ -527,6 +527,17 @@ function getPanoramaByLocation(
       resolve(null);
     }
   });
+}
+
+export async function findBaiduPanoramaNear(
+  ak: string,
+  point: BaiduPoint,
+  radius = 1800,
+): Promise<PanoramaLookupResult | null> {
+  await loadBaiduMapScript(ak, "panorama");
+  const api = window.BMap;
+  if (!api?.PanoramaService) return null;
+  return getPanoramaByLocation(api, point, radius);
 }
 
 function fallbackResult(

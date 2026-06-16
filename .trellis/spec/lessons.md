@@ -46,3 +46,10 @@
 - 根因：空接口在 TypeScript 中等价于允许任意非 nullish 值，不能准确表达“第三方 SDK 返回的不透明对象”。
 - 修复：将共享 Overlay 类型改成 `object` 类型别名，具体 Marker 继续保留实际使用到的可选方法。
 - 预防：为第三方 SDK 建模时，如果代码不读取对象成员，用 `object` / `unknown` 等不透明类型；只有真实访问成员时才声明接口。
+
+## Next dev 与 build 不要并发写 .next
+
+- 问题：浏览器 smoke test 的 `next dev --turbo` 仍在运行时并行执行 `next build` / `tsc --noEmit`，dev server 输出 `.next/server/app/.../app-paths-manifest.json` 和 `_buildManifest.js.tmp.*` 缺失，单独 `tsc` 也读到 `.next/types` 临时缺失文件。
+- 根因：Next dev、build 和项目 tsconfig 都会读写或引用 `.next` 目录，并发执行会制造工具链临时文件竞争，容易被误判为源码错误。
+- 修复：停止 dev server 后重新执行 `next build` 和 `tsc --noEmit`，验证通过。
+- 预防：涉及 Next 项目的最终验证前先停掉本地 dev server；不要把 `next build`、`next dev` 和依赖 `.next/types` 的 `tsc --noEmit` 并发运行。

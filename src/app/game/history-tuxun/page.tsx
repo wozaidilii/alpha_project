@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
+import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
 import { BaiduSceneMap } from "~/app/game/_components/BaiduSceneMap";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import {
@@ -21,7 +22,12 @@ import {
 import { api } from "~/trpc/react";
 
 type Phase = "playing" | "result";
-type SceneImageMode = "panorama" | "static-map" | "base-map" | "error";
+type SceneImageMode =
+  | "js-panorama"
+  | "static-panorama"
+  | "static-map"
+  | "base-map"
+  | "error";
 const CLUE_INTERVAL_SECONDS = 10;
 
 function formatDistance(distanceKm: number) {
@@ -57,7 +63,7 @@ export default function HistoryTuxunPage() {
   const [excludeLocation, setExcludeLocation] = useState<string | undefined>();
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
-  const [imageMode, setImageMode] = useState<SceneImageMode>("panorama");
+  const [imageMode, setImageMode] = useState<SceneImageMode>("js-panorama");
   const [submittedElapsed, setSubmittedElapsed] = useState<number | null>(null);
   const elapsed = useElapsedSeconds(
     phase === "playing" && playState != null,
@@ -122,7 +128,7 @@ export default function HistoryTuxunPage() {
     [playState],
   );
   const sceneImageUrl =
-    imageMode === "panorama"
+    imageMode === "static-panorama"
       ? panoramaUrl
       : imageMode === "static-map"
         ? staticMapUrl
@@ -165,14 +171,19 @@ export default function HistoryTuxunPage() {
       setExcludeLocation(playState.location);
     }
     setGuess(null);
-    setImageMode("panorama");
+    setImageMode("js-panorama");
     setSubmittedElapsed(null);
     setPhase("playing");
     void puzzleQuery.refetch();
   }
 
   const handleSceneImageError = useCallback(() => {
-    if (imageMode === "panorama" && staticMapUrl) {
+    if (imageMode === "js-panorama" && panoramaUrl) {
+      setImageMode("static-panorama");
+      return;
+    }
+
+    if (imageMode === "static-panorama" && staticMapUrl) {
       setImageMode("static-map");
       return;
     }
@@ -183,7 +194,7 @@ export default function HistoryTuxunPage() {
     }
 
     setImageMode("error");
-  }, [imageMode, staticMapUrl]);
+  }, [imageMode, panoramaUrl, staticMapUrl]);
 
   useEffect(() => {
     if (!sceneImageUrl || imageMode === "error") return;
@@ -423,7 +434,19 @@ export default function HistoryTuxunPage() {
           </aside>
 
           <section className="relative min-h-[420px] overflow-hidden bg-black">
-            {imageMode === "base-map" ? (
+            {imageMode === "js-panorama" ? (
+              <BaiduPanoramaView
+                key={`${playState.puzzleId}-js-panorama`}
+                point={{ lat: playState.sceneLat, lng: playState.sceneLng }}
+                heading={playState.heading}
+                pitch={playState.pitch}
+                radius={Math.max(
+                  1800,
+                  Math.min(playState.radiusKm * 1000, 10000),
+                )}
+                onUnavailable={handleSceneImageError}
+              />
+            ) : imageMode === "base-map" ? (
               <BaiduSceneMap
                 center={{ lat: playState.sceneLat, lng: playState.sceneLng }}
               />
@@ -433,7 +456,7 @@ export default function HistoryTuxunPage() {
                 key={`${playState.puzzleId}-${imageMode}`}
                 src={sceneImageUrl}
                 alt={
-                  imageMode === "panorama"
+                  imageMode === "static-panorama"
                     ? "待猜地点的百度全景静态图"
                     : "待猜地点附近的百度静态地图"
                 }
@@ -455,16 +478,20 @@ export default function HistoryTuxunPage() {
             )}
 
             <div className="absolute top-4 left-4 rounded-md border border-black/40 bg-stone-950/80 px-3 py-2 text-xs font-semibold text-stone-200 shadow-lg shadow-black/30">
-              {imageMode === "base-map"
-                ? "百度 JS 底图占位"
-                : imageMode === "static-map"
-                  ? "百度静态图占位"
-                  : "百度全景静态图"}
+              {imageMode === "js-panorama"
+                ? "百度 JS 全景图"
+                : imageMode === "base-map"
+                  ? "百度 JS 底图占位"
+                  : imageMode === "static-map"
+                    ? "百度静态图占位"
+                    : "百度全景静态图"}
             </div>
-            {(imageMode === "static-map" || imageMode === "base-map") && (
+            {(imageMode === "static-panorama" ||
+              imageMode === "static-map" ||
+              imageMode === "base-map") && (
               <div className="absolute right-4 bottom-4 max-w-xs rounded-md border border-amber-500/40 bg-stone-950/85 px-3 py-2 text-xs leading-5 text-amber-100 shadow-lg shadow-black/30">
-                当前 AK
-                未返回可用全景图，已降级为基础地图服务；这不是街景等价替代。
+                百度 JS
+                全景暂不可用，已按顺序降级到静态全景图、静态地图或基础底图。
               </div>
             )}
           </section>
