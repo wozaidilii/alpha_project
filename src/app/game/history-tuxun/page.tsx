@@ -492,7 +492,6 @@ export default function HistoryTuxunPage() {
             disabled={!guess}
             submitLabel="提交答案"
             title="历史图寻猜点"
-            helper="靠近展开，点击百度地图选择位置"
           />
         </div>
       </div>

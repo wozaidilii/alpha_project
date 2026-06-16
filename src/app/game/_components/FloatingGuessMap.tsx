@@ -11,7 +11,6 @@ interface FloatingGuessMapProps {
   disabled: boolean;
   submitLabel?: string;
   title?: string;
-  helper?: string;
 }
 
 export function FloatingGuessMap({
@@ -22,7 +21,6 @@ export function FloatingGuessMap({
   disabled,
   submitLabel = "提交猜测",
   title = "猜点地图",
-  helper = "靠近展开，点击百度地图选择位置",
 }: FloatingGuessMapProps) {
   const [expanded, setExpanded] = useState(false);
   const hasGuess = guessLat !== null && guessLng !== null;
@@ -30,11 +28,14 @@ export function FloatingGuessMap({
 
   return (
     <div
-      className={`group fixed right-3 bottom-3 z-40 transition-all duration-200 ease-out focus-within:h-[min(58dvh,460px)] focus-within:w-[min(calc(100vw-1.5rem),640px)] hover:h-[min(58dvh,460px)] hover:w-[min(calc(100vw-1.5rem),640px)] sm:right-5 sm:bottom-5 ${
+      className={`group fixed right-3 bottom-3 z-40 transition-all duration-200 ease-out focus-within:h-[min(72dvh,640px)] focus-within:w-[min(calc(100vw-1.5rem),920px)] hover:h-[min(72dvh,640px)] hover:w-[min(calc(100vw-1.5rem),920px)] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 sm:right-5 sm:bottom-5 ${
         expanded
-          ? "h-[min(58dvh,460px)] w-[min(calc(100vw-1.5rem),640px)]"
+          ? "h-[min(72dvh,640px)] w-[min(calc(100vw-1.5rem),920px)]"
           : "h-44 w-56 sm:h-48 sm:w-64"
       }`}
+      role="group"
+      aria-label={title}
+      tabIndex={0}
       onPointerEnter={() => setExpanded(true)}
       onPointerLeave={() => setExpanded(false)}
       onFocus={() => setExpanded(true)}
@@ -44,33 +45,7 @@ export function FloatingGuessMap({
         }
       }}
     >
-      <section
-        className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-stone-600 bg-stone-950 shadow-lg shadow-black/40"
-        aria-label={title}
-      >
-        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-stone-700 bg-stone-900/95 px-3 py-2">
-          <div>
-            <div className="text-sm font-bold text-amber-200">{title}</div>
-            <div
-              className={`text-xs text-stone-500 transition ${
-                expanded
-                  ? "block opacity-100"
-                  : "hidden opacity-0 group-focus-within:block group-focus-within:opacity-100 group-hover:block group-hover:opacity-100 sm:block"
-              }`}
-            >
-              {helper}
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-label={expanded ? "收起猜点地图" : "展开猜点地图"}
-            onClick={() => setExpanded((value) => !value)}
-            className="grid h-8 w-8 flex-none place-items-center rounded-md border border-stone-700 text-sm font-bold text-stone-300 transition hover:border-amber-400 hover:text-amber-200 focus:ring-2 focus:ring-amber-300 focus:outline-none"
-          >
-            {expanded ? "-" : "+"}
-          </button>
-        </div>
-
+      <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-stone-600 bg-stone-950 shadow-lg shadow-black/40">
         <div className="min-h-0 flex-1 bg-stone-900">
           <BaiduGuessMap
             guess={guess}
@@ -81,24 +56,12 @@ export function FloatingGuessMap({
         </div>
 
         <div
-          className={`border-t border-stone-700 bg-stone-900/95 px-3 py-2 transition ${
+          className={`border-t border-stone-700 bg-stone-900/95 p-2 transition ${
             expanded
               ? "block"
-              : "hidden group-focus-within:block group-hover:block sm:block"
+              : "hidden group-focus-within:block group-hover:block"
           }`}
         >
-          <div className="mb-2 text-xs text-stone-400">
-            {hasGuess ? (
-              <>
-                已选：
-                <span className="font-mono text-stone-200">
-                  {guessLat.toFixed(3)}, {guessLng.toFixed(3)}
-                </span>
-              </>
-            ) : (
-              "先在地图上点击你猜测的位置"
-            )}
-          </div>
           <button
             type="button"
             onClick={onSubmit}
@@ -109,6 +72,17 @@ export function FloatingGuessMap({
           </button>
         </div>
       </section>
+
+      {!expanded && (
+        <button
+          type="button"
+          aria-label={`展开${title}`}
+          onClick={() => setExpanded(true)}
+          onFocus={() => setExpanded(true)}
+          onPointerEnter={() => setExpanded(true)}
+          className="absolute inset-0 z-10 cursor-crosshair bg-transparent focus:outline-none"
+        />
+      )}
     </div>
   );
 }

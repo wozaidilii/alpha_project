@@ -290,7 +290,7 @@ export function BaiduGuessMap({
         </div>
       )}
 
-      {answer ? (
+      {answer && (
         <div className="pointer-events-none absolute top-3 right-3 rounded-md border border-stone-700 bg-stone-950/90 px-3 py-2 text-xs text-stone-200 shadow-lg shadow-black/30">
           <div className="flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
@@ -305,10 +305,6 @@ export function BaiduGuessMap({
               偏差 {formatDistance(distanceKm)}
             </div>
           ) : null}
-        </div>
-      ) : (
-        <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-stone-700 bg-stone-950/85 px-3 py-2 text-xs text-stone-300 shadow-lg shadow-black/30">
-          {guess ? "已选点，可提交答案" : "点击地图选择地点"}
         </div>
       )}
     </div>
