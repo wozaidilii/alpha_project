@@ -102,7 +102,7 @@ export function BaiduPanoramaView({
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-400">
               {BAIDU_MAP_AK
-                ? "如果当前位置没有可用全景，会自动降级到静态图或底图。"
+                ? "如果当前位置没有可用全景，会自动重新匹配可用街景点。"
                 : "请在 .env.local 配置 NEXT_PUBLIC_BAIDU_MAP_AK 后重启开发服务。"}
             </p>
           </div>

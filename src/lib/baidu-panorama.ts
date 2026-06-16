@@ -1,8 +1,5 @@
 import { CHINA_BOUNDS } from "~/lib/china-map";
-import {
-  pickTuxunFallbackLocations,
-  type TuxunLocation,
-} from "~/lib/tuxun-locations";
+import { type TuxunLocation } from "~/lib/tuxun-locations";
 
 export const BAIDU_MAP_AK = process.env.NEXT_PUBLIC_BAIDU_MAP_AK;
 
@@ -542,13 +539,10 @@ export async function findBaiduPanoramaNear(
   return getPanoramaByLocation(api, point, radius);
 }
 
-function fallbackResult(
-  count: number,
-  message: string,
-): TuxunLocationGenerationResult {
+function unavailableResult(message: string): TuxunLocationGenerationResult {
   return {
-    locations: pickTuxunFallbackLocations(count),
-    usedFallback: true,
+    locations: [],
+    usedFallback: false,
     message,
   };
 }
@@ -557,32 +551,29 @@ export async function generateRandomTuxunLocations(
   count: number,
 ): Promise<TuxunLocationGenerationResult> {
   if (!BAIDU_MAP_AK) {
-    return fallbackResult(
-      count,
-      "未配置百度地图 AK，当前使用本地备用点位；配置 NEXT_PUBLIC_BAIDU_MAP_AK 后会随机生成百度全景点。",
+    return unavailableResult(
+      "未配置百度地图 AK，无法生成百度 JS 街景点；请配置 NEXT_PUBLIC_BAIDU_MAP_AK 后重试。",
     );
   }
 
   try {
     await loadBaiduMapScript(BAIDU_MAP_AK);
   } catch {
-    return fallbackResult(
-      count,
-      "百度地图 JS API 加载失败，当前使用本地备用点位。",
+    return unavailableResult(
+      "百度地图 JS API 加载失败，无法生成百度 JS 街景点。",
     );
   }
 
   const api = window.BMap;
   if (!api?.PanoramaService) {
-    return fallbackResult(
-      count,
-      "当前 AK 未加载到百度全景检索服务，当前使用本地备用点位。",
+    return unavailableResult(
+      "当前 AK 未加载到百度全景检索服务，无法生成百度 JS 街景点。",
     );
   }
 
   const locations: TuxunLocation[] = [];
   const batchSize = 8;
-  const maxBatches = 5;
+  const maxBatches = 8;
 
   for (
     let batchIndex = 0;
@@ -617,13 +608,12 @@ export async function generateRandomTuxunLocations(
     return { locations, usedFallback: false };
   }
 
-  const fallback = pickTuxunFallbackLocations(count - locations.length);
   return {
-    locations: [...locations, ...fallback],
-    usedFallback: true,
+    locations: [],
+    usedFallback: false,
     message:
       locations.length > 0
-        ? `已随机生成 ${locations.length} 个百度全景点，其余轮次使用备用点位。`
-        : "多次随机后没有找到可用百度全景点，当前使用本地备用点位。",
+        ? `只匹配到 ${locations.length} / ${count} 个百度 JS 街景点，未开始本局；请重新生成。`
+        : "多次随机后没有找到可用百度 JS 街景点，请重新生成。",
   };
 }

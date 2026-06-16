@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import {
   haversineDistance,
@@ -9,7 +9,11 @@ import {
   LOCATION_ROUND_SCORE_MAX,
 } from "~/lib/scoring";
 import { generateRandomTuxunLocations } from "~/lib/baidu-panorama";
-import { TUXUN_ROUNDS, type TuxunLocation } from "~/lib/tuxun-locations";
+import {
+  isBaiduStreetViewTuxunLocation,
+  TUXUN_ROUNDS,
+  type TuxunLocation,
+} from "~/lib/tuxun-locations";
 import {
   AuthLoading,
   useCompletedPlayerSession,
@@ -83,9 +87,23 @@ export default function TuxunGamePage() {
     void generateRandomTuxunLocations(TUXUN_ROUNDS)
       .then((result) => {
         if (!active) return;
-        setLocations(result.locations);
+
+        const streetViewLocations = result.locations.filter(
+          isBaiduStreetViewTuxunLocation,
+        );
+        if (streetViewLocations.length < TUXUN_ROUNDS) {
+          setLocations([]);
+          setLocationLoadMessage(
+            result.message ??
+              `只匹配到 ${streetViewLocations.length} / ${TUXUN_ROUNDS} 个百度 JS 街景点，未开始本局；请重新生成。`,
+          );
+          setLocationLoadState("error");
+          return;
+        }
+
+        setLocations(streetViewLocations);
         setLocationLoadMessage(result.message ?? "");
-        setLocationLoadState(result.locations.length > 0 ? "ready" : "error");
+        setLocationLoadState("ready");
       })
       .catch(() => {
         if (!active) return;
@@ -143,6 +161,33 @@ export default function TuxunGamePage() {
   function handleRestart() {
     setReloadKey((value) => value + 1);
   }
+
+  const handleCurrentPanoramaUnavailable = useCallback(() => {
+    if (!current) return;
+
+    const nextLocations = locations.filter(
+      (location) => location.id !== current.id,
+    );
+    setLocations(nextLocations);
+    setGuess(null);
+
+    if (nextLocations.length <= results.length) {
+      if (results.length > 0) {
+        setPhase("final");
+        return;
+      }
+
+      setLocationLoadMessage("当前没有可用的百度 JS 街景点，请重新生成。");
+      setLocationLoadState("error");
+      return;
+    }
+
+    setRound(Math.min(round, nextLocations.length - 1));
+    setPhase("playing");
+    setLocationLoadMessage(
+      "上一处百度 JS 街景渲染失败，已跳过并切换到下一个街景点。",
+    );
+  }, [current, locations, results.length, round]);
 
   if (!ready) return <AuthLoading />;
 
@@ -361,7 +406,13 @@ export default function TuxunGamePage() {
 
       <div className="relative flex-1 overflow-hidden">
         <section className="h-full min-h-0">
-          {current && <BaiduPanorama key={current.id} location={current} />}
+          {current && (
+            <BaiduPanorama
+              key={current.id}
+              location={current}
+              onUnavailable={handleCurrentPanoramaUnavailable}
+            />
+          )}
         </section>
 
         <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),360px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/85 p-4 shadow-lg shadow-black/30">

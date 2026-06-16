@@ -153,6 +153,10 @@ export function pickTuxunLocations(count: number): TuxunLocation[] {
   return pickTuxunFallbackLocations(count);
 }
 
+export function isBaiduStreetViewTuxunLocation(location: TuxunLocation) {
+  return location.source === "baidu-random";
+}
+
 export function pickTuxunFallbackLocations(count: number): TuxunLocation[] {
   return [...TUXUN_LOCATIONS]
     .sort(() => Math.random() - 0.5)
