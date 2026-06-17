@@ -51,6 +51,7 @@ Questions to answer:
 - Script load success does not imply service availability; construct service clients and issue SDK calls inside `try/catch` or null-returning boundaries.
 - Street-view gameplay must only start after point generation confirms enough usable panoramas for the configured round count.
 - Guess-map click handlers must clamp or reject points outside the active country/region bounds.
+- Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
 
 #### 4. Validation & Error Matrix
 
@@ -62,9 +63,9 @@ Questions to answer:
 
 #### 5. Good/Base/Bad Cases
 
-- Good: shared country config + SDK loader + confirmed panorama generation + map bounds restriction + focused config tests.
+- Good: shared country config + SDK loader + confirmed panorama generation + map bounds restriction + a persistent map component whose overlays change between guessing and result states + focused config tests.
 - Base: single-country implementation that still uses a country catalog so new countries append data instead of branching UI logic.
-- Bad: hard-coded coordinates in page components, required public map keys that break unrelated builds, or fallback images/maps inside a street-view mode.
+- Bad: hard-coded coordinates in page components, required public map keys that break unrelated builds, fallback images/maps inside a street-view mode, or separate guess/result map components that remount the provider SDK during every round.
 
 #### 6. Tests Required
 
@@ -89,6 +90,24 @@ Correct:
 const country = getForeignCountry("japan");
 const result = await generateRandomForeignLocations(rounds, country);
 if (result.locations.length < rounds) showRetryableError(result.message);
+```
+
+Wrong:
+
+```tsx
+// Result phase mounts another Maps SDK instance for the same round.
+return phase === "result" ? <ResultMap /> : <GuessMap />;
+```
+
+Correct:
+
+```tsx
+// One map instance survives phase changes; only overlays and layout change.
+<GuessMap
+  guess={phase === "result" ? latestResult.guess : guess}
+  answer={phase === "result" ? latestAnswer : null}
+  disabled={phase === "result"}
+/>;
 ```
 
 ---

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
-import { GoogleResultMap } from "~/app/game/foreign/_components/GoogleResultMap";
 import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
 import {
   DEFAULT_FOREIGN_COUNTRY,
@@ -76,6 +75,15 @@ export default function ForeignGamePage() {
   );
   const current = locations[round];
   const latestResult = results[results.length - 1];
+  const roundResult = phase === "result" ? latestResult : undefined;
+  const mapGuess = roundResult?.guess ?? guess;
+  const mapAnswer = useMemo(
+    () =>
+      roundResult
+        ? { lat: roundResult.location.lat, lng: roundResult.location.lng }
+        : null,
+    [roundResult],
+  );
   const totalScore = useMemo(
     () => results.reduce((sum, result) => sum + result.score, 0),
     [results],
@@ -320,92 +328,6 @@ export default function ForeignGamePage() {
     );
   }
 
-  if (phase === "result" && latestResult) {
-    return (
-      <main className="flex h-screen flex-col bg-stone-900 text-white">
-        <header className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
-          <h1 className="text-xl font-bold text-emerald-300">
-            国外模式 · {country.label}
-          </h1>
-          <span className="text-sm text-stone-400">
-            第 {round + 1} / {locations.length} 轮结果
-          </span>
-        </header>
-
-        <div className="grid flex-1 overflow-hidden lg:grid-cols-[1fr_380px]">
-          <section className="min-h-0">
-            <GoogleResultMap
-              country={country}
-              actual={latestResult.location}
-              guess={latestResult.guess}
-              distanceKm={latestResult.distanceKm}
-            />
-          </section>
-
-          <aside className="flex flex-col gap-4 overflow-y-auto border-l border-stone-700 bg-stone-950/70 p-5">
-            <div>
-              <div className="text-sm text-stone-500">实际地点</div>
-              <h2 className="mt-1 text-2xl font-extrabold text-emerald-300">
-                {latestResult.location.title}
-              </h2>
-              <p className="mt-1 text-sm text-stone-400">
-                {latestResult.location.province} · {latestResult.location.city}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-gradient-to-br from-emerald-500/20 to-stone-800 p-5 text-center">
-              <div className="text-sm text-stone-400">本轮得分</div>
-              <div className="text-6xl font-extrabold text-white">
-                {latestResult.score.toLocaleString()}
-              </div>
-              <div className="text-sm text-stone-500">
-                / {LOCATION_ROUND_SCORE_MAX}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="text-xs text-stone-500">距离分</div>
-                <div className="mt-1 font-bold text-stone-100">
-                  {latestResult.distancePts}
-                </div>
-              </div>
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="text-xs text-stone-500">速度补偿</div>
-                <div className="mt-1 font-bold text-stone-100">
-                  +{latestResult.speedCompensationPts}
-                </div>
-              </div>
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="text-xs text-stone-500">用时</div>
-                <div className="mt-1 font-bold text-stone-100">
-                  {formatElapsed(latestResult.elapsedSeconds)}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-stone-800 p-4 text-sm leading-6 text-stone-300">
-              你的猜测距离实际地点{" "}
-              <span className="font-bold text-white">
-                {formatDistance(latestResult.distanceKm)}
-              </span>
-              ，本轮满分 100 分，分数只按距离计算，提交越快可获得少量补偿。
-              {latestResult.location.hint}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleNext}
-              className="mt-auto rounded-xl bg-emerald-400 py-3 font-bold text-stone-950 transition hover:bg-emerald-300 focus:ring-2 focus:ring-emerald-200 focus:outline-none"
-            >
-              {round + 1 >= locations.length ? "查看最终得分" : "下一轮"}
-            </button>
-          </aside>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="flex h-screen flex-col bg-stone-900 text-white">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-700 px-4 py-3 sm:px-6">
@@ -422,12 +344,18 @@ export default function ForeignGamePage() {
         </div>
         <span className="text-stone-400">
           第 {round + 1} / {locations.length} 轮
+          {roundResult ? "结果" : ""}
         </span>
       </header>
 
       <div className="relative flex-1 overflow-hidden">
-        <section className="h-full min-h-0">
-          {current && (
+        <section
+          className={`h-full min-h-0 ${
+            roundResult ? "pointer-events-none opacity-0" : ""
+          }`}
+          aria-hidden={Boolean(roundResult)}
+        >
+          {current && !roundResult && (
             <GoogleStreetView
               key={current.id}
               location={current}
@@ -436,69 +364,150 @@ export default function ForeignGamePage() {
           )}
         </section>
 
-        <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/85 p-4 shadow-lg shadow-black/30">
-          <div>
-            <div className="text-sm font-semibold text-emerald-300">国家</div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {FOREIGN_COUNTRIES.map((item) => (
-                <button
-                  key={item.slug}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCountrySlug(item.slug);
-                    setReloadKey((value) => value + 1);
-                  }}
-                  className={`min-h-11 rounded-lg border px-3 text-sm font-semibold transition focus:ring-2 focus:ring-emerald-300 focus:outline-none ${
-                    item.slug === selectedCountrySlug
-                      ? "border-emerald-300 bg-emerald-400 text-stone-950"
-                      : "border-stone-700 bg-stone-900 text-stone-200 hover:border-emerald-300"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+        {!roundResult && (
+          <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/85 p-4 shadow-lg shadow-black/30">
+            <div>
+              <div className="text-sm font-semibold text-emerald-300">国家</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {FOREIGN_COUNTRIES.map((item) => (
+                  <button
+                    key={item.slug}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCountrySlug(item.slug);
+                      setReloadKey((value) => value + 1);
+                    }}
+                    className={`min-h-11 rounded-lg border px-3 text-sm font-semibold transition focus:ring-2 focus:ring-emerald-300 focus:outline-none ${
+                      item.slug === selectedCountrySlug
+                        ? "border-emerald-300 bg-emerald-400 text-stone-950"
+                        : "border-stone-700 bg-stone-900 text-stone-200 hover:border-emerald-300"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {locationLoadMessage && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-100">
-              {locationLoadMessage}
+            {locationLoadMessage && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-100">
+                {locationLoadMessage}
+              </div>
+            )}
+
+            <div>
+              <div className="text-sm font-semibold text-emerald-300">
+                观察街景，猜它在{country.label}哪里
+              </div>
+              <p className="mt-1 text-sm leading-6 text-stone-400">
+                先从道路、招牌、地形和城市密度里找线索，再在右下角 Google
+                地图中点选位置。
+              </p>
             </div>
-          )}
+          </aside>
+        )}
 
-          <div>
-            <div className="text-sm font-semibold text-emerald-300">
-              观察街景，猜它在{country.label}哪里
+        {roundResult && (
+          <aside className="absolute right-0 bottom-0 left-0 top-[42%] z-30 flex flex-col gap-4 overflow-y-auto border-t border-stone-700 bg-stone-950/90 p-5 lg:top-0 lg:left-auto lg:w-[380px] lg:border-t-0 lg:border-l">
+            <div>
+              <div className="text-sm text-stone-500">实际地点</div>
+              <h2 className="mt-1 text-2xl font-extrabold text-emerald-300">
+                {roundResult.location.title}
+              </h2>
+              <p className="mt-1 text-sm text-stone-400">
+                {roundResult.location.province} · {roundResult.location.city}
+              </p>
             </div>
-            <p className="mt-1 text-sm leading-6 text-stone-400">
-              先从道路、招牌、地形和城市密度里找线索，再在右下角 Google
-              地图中点选位置。
-            </p>
-          </div>
-        </aside>
 
-        <div className="group fixed right-3 bottom-3 z-40 h-44 w-56 transition-all duration-200 ease-out focus-within:h-[min(72dvh,640px)] focus-within:w-[min(calc(100vw-1.5rem),920px)] hover:h-[min(72dvh,640px)] hover:w-[min(calc(100vw-1.5rem),920px)] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:right-5 sm:bottom-5 sm:h-48 sm:w-64">
-          <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-stone-600 bg-stone-950 shadow-lg shadow-black/40">
+            <div className="rounded-xl bg-gradient-to-br from-emerald-500/20 to-stone-800 p-5 text-center">
+              <div className="text-sm text-stone-400">本轮得分</div>
+              <div className="text-6xl font-extrabold text-white">
+                {roundResult.score.toLocaleString()}
+              </div>
+              <div className="text-sm text-stone-500">
+                / {LOCATION_ROUND_SCORE_MAX}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">距离分</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {roundResult.distancePts}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">速度补偿</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  +{roundResult.speedCompensationPts}
+                </div>
+              </div>
+              <div className="rounded-xl bg-stone-800 p-4">
+                <div className="text-xs text-stone-500">用时</div>
+                <div className="mt-1 font-bold text-stone-100">
+                  {formatElapsed(roundResult.elapsedSeconds)}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-stone-800 p-4 text-sm leading-6 text-stone-300">
+              你的猜测距离实际地点{" "}
+              <span className="font-bold text-white">
+                {formatDistance(roundResult.distanceKm)}
+              </span>
+              ，本轮满分 100 分，分数只按距离计算，提交越快可获得少量补偿。
+              {roundResult.location.hint}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNext}
+              className="mt-auto rounded-xl bg-emerald-400 py-3 font-bold text-stone-950 transition hover:bg-emerald-300 focus:ring-2 focus:ring-emerald-200 focus:outline-none"
+            >
+              {round + 1 >= locations.length ? "查看最终得分" : "下一轮"}
+            </button>
+          </aside>
+        )}
+
+        <div
+          className={
+            roundResult
+              ? "absolute inset-x-0 top-0 z-10 h-[42%] lg:inset-y-0 lg:left-0 lg:right-[380px] lg:h-auto"
+              : "group fixed right-3 bottom-3 z-40 h-44 w-56 transition-all duration-200 ease-out focus-within:h-[min(72dvh,640px)] focus-within:w-[min(calc(100vw-1.5rem),920px)] hover:h-[min(72dvh,640px)] hover:w-[min(calc(100vw-1.5rem),920px)] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:right-5 sm:bottom-5 sm:h-48 sm:w-64"
+          }
+        >
+          <section
+            className={`flex h-full min-h-0 flex-col overflow-hidden bg-stone-950 shadow-lg shadow-black/40 ${
+              roundResult
+                ? "border-b border-stone-700 lg:border-r lg:border-b-0"
+                : "rounded-xl border border-stone-600"
+            }`}
+          >
             <div className="min-h-0 flex-1 bg-stone-900">
               <GoogleGuessMap
                 country={country}
-                guess={guess}
-                answer={null}
+                guess={mapGuess}
+                answer={mapAnswer}
+                answerLabel={roundResult?.location.title}
+                distanceKm={roundResult?.distanceKm}
+                disabled={Boolean(roundResult)}
                 minHeightClass="min-h-0"
                 onGuess={setGuess}
               />
             </div>
 
-            <div className="hidden border-t border-stone-700 bg-stone-900/95 p-2 transition group-focus-within:block group-hover:block">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!guess}
-                className="w-full rounded-lg bg-emerald-400 px-3 py-2 text-sm font-bold text-stone-950 transition hover:bg-emerald-300 focus:ring-2 focus:ring-emerald-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                提交猜测
-              </button>
-            </div>
+            {!roundResult && (
+              <div className="hidden border-t border-stone-700 bg-stone-900/95 p-2 transition group-focus-within:block group-hover:block">
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!guess}
+                  className="w-full rounded-lg bg-emerald-400 px-3 py-2 text-sm font-bold text-stone-950 transition hover:bg-emerald-300 focus:ring-2 focus:ring-emerald-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  提交猜测
+                </button>
+              </div>
+            )}
           </section>
         </div>
       </div>
