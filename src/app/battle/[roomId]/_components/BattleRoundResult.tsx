@@ -14,6 +14,7 @@ import {
   getBattleAnswerPoint,
   getBattleQuestionSubtitle,
   getBattleQuestionTitle,
+  isForeignBattleQuestion,
   isLocationOnlyBattleQuestion,
   isStandardBattleQuestion,
 } from "~/lib/battle-question";
@@ -25,6 +26,8 @@ import {
 import { type GameModeSlug } from "~/lib/game-mode";
 import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
 import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
+import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
+import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 
 interface Props {
   result: BattleRoundResult;
@@ -68,6 +71,7 @@ export function BattleRoundResultView({
       : null;
   const showMap = questionType === "historical" && historicalQuestion !== null;
   const showLocationOnlyMap = locationOnlyAnswer !== null;
+  const showForeignMap = isForeignBattleQuestion(question);
   const yearEnd = standardQuestion
     ? getQuestionYearEnd(standardQuestion)
     : undefined;
@@ -245,15 +249,28 @@ export function BattleRoundResultView({
             className="w-full border-b border-stone-700"
             style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           >
-            <BaiduGuessMap
-              guess={locationOnlyGuess}
-              answer={locationOnlyAnswer}
-              answerLabel={locationOnlyAnswer.label}
-              distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
-              disabled
-              minHeightClass="min-h-0"
-              onGuess={() => undefined}
-            />
+            {showForeignMap ? (
+              <GoogleGuessMap
+                country={DEFAULT_FOREIGN_COUNTRY}
+                guess={locationOnlyGuess}
+                answer={locationOnlyAnswer}
+                answerLabel={locationOnlyAnswer.label}
+                distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
+                disabled
+                minHeightClass="min-h-0"
+                onGuess={() => undefined}
+              />
+            ) : (
+              <BaiduGuessMap
+                guess={locationOnlyGuess}
+                answer={locationOnlyAnswer}
+                answerLabel={locationOnlyAnswer.label}
+                distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
+                disabled
+                minHeightClass="min-h-0"
+                onGuess={() => undefined}
+              />
+            )}
           </div>
         )}
 

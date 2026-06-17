@@ -11,3 +11,4 @@
 | [Mini Program API](./miniprogram-api.md)                                | WeChat Mini Program BFF routes, auth, DB, env, and error contracts | Active |
 | [History Game Question Contracts](./history-game-question-contracts.md) | History year-mode tRPC question and scoring contracts              | Active |
 | [History Tuxun Street View Cache](./history-tuxun-street-view-cache.md) | Baidu street-view scene cache DB, tRPC, and fallback contracts     | Active |
+| [Battle Room Session Contracts](./battle-room-session-contracts.md)     | Battle room state API, start sync, and empty-room cleanup          | Active |

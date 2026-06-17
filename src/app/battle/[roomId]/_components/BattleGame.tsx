@@ -16,8 +16,11 @@ import {
   scoreRound,
 } from "~/lib/scoring";
 import { generateRandomTuxunLocations } from "~/lib/baidu-panorama";
+import { generateRandomForeignLocations } from "~/lib/google-street-view";
+import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import {
   isBaiduStreetViewTuxunLocation,
+  isGoogleStreetViewTuxunLocation,
   type TuxunLocation,
 } from "~/lib/tuxun-locations";
 import {
@@ -29,6 +32,7 @@ import {
 } from "~/lib/history-tuxun-puzzle";
 import {
   getBattleAnswerPoint,
+  isForeignBattleQuestion,
   isHistoryTuxunBattleQuestion,
   isLocationOnlyBattleQuestion,
   isStandardBattleQuestion,
@@ -36,8 +40,10 @@ import {
 } from "~/lib/battle-question";
 import {
   type BattlePhase,
+  type BattleForeignQuestion,
   type BattlePlayer,
   type BattleQuestion,
+  type BattleRoomSnapshot,
   type BattleSettings,
   type BattleTuxunQuestion,
   type BattleHistoryTuxunQuestion,
@@ -46,6 +52,7 @@ import {
   type PusherPlayerJoined,
   type PusherRoomSettings,
   type PusherRequestRoomSettings,
+  type PusherGameStarting,
   type PusherGameStarted,
   type PusherRoundStarted,
   type PusherGuessSubmitted,
@@ -66,6 +73,7 @@ import { QuizPanel } from "~/app/game/_components/QuizPanel";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import { BaiduPanorama } from "~/app/game/tuxun/_components/BaiduPanorama";
 import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
+import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
 import { type PlayerAvatar } from "~/types/player";
 import { type CharacterConfig } from "~/types/character";
 import { api } from "~/trpc/react";
@@ -82,6 +90,17 @@ function buildBattleTuxunQuestion(
   return {
     id: `tuxun:${location.id}`,
     type: "tuxun",
+    title: location.title,
+    location,
+  };
+}
+
+function buildBattleForeignQuestion(
+  location: TuxunLocation,
+): BattleForeignQuestion {
+  return {
+    id: `foreign:${location.id}`,
+    type: "foreign",
     title: location.title,
     location,
   };
@@ -242,7 +261,9 @@ function calcDamage(
   modeType: BattleSettings["questionType"],
 ): number {
   const diff = Math.abs(scoreA - scoreB);
-  return modeType === "tuxun" || modeType === "history-tuxun"
+  return modeType === "tuxun" ||
+    modeType === "foreign" ||
+    modeType === "history-tuxun"
     ? Math.floor(diff / 5)
     : Math.floor(diff / 500);
 }
@@ -266,6 +287,47 @@ interface BattleQuestionLoadResult {
   questions: BattleQuestion[];
   questionIds?: string[];
   error?: string;
+}
+
+type BattleRoomApiResponse = {
+  room?: BattleRoomSnapshot;
+  error?: string;
+};
+
+function battleRoomUrl(roomId: string) {
+  return `/api/battle/rooms/${encodeURIComponent(roomId)}`;
+}
+
+async function postBattleRoomAction(
+  roomId: string,
+  body: Record<string, unknown>,
+): Promise<BattleRoomSnapshot | null> {
+  const response = await fetch(battleRoomUrl(roomId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => ({}))) as
+    | BattleRoomApiResponse
+    | { closed?: boolean; snapshot?: BattleRoomSnapshot | null };
+  if (!response.ok) {
+    const message =
+      "error" in payload && payload.error ? payload.error : "房间状态同步失败";
+    throw new Error(message);
+  }
+  if ("room" in payload) return payload.room ?? null;
+  if ("snapshot" in payload) return payload.snapshot ?? null;
+  return null;
+}
+
+async function fetchBattleRoomSnapshot(
+  roomId: string,
+): Promise<BattleRoomSnapshot | null> {
+  const response = await fetch(battleRoomUrl(roomId), { cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("房间状态同步失败");
+  const payload = (await response.json()) as BattleRoomApiResponse;
+  return payload.room ?? null;
 }
 
 function getOrCreatePlayerId(): string {
@@ -332,6 +394,7 @@ export function BattleGame({
   const [streetViewError, setStreetViewError] = useState("");
   const [lobbySynced, setLobbySynced] = useState(isHost);
   const [gameSyncing, setGameSyncing] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [roundReady, setRoundReady] = useState<Record<string, boolean>>({});
 
   const playersRef = useRef(players);
@@ -442,6 +505,27 @@ export function BattleGame({
     });
   }
 
+  function getLocalPlayer(): BattlePlayer {
+    const existing = playersRef.current[myId.current];
+    return {
+      id: myId.current,
+      userId: playerUserId,
+      name: playerName,
+      avatar: playerAvatar,
+      character: playerCharacter,
+      hp: existing?.hp ?? settingsRef.current.startingHp,
+      isHost,
+    };
+  }
+
+  function applyRoomLobbyState(snapshot: BattleRoomSnapshot) {
+    setSettings(snapshot.settings);
+    settingsRef.current = snapshot.settings;
+    setPlayers(snapshot.players);
+    playersRef.current = snapshot.players;
+    setLobbySynced(true);
+  }
+
   function applyGameStarted(
     settings: BattleSettings,
     players: Record<string, BattlePlayer>,
@@ -490,6 +574,36 @@ export function BattleGame({
     } finally {
       setGameSyncing(false);
     }
+  }
+
+  async function applyRoomSnapshot(snapshot: BattleRoomSnapshot) {
+    if (snapshot.phase === "closed") return;
+
+    if (snapshot.phase === "lobby" || snapshot.phase === "starting") {
+      applyRoomLobbyState(snapshot);
+      setGameSyncing(snapshot.phase === "starting");
+      if (snapshot.phase === "lobby") setIsStarting(false);
+      return;
+    }
+
+    if (snapshot.phase !== "playing") return;
+    if (phaseRef.current !== "lobby" && questionsRef.current.length > 0) {
+      return;
+    }
+
+    if (snapshot.roundIndex == null || snapshot.startTime == null) {
+      setLobbyError("房间已开局，但题目状态不完整，请重新创建房间");
+      return;
+    }
+
+    await handleRemoteGameStarted({
+      settings: snapshot.settings,
+      players: snapshot.players,
+      questionIds: snapshot.questionIds,
+      questions: snapshot.questions,
+      roundIndex: snapshot.roundIndex,
+      startTime: snapshot.startTime,
+    });
   }
 
   function beginRound(roundIndex: number, startTime: number) {
@@ -674,6 +788,18 @@ export function BattleGame({
       broadcastRoomSettings();
     });
 
+    ch.bind("game-starting", (data: PusherGameStarting) => {
+      if (isHost) return;
+      applyRoomLobbyState({
+        roomId,
+        phase: "starting",
+        settings: data.settings,
+        players: data.players,
+        updatedAt: Date.now(),
+      });
+      setGameSyncing(true);
+    });
+
     ch.bind("game-started", (data: PusherGameStarted) => {
       // 房主已在本地开局，忽略 Pusher 回传
       if (isHost) return;
@@ -733,6 +859,88 @@ export function BattleGame({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function joinRoom() {
+      try {
+        const snapshot = await postBattleRoomAction(roomId, {
+          action: "join",
+          player: getLocalPlayer(),
+          settings: isHost ? settingsRef.current : undefined,
+        });
+        if (active && snapshot) await applyRoomSnapshot(snapshot);
+      } catch (error) {
+        if (!active) return;
+        setLobbyError(
+          error instanceof Error ? error.message : "加入房间状态同步失败",
+        );
+      }
+    }
+
+    void joinRoom();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "lobby") return;
+    let active = true;
+
+    async function syncRoom() {
+      try {
+        const snapshot = await fetchBattleRoomSnapshot(roomId);
+        if (active && snapshot) await applyRoomSnapshot(snapshot);
+      } catch {
+        // Pusher remains the primary live channel; polling is a recovery path.
+      }
+    }
+
+    void syncRoom();
+    const interval = window.setInterval(() => {
+      void syncRoom();
+    }, 1000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, roomId]);
+
+  useEffect(() => {
+    const url = battleRoomUrl(roomId);
+
+    function leaveRoom() {
+      const body = JSON.stringify({
+        action: "leave",
+        playerId: myId.current,
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(
+          url,
+          new Blob([body], { type: "application/json" }),
+        );
+        return;
+      }
+
+      void fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        keepalive: true,
+      });
+    }
+
+    window.addEventListener("pagehide", leaveRoom);
+    return () => {
+      window.removeEventListener("pagehide", leaveRoom);
+      leaveRoom();
+    };
+  }, [roomId]);
 
   useEffect(() => {
     if (phase !== "lobby") return;
@@ -804,6 +1012,33 @@ export function BattleGame({
     };
   }
 
+  async function loadForeignBattleQuestions(
+    count: number,
+  ): Promise<BattleQuestionLoadResult> {
+    const result = await generateRandomForeignLocations(
+      count,
+      DEFAULT_FOREIGN_COUNTRY,
+    );
+    const streetViewLocations = result.locations.filter(
+      isGoogleStreetViewTuxunLocation,
+    );
+
+    if (streetViewLocations.length < count) {
+      return {
+        questions: [],
+        error:
+          result.message ??
+          `只匹配到 ${streetViewLocations.length} / ${count} 个 Google 日本街景点，未开始本局；请重新生成。`,
+      };
+    }
+
+    return {
+      questions: streetViewLocations
+        .slice(0, count)
+        .map(buildBattleForeignQuestion),
+    };
+  }
+
   async function loadHistoryTuxunBattleQuestions(
     count: number,
   ): Promise<BattleQuestionLoadResult> {
@@ -871,6 +1106,10 @@ export function BattleGame({
       return loadTuxunBattleQuestions(nextSettings.rounds);
     }
 
+    if (nextSettings.questionType === "foreign") {
+      return loadForeignBattleQuestions(nextSettings.rounds);
+    }
+
     if (nextSettings.questionType === "history-tuxun") {
       return loadHistoryTuxunBattleQuestions(nextSettings.rounds);
     }
@@ -896,22 +1135,43 @@ export function BattleGame({
   }
 
   async function handleStartGame() {
-    try {
-      setLobbyError("");
-      const loaded = await loadBattleQuestions(settings);
-      if (loaded.error || loaded.questions.length < settings.rounds) {
-        setLobbyError(loaded.error ?? "题库题目不足");
-        return;
-      }
+    if (isStarting || playerList.length < 2) return;
 
-      const initialPlayers: Record<string, BattlePlayer> = {};
-      for (const [pid, p] of Object.entries(players)) {
-        initialPlayers[pid] = { ...p, hp: settings.startingHp };
+    const nextSettings = settingsRef.current;
+    const initialPlayers: Record<string, BattlePlayer> = {};
+    for (const [pid, p] of Object.entries(playersRef.current)) {
+      initialPlayers[pid] = { ...p, hp: nextSettings.startingHp };
+    }
+
+    try {
+      setIsStarting(true);
+      setGameSyncing(true);
+      setLobbyError("");
+
+      await postBattleRoomAction(roomId, {
+        action: "starting",
+        settings: nextSettings,
+        players: initialPlayers,
+      });
+      void sendPusherEvent(channel, "game-starting", {
+        settings: nextSettings,
+        players: initialPlayers,
+      } satisfies PusherGameStarting).catch(() => undefined);
+
+      const loaded = await loadBattleQuestions(nextSettings);
+      if (loaded.error || loaded.questions.length < nextSettings.rounds) {
+        setLobbyError(loaded.error ?? "题库题目不足");
+        setGameSyncing(false);
+        setIsStarting(false);
+        await postBattleRoomAction(roomId, { action: "cancel-start" }).catch(
+          () => undefined,
+        );
+        return;
       }
 
       const startTime = Date.now();
       const payload = {
-        settings,
+        settings: nextSettings,
         players: initialPlayers,
         questionIds: loaded.questionIds,
         questions: loaded.questionIds ? undefined : loaded.questions,
@@ -919,10 +1179,21 @@ export function BattleGame({
         startTime,
       } satisfies PusherGameStarted;
 
-      applyGameStarted(settings, initialPlayers, loaded.questions);
+      await postBattleRoomAction(roomId, {
+        action: "started",
+        ...payload,
+      });
+      await sendPusherEvent(channel, "game-started", payload).catch(
+        () => undefined,
+      );
+      applyGameStarted(nextSettings, initialPlayers, loaded.questions);
       beginRound(0, startTime);
-      await sendPusherEvent(channel, "game-started", payload);
     } catch (error) {
+      setGameSyncing(false);
+      setIsStarting(false);
+      await postBattleRoomAction(roomId, { action: "cancel-start" }).catch(
+        () => undefined,
+      );
       setLobbyError(
         error instanceof Error
           ? error.message
@@ -1064,14 +1335,18 @@ export function BattleGame({
           {isHost ? (
             <button
               onClick={handleStartGame}
-              disabled={playerList.length < 2}
+              disabled={playerList.length < 2 || isStarting}
               className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {playerList.length < 2 ? "等待对手…" : "开始游戏 ⚔️"}
+              {playerList.length < 2
+                ? "等待对手…"
+                : isStarting
+                  ? "正在生成题目…"
+                  : "开始游戏 ⚔️"}
             </button>
           ) : (
             <p className="text-center text-stone-400">
-              {gameSyncing ? "正在同步游戏，请稍候…" : "等待房主开始游戏…"}
+              {gameSyncing ? "房主正在生成题目，请稍候…" : "等待房主开始游戏…"}
             </p>
           )}
           {lobbyError && (
@@ -1143,6 +1418,7 @@ export function BattleGame({
         ? HISTORY_TUXUN_CLUE_INTERVAL_SECONDS -
           (roundElapsedSeconds % HISTORY_TUXUN_CLUE_INTERVAL_SECONDS)
         : null;
+    const isForeignQuestion = isForeignBattleQuestion(currentQuestion);
 
     return (
       <div className="flex h-screen flex-col bg-stone-900 text-white">
@@ -1174,6 +1450,16 @@ export function BattleGame({
               location={currentQuestion.location}
               onUnavailable={() =>
                 setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
+              }
+            />
+          ) : isForeignQuestion ? (
+            <GoogleStreetView
+              key={currentQuestion.id}
+              location={currentQuestion.location}
+              onUnavailable={() =>
+                setStreetViewError(
+                  "当前 Google 街景渲染失败，请返回大厅重新开局。",
+                )
               }
             />
           ) : (
@@ -1235,6 +1521,16 @@ export function BattleGame({
                   从道路、建筑、招牌和地形里找线索，在右下角百度地图中点选位置。
                 </p>
               </div>
+            ) : isForeignQuestion ? (
+              <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2">
+                <div className="text-sm font-semibold text-emerald-200">
+                  观察街景，猜它在日本哪里
+                </div>
+                <p className="mt-1 text-sm leading-6 text-stone-300">
+                  从道路、建筑、招牌和地形里找线索，在右下角 Google
+                  地图中点选位置。
+                </p>
+              </div>
             ) : (
               <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-amber-200">
@@ -1281,8 +1577,12 @@ export function BattleGame({
             title={
               isTuxunBattleQuestion(currentQuestion)
                 ? "图寻猜点"
-                : "历史图寻猜点"
+                : isForeignQuestion
+                  ? "日本地图猜点"
+                  : "历史图寻猜点"
             }
+            mapProvider={isForeignQuestion ? "google" : "baidu"}
+            country={DEFAULT_FOREIGN_COUNTRY}
           />
 
           {submitted && (

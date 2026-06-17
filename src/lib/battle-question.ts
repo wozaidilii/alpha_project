@@ -1,4 +1,5 @@
 import {
+  type BattleForeignQuestion,
   type BattleHistoryTuxunQuestion,
   type BattleQuestion,
   type BattleTuxunQuestion,
@@ -27,6 +28,12 @@ export function isTuxunBattleQuestion(
   return question.type === "tuxun";
 }
 
+export function isForeignBattleQuestion(
+  question: BattleQuestion,
+): question is BattleForeignQuestion {
+  return question.type === "foreign";
+}
+
 export function isHistoryTuxunBattleQuestion(
   question: BattleQuestion,
 ): question is BattleHistoryTuxunQuestion {
@@ -35,14 +42,20 @@ export function isHistoryTuxunBattleQuestion(
 
 export function isLocationOnlyBattleQuestion(
   question: BattleQuestion,
-): question is BattleTuxunQuestion | BattleHistoryTuxunQuestion {
+): question is
+  | BattleTuxunQuestion
+  | BattleForeignQuestion
+  | BattleHistoryTuxunQuestion {
   return (
-    isTuxunBattleQuestion(question) || isHistoryTuxunBattleQuestion(question)
+    isTuxunBattleQuestion(question) ||
+    isForeignBattleQuestion(question) ||
+    isHistoryTuxunBattleQuestion(question)
   );
 }
 
 export function getBattleQuestionTitle(question: BattleQuestion): string {
   if (isTuxunBattleQuestion(question)) return question.location.title;
+  if (isForeignBattleQuestion(question)) return question.location.title;
   if (isHistoryTuxunBattleQuestion(question)) {
     return question.playState.answerName;
   }
@@ -51,6 +64,9 @@ export function getBattleQuestionTitle(question: BattleQuestion): string {
 
 export function getBattleQuestionSubtitle(question: BattleQuestion): string {
   if (isTuxunBattleQuestion(question)) {
+    return `${question.location.province} · ${question.location.city}`;
+  }
+  if (isForeignBattleQuestion(question)) {
     return `${question.location.province} · ${question.location.city}`;
   }
   if (isHistoryTuxunBattleQuestion(question)) {
@@ -65,6 +81,13 @@ export function getBattleAnswerPoint(question: BattleQuestion): {
   label: string;
 } | null {
   if (isTuxunBattleQuestion(question)) {
+    return {
+      lat: question.location.lat,
+      lng: question.location.lng,
+      label: question.location.title,
+    };
+  }
+  if (isForeignBattleQuestion(question)) {
     return {
       lat: question.location.lat,
       lng: question.location.lng,

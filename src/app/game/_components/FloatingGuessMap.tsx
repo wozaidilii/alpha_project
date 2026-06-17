@@ -2,6 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { BaiduGuessMap } from "./BaiduGuessMap";
+import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
+import {
+  DEFAULT_FOREIGN_COUNTRY,
+  type ForeignCountryConfig,
+} from "~/lib/foreign-map";
 
 interface FloatingGuessMapProps {
   guessLat: number | null;
@@ -11,6 +16,8 @@ interface FloatingGuessMapProps {
   disabled: boolean;
   submitLabel?: string;
   title?: string;
+  mapProvider?: "baidu" | "google";
+  country?: ForeignCountryConfig;
 }
 
 export function FloatingGuessMap({
@@ -21,6 +28,8 @@ export function FloatingGuessMap({
   disabled,
   submitLabel = "提交猜测",
   title = "猜点地图",
+  mapProvider = "baidu",
+  country = DEFAULT_FOREIGN_COUNTRY,
 }: FloatingGuessMapProps) {
   const [expanded, setExpanded] = useState(false);
   const hasGuess = guessLat !== null && guessLng !== null;
@@ -50,12 +59,22 @@ export function FloatingGuessMap({
     >
       <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-stone-600 bg-stone-950 shadow-lg shadow-black/40">
         <div className="min-h-0 flex-1 bg-stone-900">
-          <BaiduGuessMap
-            guess={guess}
-            answer={null}
-            minHeightClass="min-h-0"
-            onGuess={(point) => onGuess(point.lat, point.lng)}
-          />
+          {mapProvider === "google" ? (
+            <GoogleGuessMap
+              country={country}
+              guess={guess}
+              answer={null}
+              minHeightClass="min-h-0"
+              onGuess={(point) => onGuess(point.lat, point.lng)}
+            />
+          ) : (
+            <BaiduGuessMap
+              guess={guess}
+              answer={null}
+              minHeightClass="min-h-0"
+              onGuess={(point) => onGuess(point.lat, point.lng)}
+            />
+          )}
         </div>
 
         <div

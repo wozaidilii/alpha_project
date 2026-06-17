@@ -12,6 +12,13 @@ export interface BattleTuxunQuestion {
   location: TuxunLocation;
 }
 
+export interface BattleForeignQuestion {
+  id: string;
+  type: "foreign";
+  title: string;
+  location: TuxunLocation;
+}
+
 export interface BattleHistoryTuxunQuestion {
   id: string;
   type: "history-tuxun";
@@ -22,7 +29,10 @@ export interface BattleHistoryTuxunQuestion {
 export type BattleQuestion =
   | GameQuestion
   | BattleTuxunQuestion
+  | BattleForeignQuestion
   | BattleHistoryTuxunQuestion;
+
+export type BattleRoomPhase = "lobby" | "starting" | "playing" | "closed";
 
 export type BattlePhase =
   | "lobby" // waiting for 2nd player
@@ -46,6 +56,20 @@ export interface BattleSettings {
   startingHp: number;
   /** 与个人模式一致的模式 */
   questionType: GameModeSlug;
+}
+
+export interface BattleRoomSnapshot {
+  roomId: string;
+  phase: BattleRoomPhase;
+  settings: BattleSettings;
+  players: Record<string, BattlePlayer>;
+  /** 普通题库模式仅同步 ID，加入方本地拉取完整题目，避免消息过大 */
+  questionIds?: string[];
+  /** 随机街景题需要同步完整题目，保证双方看到同一处街景 */
+  questions?: BattleQuestion[];
+  roundIndex?: number;
+  startTime?: number;
+  updatedAt: number;
 }
 
 export interface PlayerGuess {
@@ -92,6 +116,11 @@ export interface PusherRoomSettings {
 /** 加入方请求房主同步大厅设置 */
 export interface PusherRequestRoomSettings {
   playerId: string;
+}
+
+export interface PusherGameStarting {
+  settings: BattleSettings;
+  players: Record<string, BattlePlayer>;
 }
 
 export interface PusherGameStarted {

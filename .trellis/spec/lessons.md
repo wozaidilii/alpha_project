@@ -81,3 +81,10 @@
 - 根因：父组件计时器和 hover 状态会让浮动地图重渲染并新建 `guess` 对象，`BaiduGuessMap` 的 marker 同步 effect 随后对单个猜测点执行 `centerAndZoom(..., 7)`，覆盖了用户手动 zoom。
 - 修复：在 `FloatingGuessMap` 中 memoize `guess` 引用；答题阶段只有猜测点、没有答案点时只同步 marker，不再自动 center/zoom，也不绘制会遮挡街道的大范围圆形覆盖物。
 - 预防：第三方地图组件的 overlay 同步应和 viewport 同步分离；只有初始化、结果页 fit bounds 或明确用户动作才允许改变 center/zoom，普通 props 重渲染不能覆盖用户视角。
+
+## 服务端模块测试需要 mock server-only
+
+- 问题：为 `src/server/data/*` 增加 Vitest 单元测试时，导入带有 `import "server-only"` 的模块会在测试环境直接抛错，导致测试套件 0 tests 失败。
+- 根因：`server-only` 是 Next 的运行边界 marker 包，不是普通业务依赖；Vitest 直接导入服务端模块时不会自动按 Next Server Component 语义处理它。
+- 修复：在对应测试文件顶部使用 `vi.mock("server-only", () => ({}))`，只在测试环境替换 marker 包，保留生产代码的服务端边界。
+- 预防：后续给服务端 data/store 模块补测试时，先检查模块是否导入 `server-only`；如果有，测试入口要显式 mock marker 包，避免把框架边界误判成业务失败。

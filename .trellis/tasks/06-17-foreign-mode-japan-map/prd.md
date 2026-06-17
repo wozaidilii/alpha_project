@@ -18,7 +18,7 @@
 
 ## Assumptions
 
-- “国外模式”先做个人模式入口，不默认进入对战模式。
+- “国外模式”先做个人模式入口；用户后续要求加入对战模式，所以对战模式也纳入当前任务范围。
 - “允许选择国家”先提供国家选择控件与数据结构；MVP 只有日本一个可选项，后续可追加国家。
 - “新建一个日本地图”指新增日本国家配置、Google Street View 展示和 Google Maps 猜点/结果地图，不替换现有中国模式地图。
 - “范围限定到日本”要求初始化视野、拖拽边界、点击结果都限制在日本 bounds 内。
@@ -35,6 +35,10 @@
 - Google Maps API key 缺失或加载失败时，页面显示清晰错误，不崩溃。
 - Google Maps API key 使用 `NEXT_PUBLIC_GOOGLE_MAP_AK`。
 - 保留现有中国历史地理、图寻、历史图寻和对战模式行为。
+- 对战模式可选择国外模式，并复用日本 Google Street View 点位生成与猜点/结果地图体验。
+- 对战房主点击开始后，所有已加入玩家都应可靠进入游戏，不应只有房主进入。
+- 房主点击开始游戏不应因为前端逐个生成第三方街景点而长时间阻塞；多人应共享同一套已生成题目。
+- 房间内所有玩家退出后，应关闭/清理该对战 session，避免留下无人房间。
 
 ## Acceptance Criteria
 
@@ -47,6 +51,9 @@
 - [ ] 提交猜测后能看到结果地图、距离和本轮得分。
 - [ ] 未配置 Google Maps key 时显示配置提示。
 - [ ] 现有中国地图、百度图寻和历史图寻不被破坏。
+- [ ] 对战模式可以选择并开始国外模式，日本题目对所有房间玩家一致。
+- [ ] 两名玩家加入房间后，房主点击开始，双方都进入同一局游戏。
+- [ ] 所有玩家离开房间后，房间 session 被清理或关闭。
 - [ ] TypeScript、lint、相关测试通过。
 
 ## Definition of Done
@@ -63,7 +70,7 @@
 - Add Google Maps client loader and typed wrapper following the existing Baidu integration style.
 - Add Google Street View lookup/generator utilities that mirror the existing Baidu Tuxun generation contract.
 - Add dedicated Google Street View, Google guess map, and Google result map components, then wire them into a new foreign-mode page.
-- Keep the first implementation scoped to solo play unless explicitly expanded.
+- Extend the battle flow after the solo implementation: generate shared foreign-mode locations at start time, persist them in room state, and ensure clients react to the shared game-start state instead of local-only transitions.
 
 ## Decision (ADR-lite)
 
@@ -71,7 +78,7 @@
 
 **Decision**: Implement Japan as the first country in a reusable foreign-mode country catalog, with Google Street View for scene display and Google Maps for guess/result maps.
 
-**Consequences**: This is a larger first slice than a static map because it needs Google API loading, Street View availability checks, failure states, and result rendering. It preserves the right gameplay contract and keeps the country-selection model ready for more countries.
+**Consequences**: This is a larger first slice than a static map because it needs Google API loading, Street View availability checks, failure states, result rendering, and now a shared battle-room start contract. It preserves the right gameplay contract and keeps the country-selection model ready for more countries.
 
 ## Research References
 
@@ -82,4 +89,4 @@
 - Additional countries beyond Japan.
 - Replacing existing China / Baidu map modes.
 - Full international question bank or import pipeline.
-- Battle mode support unless explicitly included.
+- Additional battle-room matchmaking or persistence features beyond reliable start, shared locations, and empty-room cleanup.

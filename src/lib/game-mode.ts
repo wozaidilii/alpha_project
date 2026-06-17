@@ -88,7 +88,6 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     accentClass: "text-emerald-300",
     borderHoverClass: "hover:border-emerald-500",
     enabled: true,
-    battleEnabled: false,
   },
   "history-tuxun": {
     type: "history-tuxun",
