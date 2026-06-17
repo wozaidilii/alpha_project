@@ -14,6 +14,8 @@
     "db:import-famous": "node scripts/import-famous-questions.mjs",
     "db:import-location": "node scripts/import-location-questions.mjs",
     "db:push-location-remote": "node scripts/push-location-questions-remote.mjs",
+    "db:import-anime": "node scripts/import-anime-questions.mjs",
+    "db:push-anime-remote": "node scripts/push-anime-questions-remote.mjs",
     "images:upload": "node scripts/upload-event-images.mjs",
     "dev": "next dev --turbo",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",

@@ -24,10 +24,10 @@ export default function GameModePage() {
             <div>
               <div className="text-xl font-bold text-amber-300">个人模式</div>
               <div className="text-sm text-stone-300">
-                单人答题、图寻、国外模式、历史图寻和猜年份
+                单人答题、图寻、国外模式、动漫寻图、历史图寻和猜年份
               </div>
               <div className="mt-3 text-xs leading-5 text-stone-500">
-                进入后选择历史地理、冷知识、图寻、国外模式、历史图寻或猜年份。
+                进入后选择历史地理、冷知识、图寻、国外模式、动漫寻图、历史图寻或猜年份。
               </div>
             </div>
           </Link>

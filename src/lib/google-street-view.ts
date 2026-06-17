@@ -143,7 +143,7 @@ declare global {
   }
 }
 
-interface GoogleStreetViewLookupResult {
+export interface GoogleStreetViewLookupResult {
   point: LatLng;
   panoId?: string;
 }
@@ -348,6 +348,55 @@ function getStreetViewNear(
       resolve(null);
     }
   });
+}
+
+function randomPointAroundCenter(center: LatLng, radiusKm: number): LatLng {
+  const angle = Math.random() * Math.PI * 2;
+  const distanceKm = Math.sqrt(Math.random()) * radiusKm;
+  const latOffset = (Math.cos(angle) * distanceKm) / 111;
+  const lngOffset =
+    (Math.sin(angle) * distanceKm) /
+    (111 * Math.cos((center.lat * Math.PI) / 180));
+
+  return {
+    lat: center.lat + latOffset,
+    lng: center.lng + lngOffset,
+  };
+}
+
+export async function findGoogleStreetViewNear(
+  center: LatLng,
+  radiusKm: number,
+  country: ForeignCountryConfig = DEFAULT_FOREIGN_COUNTRY,
+  candidateAttempts = 6,
+): Promise<GoogleStreetViewLookupResult | null> {
+  if (!GOOGLE_MAP_AK) {
+    throw new Error("未配置 Google Maps AK，无法匹配 Google 街景。");
+  }
+
+  await loadGoogleMapsScript(GOOGLE_MAP_AK);
+  const api = getGoogleMapsApi();
+  if (!api?.StreetViewService) {
+    throw new Error("Google Street View 服务未加载。");
+  }
+
+  const searchRadiusKm = Math.max(0.5, radiusKm);
+  const candidates = [
+    clampToBounds(center, country.bounds),
+    ...Array.from({ length: candidateAttempts }, () =>
+      clampToBounds(
+        randomPointAroundCenter(center, searchRadiusKm),
+        country.bounds,
+      ),
+    ),
+  ];
+
+  for (const candidate of candidates) {
+    const result = await getStreetViewNear(api, country, candidate);
+    if (result) return result;
+  }
+
+  return null;
 }
 
 function makeRandomLocation(

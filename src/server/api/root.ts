@@ -1,3 +1,4 @@
+import { animeTuxunRouter } from "~/server/api/routers/anime-tuxun";
 import { eventRouter } from "~/server/api/routers/event";
 import { funfactRouter } from "~/server/api/routers/funfact";
 import { locationTuxunRouter } from "~/server/api/routers/location-tuxun";
@@ -11,6 +12,7 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
+  animeTuxun: animeTuxunRouter,
   event: eventRouter,
   funfact: funfactRouter,
   locationTuxun: locationTuxunRouter,
