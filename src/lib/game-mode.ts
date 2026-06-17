@@ -3,6 +3,7 @@ import { type QuestionType } from "~/types/question";
 export type GameModeSlug =
   | QuestionType
   | "tuxun"
+  | "foreign"
   | "history-tuxun"
   | "history-year";
 
@@ -77,6 +78,18 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     borderHoverClass: "hover:border-sky-500",
     enabled: true,
   },
+  foreign: {
+    type: "foreign",
+    slug: "foreign",
+    title: "国外模式",
+    emoji: "🌏",
+    description: "Google 街景日本版 GeoGuessr，观察街景猜位置",
+    tagline: "Google 街景 + 日本地图猜点",
+    accentClass: "text-emerald-300",
+    borderHoverClass: "hover:border-emerald-500",
+    enabled: true,
+    battleEnabled: false,
+  },
   "history-tuxun": {
     type: "history-tuxun",
     slug: "history-tuxun",
@@ -123,6 +136,7 @@ export function isGameModeSlug(value: string): value is GameModeSlug {
   return (
     isQuestionType(value) ||
     value === "tuxun" ||
+    value === "foreign" ||
     value === "history-tuxun" ||
     value === "history-year"
   );

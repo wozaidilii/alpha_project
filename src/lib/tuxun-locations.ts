@@ -9,7 +9,7 @@ export interface TuxunLocation {
   heading: number;
   pitch: number;
   hint: string;
-  source?: "baidu-random" | "fallback" | "historical-event";
+  source?: "baidu-random" | "google-random" | "fallback" | "historical-event";
 }
 
 export const TUXUN_ROUNDS = 5;
@@ -155,6 +155,10 @@ export function pickTuxunLocations(count: number): TuxunLocation[] {
 
 export function isBaiduStreetViewTuxunLocation(location: TuxunLocation) {
   return location.source === "baidu-random";
+}
+
+export function isGoogleStreetViewTuxunLocation(location: TuxunLocation) {
+  return location.source === "google-random";
 }
 
 export function pickTuxunFallbackLocations(count: number): TuxunLocation[] {
