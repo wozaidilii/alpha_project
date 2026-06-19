@@ -172,3 +172,10 @@
 - 根因：回合中的 guesses、results、ready、next round 和 game-over 主要靠瞬时 Pusher 事件驱动，房间快照只保存开局状态；同时模块级内存 Map 在开发热更新或同进程重新加载时可能丢失引用。
 - 修复：把提交、结算、准备、换轮和结束都写入房间快照，客户端在所有阶段轮询并从快照恢复；同进程内存房间表挂到 `globalThis`，避免同一 Node 进程内的模块重载丢状态。
 - 预防：实时通道只能做低延迟通知，不能做唯一事实源；所有影响玩家进度的对战状态必须可从服务端快照重放。若部署为多实例/serverless，必须把房间状态迁移到 Redis 或数据库等跨实例持久层。
+
+## 网站图标更新不要只替换 favicon.ico
+
+- 问题：线上域名仍显示旧网站 icon，即使 `/favicon.ico` 已经部署为新文件。
+- 根因：浏览器会长期缓存 `/favicon.ico`，且不同设备会优先读取 PNG icon 或 Apple touch icon；页面 metadata 只声明了无版本的 `/favicon.ico`。
+- 修复：从占位动漫图重新生成 192/512 PNG、Apple touch PNG 和多尺寸 ICO，并在 Next metadata 中声明带版本 query 的 icon URL。
+- 预防：以后更新网站 icon 时，同时更新现代 PNG、touch icon、legacy ICO 和 versioned metadata；上线后用 curl 检查 HTML icon 标签和图标文件 hash。
