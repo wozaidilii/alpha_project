@@ -4,6 +4,11 @@ import {
   isAnimeLocale,
   type AnimeLocale,
 } from "~/lib/anime-locale";
+import {
+  ANIME_GUESSR_IMAGE_API_PREFIX as SHARED_ANIME_GUESSR_IMAGE_API_PREFIX,
+  buildAnimeGuessrLocalImageApiUrl,
+  buildAnimeGuessrRemoteImageUrl,
+} from "~/lib/anime-guessr-image-url";
 
 export const ANIME_GUESSR_ROUNDS = 5;
 export const ANIME_GUESSR_ROUND_OPTIONS = [5, 10] as const;
@@ -38,13 +43,11 @@ export const ANIME_GUESSR_IMAGE_BASE_URL =
   process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL;
 
 export function isAnimeGuessrLocalImagesEnabled() {
-  return (
-    process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES === "true" ||
-    process.env.NODE_ENV === "development"
-  );
+  return process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES === "true";
 }
 
-export const ANIME_GUESSR_IMAGE_API_PREFIX = "/api/anime-guessr-image";
+export const ANIME_GUESSR_IMAGE_API_PREFIX =
+  SHARED_ANIME_GUESSR_IMAGE_API_PREFIX;
 
 export interface AnimeGuessrQuestionText {
   title: string;
@@ -196,8 +199,7 @@ export function filterAnimeGuessrQuestionsByTier(
 ): AnimeGuessrQuestion[] {
   const maxDifficulty = getAnimeGuessrTierMaxDifficulty(tier);
   return questions.filter(
-    (question) =>
-      getAnimeGuessrQuestionDifficulty(question) <= maxDifficulty,
+    (question) => getAnimeGuessrQuestionDifficulty(question) <= maxDifficulty,
   );
 }
 
@@ -233,17 +235,18 @@ export function buildAnimeGuessrImageUrl(
   if (!imagePath) return undefined;
   if (/^https?:\/\//i.test(imagePath)) return imagePath;
 
-  const path = imagePath.replace(/^\/+/, "");
-  if (!path.startsWith("anime/")) return undefined;
-
   if (isAnimeGuessrLocalImagesEnabled()) {
-    return `${ANIME_GUESSR_IMAGE_API_PREFIX}/${path}`;
+    return buildAnimeGuessrLocalImageApiUrl(imagePath);
   }
 
-  if (!baseUrl) return undefined;
+  const remoteUrl = buildAnimeGuessrRemoteImageUrl(imagePath, baseUrl);
+  if (remoteUrl) return remoteUrl;
 
-  const base = baseUrl.replace(/\/+$/, "");
-  return `${base}/${path}`;
+  if (process.env.NODE_ENV === "development") {
+    return buildAnimeGuessrLocalImageApiUrl(imagePath);
+  }
+
+  return undefined;
 }
 
 export function buildGoogleMapsStreetViewUrl(question: AnimeGuessrQuestion) {
@@ -383,7 +386,9 @@ export function getStoredAnimeGuessrDifficultyTier(): AnimeGuessrDifficultyTier 
     return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
   }
   try {
-    const raw = window.localStorage.getItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(
+      ANIME_GUESSR_DIFFICULTY_STORAGE_KEY,
+    );
     if (!raw) return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
     return normalizeAnimeGuessrDifficultyTier(JSON.parse(raw));
   } catch {

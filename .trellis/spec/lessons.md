@@ -193,3 +193,10 @@
 - 根因：`GoogleGuessMap` 为了避免重复加载第三方 SDK，在结果态和游玩态复用同一个地图实例；结果态会 `fitBounds` 到猜测点和答案点，但下一题把 `guess` / `answer` 清空时只清除了 marker，没有把 viewport 重置到初始国家视野。
 - 修复：抽出 `syncGoogleGuessMapViewport`，在 `guess === null && answer === null` 时恢复国家初始 `center` / `zoom`，结果态仍按 guess/answer `fitBounds`，guess-only 状态不重置玩家当前视野。
 - 预防：复用第三方地图实例时，每个状态转换都要同步覆盖物和 viewport；尤其是 result -> playing 的空状态必须有显式 reset，并用单元测试锁定。
+
+## R2 图片 base URL 要兼容对象 key 层级
+
+- 问题：猜动漫图片上传到 R2 的 `anime-gussr/anime/` 后，答题界面没有正确显示线索图。
+- 根因：题库里存的是 `anime/...` 相对 key，前端依赖 `NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL` 拼接；如果 base URL 填到 `/anime` 层会生成重复 `/anime/anime/...`，而开发环境还会默认强制走本地 rawdata proxy，导致已配置 R2 时仍不请求远程图片。
+- 修复：抽出共享图片 URL helper，统一规范 `anime-gussr/anime/...` 和 `anime/...` key，兼容 bucket root、bucket path 和已到 `/anime` 层的 public base；配置了 public base 时优先直接加载 R2，未配置时开发环境才走本地 proxy。
+- 预防：所有客户端题图 URL 都必须通过共享 helper 拼接，并用测试覆盖 bucket-root、path-prefix、`/anime` 结尾和 bucket-name pasted key；R2 base 必须是无需 Authorization 的 public URL，不要使用 catalog 地址。

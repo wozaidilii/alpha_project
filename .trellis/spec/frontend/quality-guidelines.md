@@ -312,6 +312,8 @@ buildQuestionImageUrl(imagePath?: string, baseUrl?: string): string | undefined;
 - Missing public image base URL -> render a non-crashing placeholder and keep the question playable.
 - Object storage URLs used directly by `<img>` must be readable by a normal browser request without `Authorization`.
 - Storage endpoints that return `401 Missing Authorization header` are not valid direct image bases; use a public R2 custom domain, `r2.dev` public URL, signed app proxy, or another browser-readable CDN URL instead.
+- URL helpers must tolerate common R2 configuration variants: bucket-root bases such as `https://pub-...r2.dev`, path-prefixed bases such as `https://cdn.example.com/anime-gussr`, and bases already ending in `/anime`. The final URL must not duplicate the `anime/` object-key segment.
+- Development should not force local file proxying when a public image base URL is configured; use local images only when explicitly requested or when no public base is available.
 - Wrangler R2 object uploads must include `--remote`; without it Wrangler can write to local simulation state instead of the Cloudflare bucket.
 - Do not commit real storage tokens, signed URLs, or user-local source paths into question payloads.
 
@@ -332,6 +334,7 @@ buildQuestionImageUrl(imagePath?: string, baseUrl?: string): string | undefined;
 #### 6. Tests Required
 
 - Unit tests for URL joining, missing-base behavior, and data guard functions.
+- Unit tests for path normalization across bucket-prefix variants, including bases that already end with `/anime` and object keys pasted as `anime-gussr/anime/...`.
 - For upload scripts, run syntax/help checks and upload one known small object before sharing the command.
 - Build/type-check after adding public env keys or generated payload types.
 - Browser smoke for the mode entry and image fallback when the public image base is absent or inaccessible.

@@ -9,6 +9,7 @@ import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
 import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
 import {
   ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   ANIME_GUESSR_ROUNDS,
   buildAnimeGuessrImageUrl,
   buildGoogleMapsStreetViewUrl,
@@ -192,21 +193,21 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     difficultyLabel: "难度档位",
     difficultyOption: (tier) =>
       (
-        {
+        ({
           beginner: "入门",
           intermediate: "进阶",
           master: "大师",
           miracle: "神迹",
-        } satisfies Record<AnimeGuessrDifficultyTier, string>
+        }) satisfies Record<AnimeGuessrDifficultyTier, string>
       )[tier],
     difficultyHint: (tier) =>
       (
-        {
+        ({
           beginner: "仅包含难度 1 的题目。",
           intermediate: "包含难度 1 与 2 的题目。",
           master: "包含难度 1、2、3 的题目。",
           miracle: "包含全部难度题目。",
-        } satisfies Record<AnimeGuessrDifficultyTier, string>
+        }) satisfies Record<AnimeGuessrDifficultyTier, string>
       )[tier],
     animeClue: "动漫线索",
     scene: "场景",
@@ -236,8 +237,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     resultLine: (location, distance, elapsed) =>
       `${location} · 偏差 ${distance} · 用时 ${elapsed}`,
     scoreUnit: "分",
-    scoreBreakthrough:
-      "精确度与用时都超乎寻常，本轮得分突破了常规满分上限。",
+    scoreBreakthrough: "精确度与用时都超乎寻常，本轮得分突破了常规满分上限。",
     scoreBreakthroughFinal: "本局有轮次突破了单轮满分上限。",
     ranks: {
       s: "圣地巡礼大师",
@@ -302,21 +302,21 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     difficultyLabel: "難易度",
     difficultyOption: (tier) =>
       (
-        {
+        ({
           beginner: "入門",
           intermediate: "進階",
           master: "マスター",
           miracle: "奇跡",
-        } satisfies Record<AnimeGuessrDifficultyTier, string>
+        }) satisfies Record<AnimeGuessrDifficultyTier, string>
       )[tier],
     difficultyHint: (tier) =>
       (
-        {
+        ({
           beginner: "難易度 1 の問題のみ。",
           intermediate: "難易度 1 と 2 の問題。",
           master: "難易度 1、2、3 の問題。",
           miracle: "すべての難易度の問題。",
-        } satisfies Record<AnimeGuessrDifficultyTier, string>
+        }) satisfies Record<AnimeGuessrDifficultyTier, string>
       )[tier],
     animeClue: "アニメヒント",
     scene: "シーン",
@@ -349,7 +349,8 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     scoreUnit: "点",
     scoreBreakthrough:
       "精度とスピードが際立っているため、このラウンドは通常上限を超えて得点しました。",
-    scoreBreakthroughFinal: "この対局では満点上限を超えたラウンドがありました。",
+    scoreBreakthroughFinal:
+      "この対局では満点上限を超えたラウンドがありました。",
     ranks: {
       s: "聖地巡礼マスター",
       a: "ロケ地ハンター",
@@ -415,21 +416,21 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     difficultyLabel: "Difficulty",
     difficultyOption: (tier) =>
       (
-        {
+        ({
           beginner: "Beginner",
           intermediate: "Intermediate",
           master: "Master",
           miracle: "Miracle",
-        } satisfies Record<AnimeGuessrDifficultyTier, string>
+        }) satisfies Record<AnimeGuessrDifficultyTier, string>
       )[tier],
     difficultyHint: (tier) =>
       (
-        {
+        ({
           beginner: "Difficulty 1 questions only.",
           intermediate: "Difficulty 1 and 2 questions.",
           master: "Difficulty 1, 2, and 3 questions.",
           miracle: "All difficulty levels.",
-        } satisfies Record<AnimeGuessrDifficultyTier, string>
+        }) satisfies Record<AnimeGuessrDifficultyTier, string>
       )[tier],
     animeClue: "Anime clue",
     scene: "Scene",
@@ -570,28 +571,39 @@ function AuthPromptModal({
 function AnimeClueImage({
   question,
   text,
+  imageUnavailable,
+  imageMissingBase,
 }: {
   question: AnimeGuessrQuestion;
   text: AnimeGuessrQuestionText;
+  imageUnavailable: string;
+  imageMissingBase: string;
 }) {
   const [failed, setFailed] = useState(false);
   const imageUrl = buildAnimeGuessrImageUrl(question.imagePath);
+  const showPlaceholder = !imageUrl || failed;
+  const displayImageUrl = showPlaceholder
+    ? ANIME_GUESSR_PLACEHOLDER_IMAGE_URL
+    : imageUrl;
 
   useEffect(() => {
     setFailed(false);
   }, [question.id]);
 
-  if (!imageUrl || failed) return null;
-
   return (
     <div className="relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-black/40">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={imageUrl}
+        src={displayImageUrl}
         alt={text.title}
         className="h-full w-full object-cover"
         onError={() => setFailed(true)}
       />
+      {showPlaceholder && (
+        <div className="absolute right-2 bottom-2 left-2 rounded-lg border border-white/10 bg-slate-950/90 px-2 py-1.5 text-[11px] leading-4 text-pink-50/80">
+          {imageUrl ? imageUnavailable : imageMissingBase}
+        </div>
+      )}
     </div>
   );
 }
@@ -616,12 +628,10 @@ export default function AnimeGuessrPage() {
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [results, setResults] = useState<AnimeRoundResult[]>([]);
-  const [roundCount, setRoundCount] = useState<AnimeGuessrRoundCount>(
-    ANIME_GUESSR_ROUNDS,
-  );
-  const [difficultyTier, setDifficultyTier] = useState<AnimeGuessrDifficultyTier>(
-    ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
-  );
+  const [roundCount, setRoundCount] =
+    useState<AnimeGuessrRoundCount>(ANIME_GUESSR_ROUNDS);
+  const [difficultyTier, setDifficultyTier] =
+    useState<AnimeGuessrDifficultyTier>(ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER);
   const roundStartedAtRef = useRef(Date.now());
   const recordedStartKeyRef = useRef<string | null>(null);
   const recordedCompletionKeyRef = useRef<string | null>(null);
@@ -766,15 +776,15 @@ export default function AnimeGuessrPage() {
       .then((pool) => {
         if (!active) return;
         const eligible = filterAnimeGuessrQuestionsByTier(pool, difficultyTier);
-        const picked = pickAnimeGuessrQuestions(pool, roundCount, difficultyTier);
+        const picked = pickAnimeGuessrQuestions(
+          pool,
+          roundCount,
+          difficultyTier,
+        );
         if (picked.length < roundCount) {
           setLoadState("error");
           setLoadMessage(
-            copy.notEnoughQuestions(
-              picked.length,
-              roundCount,
-              eligible.length,
-            ),
+            copy.notEnoughQuestions(picked.length, roundCount, eligible.length),
           );
           return;
         }
@@ -1157,7 +1167,9 @@ export default function AnimeGuessrPage() {
   if (phase === "final") {
     const standardMaxScore = roundCount * LOCATION_ROUND_SCORE_MAX;
     const absoluteMaxScore = roundCount * LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX;
-    const hasScoreBreakthrough = results.some((result) => result.scoreBreakthrough);
+    const hasScoreBreakthrough = results.some(
+      (result) => result.scoreBreakthrough,
+    );
     const rank = getRank(totalScore, locale);
     const guestModeBest = guestProgress
       ? getGuestBestScoreForRounds(guestProgress, roundCount)
@@ -1209,9 +1221,7 @@ export default function AnimeGuessrPage() {
               </div>
             ) : null}
             <div className="mt-3 text-sm font-bold text-cyan-100/80">
-              {copy.totalElapsed(
-                formatAnimeGameCountdown(totalElapsedSeconds),
-              )}
+              {copy.totalElapsed(formatAnimeGameCountdown(totalElapsedSeconds))}
             </div>
             {!session && guestProgress && (
               <div className="mt-4 rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">
@@ -1373,7 +1383,12 @@ export default function AnimeGuessrPage() {
 
         {!roundResult && current && currentText && (
           <aside className="anime-panel absolute top-4 left-4 z-20 flex max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] flex-col gap-3 overflow-y-auto p-4">
-            <AnimeClueImage question={current} text={currentText} />
+            <AnimeClueImage
+              question={current}
+              text={currentText}
+              imageUnavailable={copy.imageUnavailable}
+              imageMissingBase={copy.imageMissingBase}
+            />
 
             <div>
               <div className="text-sm font-bold text-cyan-100/70">
@@ -1383,7 +1398,9 @@ export default function AnimeGuessrPage() {
                 {currentText.animeTitle}
               </h2>
               {current.year != null && (
-                <div className="mt-1 text-sm text-pink-50/60">{current.year}</div>
+                <div className="mt-1 text-sm text-pink-50/60">
+                  {current.year}
+                </div>
               )}
             </div>
 

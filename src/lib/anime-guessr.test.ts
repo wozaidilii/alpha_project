@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
@@ -94,6 +94,38 @@ describe("anime-guessr", () => {
     ).toBe("https://example.com/anime-gussr/anime/51_CLANNAD/5c4dgq9pm.jpg");
   });
 
+  it("does not duplicate the anime path when the public base already includes it", () => {
+    expect(
+      buildAnimeGuessrImageUrl(
+        "anime/51_CLANNAD/5c4dgq9pm.jpg",
+        "https://example.com/anime-gussr/anime/",
+      ),
+    ).toBe("https://example.com/anime-gussr/anime/51_CLANNAD/5c4dgq9pm.jpg");
+  });
+
+  it("accepts object keys pasted with the bucket prefix", () => {
+    expect(
+      buildAnimeGuessrImageUrl(
+        "anime-gussr/anime/51_CLANNAD/5c4dgq9pm.jpg",
+        "https://example.com/",
+      ),
+    ).toBe("https://example.com/anime/51_CLANNAD/5c4dgq9pm.jpg");
+  });
+
+  it("uses the configured public base in development unless local images are explicitly enabled", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES", "false");
+
+    expect(
+      buildAnimeGuessrImageUrl(
+        "anime/51_CLANNAD/5c4dgq9pm.jpg",
+        "https://example.com/anime-gussr/",
+      ),
+    ).toBe("https://example.com/anime-gussr/anime/51_CLANNAD/5c4dgq9pm.jpg");
+
+    vi.unstubAllEnvs();
+  });
+
   it("uses the local image API route when local images are enabled", () => {
     const previousFlag = process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES;
     process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES = "true";
@@ -157,7 +189,10 @@ describe("anime-guessr", () => {
     const unrated = { ...sampleQuestion, id: "unrated", difficulty: undefined };
 
     expect(
-      filterAnimeGuessrQuestionsByTier([easy, medium, hard, unrated], "beginner"),
+      filterAnimeGuessrQuestionsByTier(
+        [easy, medium, hard, unrated],
+        "beginner",
+      ),
     ).toEqual([easy]);
     expect(
       filterAnimeGuessrQuestionsByTier([easy, medium, hard], "intermediate"),
@@ -179,7 +214,8 @@ describe("anime-guessr", () => {
   });
 
   it("accepts questions without a year", () => {
-    const { year: _year, ...withoutYear } = sampleQuestion;
+    const withoutYear: Partial<AnimeGuessrQuestion> = { ...sampleQuestion };
+    delete withoutYear.year;
     expect(isAnimeGuessrQuestion(withoutYear)).toBe(true);
   });
 
