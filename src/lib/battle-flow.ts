@@ -28,6 +28,42 @@ export function hasSingleRemainingBattlePlayer(
   return aliveCount <= 1;
 }
 
+export function mergeBattlePlayersPreservingLowerHp(
+  current: Record<string, BattlePlayer>,
+  incoming: Record<string, BattlePlayer>,
+) {
+  const next: Record<string, BattlePlayer> = { ...incoming };
+
+  for (const [id, currentPlayer] of Object.entries(current)) {
+    const incomingPlayer = next[id];
+    if (!incomingPlayer) continue;
+    next[id] = {
+      ...incomingPlayer,
+      hp: Math.min(incomingPlayer.hp, currentPlayer.hp),
+    };
+  }
+
+  return next;
+}
+
+export function applyBattleHpSnapshotPreservingLowerHp(
+  current: Record<string, BattlePlayer>,
+  hpByPlayer: Record<string, number>,
+) {
+  const next = { ...current };
+
+  for (const [id, hp] of Object.entries(hpByPlayer)) {
+    const player = next[id];
+    if (!player) continue;
+    next[id] = {
+      ...player,
+      hp: Math.min(player.hp, hp),
+    };
+  }
+
+  return next;
+}
+
 export function shouldFinishBattleFromResult({
   roundIndex,
   settings,

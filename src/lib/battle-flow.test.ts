@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyBattleHpSnapshotPreservingLowerHp,
   areBattlePlayersReady,
   isBattleFinalRound,
+  mergeBattlePlayersPreservingLowerHp,
   shouldFinishBattleFromResult,
 } from "./battle-flow";
 import { type BattlePlayer, type BattleSettings } from "~/types/battle";
@@ -103,5 +105,41 @@ describe("battle flow helpers", () => {
         roundReady: {},
       }),
     ).toBe(true);
+  });
+
+  it("does not raise HP when an older player snapshot arrives", () => {
+    expect(
+      mergeBattlePlayersPreservingLowerHp(
+        {
+          host: player("host", 64),
+          guest: player("guest", 40),
+        },
+        {
+          host: player("host", 100),
+          guest: player("guest", 100),
+        },
+      ),
+    ).toMatchObject({
+      host: { hp: 64 },
+      guest: { hp: 40 },
+    });
+  });
+
+  it("does not raise HP from a stale final HP snapshot", () => {
+    expect(
+      applyBattleHpSnapshotPreservingLowerHp(
+        {
+          host: player("host", 64),
+          guest: player("guest", 40),
+        },
+        {
+          host: 100,
+          guest: 10,
+        },
+      ),
+    ).toMatchObject({
+      host: { hp: 64 },
+      guest: { hp: 10 },
+    });
   });
 });

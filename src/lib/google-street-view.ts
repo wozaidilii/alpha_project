@@ -151,6 +151,12 @@ declare global {
   }
 }
 
+export type GoogleMapsLanguage = "zh-CN" | "ja" | "en";
+
+export interface GoogleMapsScriptOptions {
+  language?: GoogleMapsLanguage;
+}
+
 export interface GoogleStreetViewLookupResult {
   point: LatLng;
   panoId?: string;
@@ -198,6 +204,7 @@ export function googleBoundsForCountry(country: ForeignCountryConfig) {
 
 export function loadGoogleMapsScript(
   ak: string | undefined = GOOGLE_MAP_AK,
+  options: GoogleMapsScriptOptions = {},
 ): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("浏览器环境不可用"));
@@ -234,6 +241,9 @@ export function loadGoogleMapsScript(
       callback: "__histoguessrGoogleMapsReady",
       v: "weekly",
     });
+    if (options.language) {
+      params.set("language", options.language);
+    }
     const script = document.createElement("script");
     script.id = "google-maps-jsapi";
     script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;

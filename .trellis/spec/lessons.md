@@ -221,3 +221,10 @@
 - 根因：扣血逻辑把分差按模式缩放，导致扣除 HP 不是两边本轮分差；终局推进只由房主路径处理，且“淘汰到只剩一人”仍被 ready gate 挡住；Google Maps 默认 marker 颜色没有和 UI 图例对应。
 - 修复：抽出 `calcBattleDamage`、`shouldFinishBattleFromResult` 和 ready/final helper，扣血直接等于本轮最高分与玩家分数的差值，淘汰终局不等待 ready，最终结算可由任一客户端幂等写入；Google 结算 marker 改为绿色答案和琥珀猜测图钉。
 - 预防：battle 的计分、伤害、ready 和终局规则必须集中在可测 helper 中；组件只编排事件和渲染，不能把模式名单、存活判断或最终结算条件散落在 JSX/handler 分支里。
+
+## 对战同轮快照只能单调合并
+
+- 问题：对战中玩家已准备会弹回未准备，血量有时从扣血后的值回到 100；battle anime 的计分也低于个人猜动漫模式。
+- 根因：客户端轮询和 Pusher 事件顺序不稳定，旧 `round-result` 快照会直接覆盖本地 `roundReady` 和 `players.hp`；battle 的位置题计分没有传 `soloAnimeScoring: true`，与个人 anime 模式产生规则漂移。
+- 修复：同一结果轮的 ready 状态只合并不缩减，active battle HP 只允许降低不允许被旧快照抬高；battle anime 位置题改用共享 `calcBattleLocationScore`，内部复用个人模式的 solo anime 计分参数。
+- 预防：battle 客户端应用恢复快照时要按字段判断单调性：guesses/ready 可追加不可删除，HP 可降不可升，新回合才清空；玩法计分规则必须放进可测 helper，不要在个人模式和 battle 组件里分别手写参数。

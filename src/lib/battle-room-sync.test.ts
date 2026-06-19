@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getBattleSubmittedPlayers,
+  mergeBattleRoundReady,
   mergeBattleSubmittedGuesses,
 } from "./battle-room-sync";
 import { type PusherGuessSubmitted } from "~/types/battle";
@@ -46,5 +47,14 @@ describe("battle room sync helpers", () => {
     );
 
     expect(Object.keys(merged)).toEqual(["guest"]);
+  });
+
+  it("keeps local ready players when an older result snapshot arrives", () => {
+    expect(
+      mergeBattleRoundReady({ host: true, guest: true }, { host: true }),
+    ).toEqual({
+      host: true,
+      guest: true,
+    });
   });
 });

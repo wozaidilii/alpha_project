@@ -12,7 +12,6 @@ import { getTimelineBounds } from "~/lib/question-utils";
 import {
   calcSpeedMultiplier,
   haversineDistance,
-  locationRoundScore,
   scoreRound,
 } from "~/lib/scoring";
 import { generateRandomForeignLocations } from "~/lib/google-street-view";
@@ -94,13 +93,20 @@ import { type AnimeLocale, withAnimeLocale } from "~/lib/anime-locale";
 import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
 import {
   getBattleSubmittedPlayers,
+  mergeBattleRoundReady,
   mergeBattleSubmittedGuesses,
 } from "~/lib/battle-room-sync";
 import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
-import { calcBattleDamage } from "~/lib/battle-scoring";
+import { getGoogleMapsLanguage } from "~/lib/google-maps-language";
 import {
+  calcBattleDamage,
+  calcBattleLocationScore,
+} from "~/lib/battle-scoring";
+import {
+  applyBattleHpSnapshotPreservingLowerHp,
   areBattlePlayersReady,
   isBattleFinalRound,
+  mergeBattlePlayersPreservingLowerHp,
   shouldFinishBattleFromResult,
 } from "~/lib/battle-flow";
 
@@ -269,10 +275,11 @@ function calcLocationOnlyPlayerGuess(
     raw.lat,
     raw.lng,
   );
-  const score = locationRoundScore({
+  const score = calcBattleLocationScore({
+    question,
     distanceKm,
     elapsedSeconds,
-    speedCompensationWindowSeconds: timePerRound,
+    timePerRound,
   });
 
   return {
@@ -508,6 +515,7 @@ export function BattleGame({
 
   const copy = getBattleCopy(locale);
   const googleMapLabels = getGoogleGuessMapLabels(locale);
+  const googleMapsLanguage = getGoogleMapsLanguage(locale);
   const gameMode = getGameMode(settings.questionType);
   const gameModeText = gameMode ? getBattleModeText(gameMode, locale) : null;
   const battleLobbyUrl = withAnimeLocale("/battle", locale);
@@ -653,20 +661,27 @@ export function BattleGame({
   function syncRoomPlayState(snapshot: BattleRoomSnapshot) {
     setSettings(snapshot.settings);
     settingsRef.current = snapshot.settings;
-    setPlayers(snapshot.players);
-    playersRef.current = snapshot.players;
+    const nextPlayers = mergeBattlePlayersPreservingLowerHp(
+      playersRef.current,
+      snapshot.players,
+    );
+    setPlayers(nextPlayers);
+    playersRef.current = nextPlayers;
     replaceResults(snapshot.results);
-    roundReadyRef.current = snapshot.roundReady ?? {};
+    roundReadyRef.current =
+      snapshot.roundStatus === "round-result" &&
+      snapshot.roundIndex === currentRoundRef.current
+        ? mergeBattleRoundReady(roundReadyRef.current, snapshot.roundReady)
+        : (snapshot.roundReady ?? {});
     setRoundReady({ ...roundReadyRef.current });
     syncSubmittedPlayers(snapshot.guesses);
 
     if (snapshot.finalHp) {
       setPlayers((prev) => {
-        const next = { ...prev };
-        for (const [pid, hp] of Object.entries(snapshot.finalHp ?? {})) {
-          const existing = next[pid];
-          if (existing) next[pid] = { ...existing, hp };
-        }
+        const next = applyBattleHpSnapshotPreservingLowerHp(
+          prev,
+          snapshot.finalHp ?? {},
+        );
         playersRef.current = next;
         return next;
       });
@@ -1079,7 +1094,9 @@ export function BattleGame({
 
     ch.bind("round-ready", (data: PusherRoundReady) => {
       if (data.roundIndex !== currentRoundRef.current) return;
-      roundReadyRef.current[data.playerId] = true;
+      roundReadyRef.current = mergeBattleRoundReady(roundReadyRef.current, {
+        [data.playerId]: true,
+      });
       setRoundReady({ ...roundReadyRef.current });
       checkAllReadyAndProceed();
     });
@@ -1088,11 +1105,7 @@ export function BattleGame({
       gameOverRequestedRef.current = true;
       if (data.results.length > 0) replaceResults(data.results);
       setPlayers((prev) => {
-        const next = { ...prev };
-        for (const [pid, hp] of Object.entries(data.finalHp)) {
-          const existing = next[pid];
-          if (existing) next[pid] = { ...existing, hp };
-        }
+        const next = applyBattleHpSnapshotPreservingLowerHp(prev, data.finalHp);
         playersRef.current = next;
         return next;
       });
@@ -1749,6 +1762,7 @@ export function BattleGame({
             <GoogleStreetView
               key={currentQuestion.id}
               location={currentQuestion.location}
+              googleMapsLanguage={googleMapsLanguage}
               onUnavailable={() =>
                 setStreetViewError(copy.googleStreetViewFailed)
               }
@@ -1760,6 +1774,7 @@ export function BattleGame({
                 currentQuestion.question,
                 locale,
               )}
+              googleMapsLanguage={googleMapsLanguage}
               onUnavailable={() =>
                 setStreetViewError(copy.googleStreetViewFailed)
               }
@@ -1768,6 +1783,7 @@ export function BattleGame({
             <GoogleStreetView
               key={currentQuestion.id}
               location={toAnimeTuxunBattleStreetViewLocation(currentQuestion)}
+              googleMapsLanguage={googleMapsLanguage}
               onUnavailable={() =>
                 setStreetViewError(copy.googleStreetViewFailed)
               }
@@ -1929,6 +1945,7 @@ export function BattleGame({
             mapProvider="google"
             country={DEFAULT_FOREIGN_COUNTRY}
             googleMapLabels={googleMapLabels}
+            googleMapsLanguage={googleMapsLanguage}
           />
 
           {submitted && (

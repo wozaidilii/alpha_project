@@ -21,6 +21,7 @@ import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import { type AnimeLocale } from "~/lib/anime-locale";
 import { formatBattleDistance, getBattleCopy } from "~/lib/battle-copy";
 import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
+import { getGoogleMapsLanguage } from "~/lib/google-maps-language";
 import { areBattlePlayersReady } from "~/lib/battle-flow";
 
 interface Props {
@@ -46,6 +47,7 @@ export function BattleRoundResultView({
 }: Props) {
   const copy = getBattleCopy(locale);
   const mapLabels = getGoogleGuessMapLabels(locale);
+  const googleMapsLanguage = getGoogleMapsLanguage(locale);
   const { question } = result;
   const standardQuestion = isStandardBattleQuestion(question) ? question : null;
   const historicalQuestion =
@@ -189,6 +191,7 @@ export function BattleRoundResultView({
                 distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
                 disabled
                 labels={mapLabels}
+                googleMapsLanguage={googleMapsLanguage}
                 formatDistance={(distanceKm) =>
                   formatBattleDistance(distanceKm, locale)
                 }
@@ -216,6 +219,7 @@ export function BattleRoundResultView({
                 distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
                 disabled
                 labels={mapLabels}
+                googleMapsLanguage={googleMapsLanguage}
                 formatDistance={(distanceKm) =>
                   formatBattleDistance(distanceKm, locale)
                 }

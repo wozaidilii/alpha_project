@@ -5,6 +5,7 @@ import {
   GOOGLE_MAP_AK,
   getGoogleMapsApi,
   loadGoogleMapsScript,
+  type GoogleMapsLanguage,
   type GoogleStreetViewPanoramaInstance,
 } from "~/lib/google-street-view";
 import { type TuxunLocation } from "~/lib/tuxun-locations";
@@ -12,6 +13,7 @@ import { type TuxunLocation } from "~/lib/tuxun-locations";
 interface Props {
   location: TuxunLocation;
   allowMovement?: boolean;
+  googleMapsLanguage?: GoogleMapsLanguage;
   onUnavailable?: () => void;
 }
 
@@ -20,6 +22,7 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 export function GoogleStreetView({
   location,
   allowMovement = false,
+  googleMapsLanguage,
   onUnavailable,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,7 +43,7 @@ export function GoogleStreetView({
     let active = true;
     setState("loading");
 
-    void loadGoogleMapsScript(GOOGLE_MAP_AK)
+    void loadGoogleMapsScript(GOOGLE_MAP_AK, { language: googleMapsLanguage })
       .then(() => {
         if (!active || !containerRef.current) return;
         const api = getGoogleMapsApi();
@@ -91,6 +94,7 @@ export function GoogleStreetView({
     location.panoId,
     location.pitch,
     allowMovement,
+    googleMapsLanguage,
   ]);
 
   return (

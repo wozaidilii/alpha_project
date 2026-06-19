@@ -25,3 +25,13 @@ export function getBattleSubmittedPlayers(
     Object.keys(guesses).map((playerId) => [playerId, true]),
   ) as Record<string, boolean>;
 }
+
+export function mergeBattleRoundReady(
+  current: Record<string, boolean>,
+  incoming: Record<string, boolean> | undefined,
+) {
+  return {
+    ...(incoming ?? {}),
+    ...current,
+  };
+}

@@ -227,6 +227,7 @@ export const metadata: Metadata = {
 - Persistent guess maps must also reset their viewport when a new round starts with no guess and no answer. Result states may `fitBounds` to the guess/answer pair, but clearing the result for the next round must restore the active country/world overview instead of inheriting the previous answer-area viewport.
 - If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
 - Result-page continuation links for Google Street View should use Google Maps URLs with `api=1`, `map_action=pano`, and answer coordinates as the `viewpoint`. Keep crawl/source URLs internal for traceability; do not expose third-party source links such as Anitabi as user-facing CTAs.
+- Google Maps JavaScript API loaders in localized anime flows must pass the selected site locale as the SDK `language` parameter (`zh -> zh-CN`, `ja -> ja`, `en -> en`) so map controls, result maps, and Street View UI align with the user's language selection.
 
 #### 4. Validation & Error Matrix
 

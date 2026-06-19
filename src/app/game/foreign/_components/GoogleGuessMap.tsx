@@ -11,6 +11,7 @@ import {
   getGoogleMapsApi,
   googleBoundsForCountry,
   loadGoogleMapsScript,
+  type GoogleMapsLanguage,
   type GoogleMapInstance,
   type GoogleMarkerInstance,
   type GooglePolylineInstance,
@@ -30,6 +31,7 @@ interface Props {
   distanceKm?: number;
   disabled?: boolean;
   labels?: GoogleGuessMapLabels;
+  googleMapsLanguage?: GoogleMapsLanguage;
   minHeightClass?: string;
   restrictToCountry?: boolean;
   formatDistance?: (distanceKm: number) => string;
@@ -71,6 +73,7 @@ export function GoogleGuessMap({
   distanceKm,
   disabled,
   labels = DEFAULT_LABELS,
+  googleMapsLanguage,
   minHeightClass = "min-h-[360px]",
   restrictToCountry = true,
   formatDistance = formatDistanceZh,
@@ -182,7 +185,7 @@ export function GoogleGuessMap({
     let active = true;
     setState("loading");
 
-    void loadGoogleMapsScript(GOOGLE_MAP_AK)
+    void loadGoogleMapsScript(GOOGLE_MAP_AK, { language: googleMapsLanguage })
       .then(() => {
         if (!active || !containerRef.current) return;
         const api = getGoogleMapsApi();
@@ -234,7 +237,7 @@ export function GoogleGuessMap({
       }
       mapRef.current = null;
     };
-  }, [clearOverlays, country, restrictToCountry]);
+  }, [clearOverlays, country, googleMapsLanguage, restrictToCountry]);
 
   useEffect(() => {
     if (state === "ready") syncMarkers();
