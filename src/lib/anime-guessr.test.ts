@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   buildAnimeGuessrImageUrl,
   buildGoogleMapsStreetViewUrl,
+  filterAnimeGuessrQuestionsByMaxDifficulty,
+  getAnimeGuessrQuestionDifficulty,
   getAnimeGuessrQuestionText,
   isAnimeGuessrQuestion,
   pickAnimeGuessrQuestions,
@@ -134,6 +137,25 @@ describe("anime-guessr", () => {
 
   it("picks at most the requested number of questions", () => {
     expect(pickAnimeGuessrQuestions([sampleQuestion], 5)).toHaveLength(1);
+  });
+
+  it("filters questions by max difficulty", () => {
+    const easy = { ...sampleQuestion, id: "easy", difficulty: 1 as const };
+    const hard = { ...sampleQuestion, id: "hard", difficulty: 3 as const };
+    const unrated = { ...sampleQuestion, id: "unrated", difficulty: undefined };
+
+    expect(
+      filterAnimeGuessrQuestionsByMaxDifficulty([easy, hard, unrated], 1),
+    ).toEqual([easy]);
+    expect(getAnimeGuessrQuestionDifficulty(unrated)).toBe(5);
+    expect(
+      pickAnimeGuessrQuestions([easy, hard], 5, ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY),
+    ).toEqual([easy]);
+  });
+
+  it("accepts questions without a year", () => {
+    const { year: _year, ...withoutYear } = sampleQuestion;
+    expect(isAnimeGuessrQuestion(withoutYear)).toBe(true);
   });
 
   it("maps anime questions to Google Street View locations", () => {

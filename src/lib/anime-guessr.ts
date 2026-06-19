@@ -9,6 +9,12 @@ export const ANIME_GUESSR_ROUNDS = 5;
 export const ANIME_GUESSR_ROUND_OPTIONS = [5, 10] as const;
 export type AnimeGuessrRoundCount = (typeof ANIME_GUESSR_ROUND_OPTIONS)[number];
 export const ANIME_GUESSR_ROUNDS_STORAGE_KEY = "aniguessr_round_count";
+export const ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY = 1;
+export const ANIME_GUESSR_DIFFICULTY_OPTIONS = [1, 2, 3, 4, 5] as const;
+export type AnimeGuessrMaxDifficulty =
+  (typeof ANIME_GUESSR_DIFFICULTY_OPTIONS)[number];
+export const ANIME_GUESSR_DIFFICULTY_STORAGE_KEY = "aniguessr_max_difficulty";
+export const ANIME_GUESSR_UNKNOWN_DIFFICULTY = 5;
 export const ANIME_GUESSR_DATA_URL = "/data/anime-guessr-questions.json";
 export const ANIME_GUESSR_PLACEHOLDER_IMAGE_URL =
   "/images/anime-placeholder.jpg";
@@ -38,7 +44,7 @@ export interface AnimeGuessrQuestion {
   description: string;
   animeTitle: string;
   aspect?: string;
-  year: number;
+  year?: number;
   lat: number;
   lng: number;
   location: string;
@@ -112,7 +118,7 @@ export function isAnimeGuessrQuestion(
     typeof item.title === "string" &&
     typeof item.description === "string" &&
     typeof item.animeTitle === "string" &&
-    typeof item.year === "number" &&
+    (typeof item.year === "number" || item.year === undefined) &&
     typeof item.lat === "number" &&
     typeof item.lng === "number" &&
     typeof item.location === "string" &&
@@ -139,11 +145,41 @@ function shuffle<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
+export function getAnimeGuessrQuestionDifficulty(
+  question: AnimeGuessrQuestion,
+): AnimeGuessrMaxDifficulty {
+  const difficulty = question.difficulty;
+  if (
+    typeof difficulty === "number" &&
+    Number.isInteger(difficulty) &&
+    difficulty >= 1 &&
+    difficulty <= 5
+  ) {
+    return difficulty as AnimeGuessrMaxDifficulty;
+  }
+  return ANIME_GUESSR_UNKNOWN_DIFFICULTY;
+}
+
+export function filterAnimeGuessrQuestionsByMaxDifficulty(
+  questions: AnimeGuessrQuestion[],
+  maxDifficulty: AnimeGuessrMaxDifficulty,
+): AnimeGuessrQuestion[] {
+  return questions.filter(
+    (question) =>
+      getAnimeGuessrQuestionDifficulty(question) <= maxDifficulty,
+  );
+}
+
 export function pickAnimeGuessrQuestions(
   questions: AnimeGuessrQuestion[],
   count = ANIME_GUESSR_ROUNDS,
+  maxDifficulty: AnimeGuessrMaxDifficulty = ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
 ): AnimeGuessrQuestion[] {
-  return shuffle(questions).slice(0, Math.min(count, questions.length));
+  const pool = filterAnimeGuessrQuestionsByMaxDifficulty(
+    questions,
+    maxDifficulty,
+  );
+  return shuffle(pool).slice(0, Math.min(count, pool.length));
 }
 
 export async function fetchAnimeGuessrQuestions(
@@ -276,4 +312,55 @@ export function getAnimeGuessrRoundCountFromSearch(
   const value = params.get("rounds");
   if (value == null) return null;
   return normalizeAnimeGuessrRoundCount(value);
+}
+
+export function normalizeAnimeGuessrMaxDifficulty(
+  value: unknown,
+): AnimeGuessrMaxDifficulty {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : NaN;
+  if (
+    ANIME_GUESSR_DIFFICULTY_OPTIONS.includes(
+      parsed as AnimeGuessrMaxDifficulty,
+    )
+  ) {
+    return parsed as AnimeGuessrMaxDifficulty;
+  }
+  return ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY;
+}
+
+export function getStoredAnimeGuessrMaxDifficulty(): AnimeGuessrMaxDifficulty {
+  if (typeof window === "undefined") return ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY;
+  try {
+    const raw = window.localStorage.getItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY);
+    if (!raw) return ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY;
+    return normalizeAnimeGuessrMaxDifficulty(JSON.parse(raw));
+  } catch {
+    return normalizeAnimeGuessrMaxDifficulty(
+      window.localStorage.getItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY),
+    );
+  }
+}
+
+export function saveAnimeGuessrMaxDifficulty(
+  difficulty: AnimeGuessrMaxDifficulty,
+) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    ANIME_GUESSR_DIFFICULTY_STORAGE_KEY,
+    String(difficulty),
+  );
+}
+
+export function getAnimeGuessrMaxDifficultyFromSearch(
+  search: string,
+): AnimeGuessrMaxDifficulty | null {
+  const params = new URLSearchParams(search);
+  const value = params.get("difficulty");
+  if (value == null) return null;
+  return normalizeAnimeGuessrMaxDifficulty(value);
 }

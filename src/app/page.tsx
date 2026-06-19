@@ -11,6 +11,17 @@ import {
   withAnimeLocale,
   type AnimeLocale,
 } from "~/lib/anime-locale";
+import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
+import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
+import {
+  ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
+  getStoredAnimeGuessrMaxDifficulty,
+  getStoredAnimeGuessrRoundCount,
+  saveAnimeGuessrMaxDifficulty,
+  saveAnimeGuessrRoundCount,
+  type AnimeGuessrMaxDifficulty,
+  type AnimeGuessrRoundCount,
+} from "~/lib/anime-guessr";
 import {
   clearPlayerSession,
   getStoredPlayerSession,
@@ -60,6 +71,11 @@ const COPY: Record<
     myRank: string;
     points: string;
     loading: string;
+    roundsLabel: string;
+    roundsOption: (rounds: number) => string;
+    difficultyLabel: string;
+    difficultyOption: (level: number) => string;
+    difficultyHint: string;
   }
 > = {
   zh: {
@@ -110,6 +126,11 @@ const COPY: Record<
     myRank: "我的排名",
     points: "分",
     loading: "加载中...",
+    roundsLabel: "局数",
+    roundsOption: (rounds) => `${rounds} 轮`,
+    difficultyLabel: "难度上限",
+    difficultyOption: (level) => `${level}★`,
+    difficultyHint: "会抽取难度不超过所选星级的题目；未标注难度视为最高档。",
   },
   ja: {
     lang: "日本語",
@@ -159,6 +180,12 @@ const COPY: Record<
     myRank: "自分の順位",
     points: "点",
     loading: "読み込み中...",
+    roundsLabel: "ラウンド数",
+    roundsOption: (rounds) => `${rounds} ラウンド`,
+    difficultyLabel: "難易度上限",
+    difficultyOption: (level) => `${level}★`,
+    difficultyHint:
+      "選択した星以下の難易度から出題します。未設定は最高難易度として扱います。",
   },
   en: {
     lang: "English",
@@ -209,6 +236,12 @@ const COPY: Record<
     myRank: "My rank",
     points: "pts",
     loading: "Loading...",
+    roundsLabel: "Rounds",
+    roundsOption: (rounds) => `${rounds} rounds`,
+    difficultyLabel: "Difficulty cap",
+    difficultyOption: (level) => `${level}★`,
+    difficultyHint:
+      "Questions with difficulty at or below the selected level are eligible. Unrated entries count as the hardest tier.",
   },
 };
 
@@ -222,6 +255,11 @@ function avatarImageStyle(
 export default function Home() {
   const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [leaderboardRounds, setLeaderboardRounds] = useState<5 | 10>(5);
+  const [selectedRoundCount, setSelectedRoundCount] =
+    useState<AnimeGuessrRoundCount>(5);
+  const [maxDifficulty, setMaxDifficulty] = useState<AnimeGuessrMaxDifficulty>(
+    ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
+  );
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileCountryCode, setProfileCountryCode] = useState("");
@@ -229,7 +267,7 @@ export default function Home() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const copy = COPY[locale];
   const playUrl = withAnimeLocale(
-    `/game/anime?rounds=${leaderboardRounds}`,
+    `/game/anime?rounds=${selectedRoundCount}&difficulty=${maxDifficulty}`,
     locale,
   );
   const loginUrl = withAnimeLocale("/login", locale);
@@ -265,6 +303,8 @@ export default function Home() {
 
   useEffect(() => {
     setLocale(getStoredAnimeLocale());
+    setSelectedRoundCount(getStoredAnimeGuessrRoundCount());
+    setMaxDifficulty(getStoredAnimeGuessrMaxDifficulty());
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
     if (storedSession) identifyPostHogUser(storedSession.user);
@@ -284,6 +324,16 @@ export default function Home() {
     setProfileName(meQuery.data.name);
     setProfileCountryCode(meQuery.data.countryCode ?? "");
   }, [meQuery.data]);
+
+  function handleRoundCountChange(nextRoundCount: AnimeGuessrRoundCount) {
+    setSelectedRoundCount(nextRoundCount);
+    saveAnimeGuessrRoundCount(nextRoundCount);
+  }
+
+  function handleMaxDifficultyChange(nextMaxDifficulty: AnimeGuessrMaxDifficulty) {
+    setMaxDifficulty(nextMaxDifficulty);
+    saveAnimeGuessrMaxDifficulty(nextMaxDifficulty);
+  }
 
   function selectLocale(nextLocale: AnimeLocale) {
     setLocale(nextLocale);
@@ -529,12 +579,25 @@ export default function Home() {
               {copy.subtitle}
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-col gap-4">
+              <AnimeDifficultySelector
+                value={maxDifficulty}
+                copy={copy}
+                onChange={handleMaxDifficultyChange}
+              />
+              <AnimeRoundCountSelector
+                value={selectedRoundCount}
+                copy={copy}
+                onChange={handleRoundCountChange}
+              />
+              <div className="flex flex-wrap gap-3">
               <Link
                 href={playUrl}
                 onClick={() =>
                   capturePostHogEvent(POSTHOG_EVENTS.homeStartClicked, {
                     locale,
+                    rounds: selectedRoundCount,
+                    difficulty: maxDifficulty,
                   })
                 }
                 className="anime-button"
@@ -553,6 +616,7 @@ export default function Home() {
               >
                 {copy.battle}
               </Link>
+              </div>
             </div>
 
             <div className="mt-10 max-w-2xl border-y border-white/10 py-5">
