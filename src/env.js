@@ -18,6 +18,7 @@ export const env = createEnv({
     NEXT_PUBLIC_BAIDU_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_GOOGLE_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_TENCENT_MAP_AK: z.string().optional(),
+    NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL: z.string().url().optional(),
   },
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
@@ -33,6 +34,8 @@ export const env = createEnv({
     NEXT_PUBLIC_BAIDU_MAP_AK: process.env.NEXT_PUBLIC_BAIDU_MAP_AK,
     NEXT_PUBLIC_GOOGLE_MAP_AK: process.env.NEXT_PUBLIC_GOOGLE_MAP_AK,
     NEXT_PUBLIC_TENCENT_MAP_AK: process.env.NEXT_PUBLIC_TENCENT_MAP_AK,
+    NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL:
+      process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,

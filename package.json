@@ -15,6 +15,7 @@
     "db:import-location": "node scripts/import-location-questions.mjs",
     "db:push-location-remote": "node scripts/push-location-questions-remote.mjs",
     "images:upload": "node scripts/upload-event-images.mjs",
+    "images:upload-anime": "node scripts/upload-anime-guessr-image.mjs",
     "dev": "next dev --turbo",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",

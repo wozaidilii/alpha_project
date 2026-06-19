@@ -40,6 +40,17 @@
 - 房主点击开始游戏不应因为前端逐个生成第三方街景点而长时间阻塞；多人应共享同一套已生成题目。
 - 房间内所有玩家退出后，应关闭/清理该对战 session，避免留下无人房间。
 
+## Scope Update: 猜动漫模式题库接入
+
+- 用户补充提供 `deepseek_anitabi_points.json`，要求把题目接入“猜动漫模式”。
+- 动漫题目是 Anitabi/DeepSeek 生成的巡礼点数据，包含动漫作品、场景描述、年份、经纬度、真实地点、Anitabi 来源和后续配图路径。
+- 猜动漫模式应作为独立个人模式入口，使用图片/文字线索展示题目，并复用日本 Google Maps 猜点地图。
+- 题目配图后续会上传到对象存储；客户端只保存相对图片路径，图片公网前缀通过 `NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL` 配置。
+- 当前提供的 `https://catalog.cloudflarestorage.com/f07028ad4bec2b967e1636a74d77247d/anime-gussr` 以及按首图拼出的对象 URL 均返回 `HTTP/2 401 Missing Authorization header`，不能作为浏览器直连图片前缀。
+- 已通过 Wrangler 登录 Cloudflare 账号 `f07028ad4bec2b967e1636a74d77247d`，确认 R2 bucket `anime-gussr` 存在并开启公开 `r2.dev` URL：`https://pub-fb0cf55dbd0b4c4cb42bf8312f34dbd4.r2.dev`。`NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL` 应使用该公网前缀，或后续替换为正式自定义域名。
+- 本地已将用户提供的截图复制为 `public/images/anime-placeholder.jpg`，动漫模式在图片公网前缀缺失或题图加载失败时使用该占位图。
+- 已将占位图上传到 R2：`npx wrangler r2 object put anime-gussr/anime-placeholder.jpg --file public/images/anime-placeholder.jpg --remote`。后续题图上传命令沉淀为 `npm run images:upload-anime -- <local-file> <object-key>`。
+
 ## Acceptance Criteria
 
 - [ ] `/game/solo` 展示新的国外模式入口。
@@ -54,6 +65,11 @@
 - [ ] 对战模式可以选择并开始国外模式，日本题目对所有房间玩家一致。
 - [ ] 两名玩家加入房间后，房主点击开始，双方都进入同一局游戏。
 - [ ] 所有玩家离开房间后，房间 session 被清理或关闭。
+- [ ] `/game/solo` 展示新的“猜动漫模式”入口。
+- [ ] `/game/anime` 能加载转换后的动漫巡礼题库并随机抽取整局题目。
+- [ ] 动漫题目答案均位于日本地图 bounds 内，玩家可以在 Google Maps 上猜点并查看偏差和得分。
+- [ ] 未配置或无法访问图片公网前缀时，动漫题卡显示占位状态且游戏仍可进行。
+- [ ] 动漫题库转换脚本从原始大 JSON 生成精简 public JSON，不把 100MB 级原始抓取数据打进客户端 bundle。
 - [ ] TypeScript、lint、相关测试通过。
 
 ## Definition of Done

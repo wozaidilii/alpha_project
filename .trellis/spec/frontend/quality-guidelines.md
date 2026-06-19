@@ -107,7 +107,72 @@ Correct:
   guess={phase === "result" ? latestResult.guess : guess}
   answer={phase === "result" ? latestAnswer : null}
   disabled={phase === "result"}
-/>;
+/>
+```
+
+### Scenario: Client-Hosted Question Image Assets
+
+#### 1. Scope / Trigger
+
+- Trigger: adding question-bank images, CDN/R2 object paths, or a public image base URL used by browser-rendered game cards.
+- Applies to static question JSON, generated question payloads, browser `<img>` tags, and future object-storage image uploads.
+
+#### 2. Signatures
+
+- Public browser image prefix must be optional and named with a `NEXT_PUBLIC_*` key, for example `NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL`.
+- Question records should store relative object keys such as `anime/51_CLANNAD/5c4dgq9pm.jpg`, not user-specific local filesystem paths.
+- Anime Guessr R2 uploads should use `npm run images:upload-anime -- <local-file> [object-key]`, which wraps `npx wrangler r2 object put anime-gussr/<object-key> --file <local-file> --remote`.
+- Image URL helpers should expose a signature like:
+
+```typescript
+buildQuestionImageUrl(imagePath?: string, baseUrl?: string): string | undefined;
+```
+
+#### 3. Contracts
+
+- `imagePath` may be missing while data or uploads are still incomplete.
+- Missing public image base URL -> render a non-crashing placeholder and keep the question playable.
+- Object storage URLs used directly by `<img>` must be readable by a normal browser request without `Authorization`.
+- Storage endpoints that return `401 Missing Authorization header` are not valid direct image bases; use a public R2 custom domain, `r2.dev` public URL, signed app proxy, or another browser-readable CDN URL instead.
+- Wrangler R2 object uploads must include `--remote`; without it Wrangler can write to local simulation state instead of the Cloudflare bucket.
+- Do not commit real storage tokens, signed URLs, or user-local source paths into question payloads.
+
+#### 4. Validation & Error Matrix
+
+- Missing `NEXT_PUBLIC_*_IMAGE_BASE_URL` -> show "image unavailable/prefix not configured" state, not a thrown render error.
+- Image object 404/401/5xx -> handle `<img onError>` and fall back to the placeholder for that question.
+- Absolute `https://` image URL in data -> use as-is.
+- Relative image path + public base URL -> trim duplicate slashes and join exactly once.
+- Generated data outside active map bounds -> exclude during conversion so the answer remains clickable.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: generated compact JSON with relative image keys, optional public env base URL, unit-tested URL joining, and browser fallback on image load failure.
+- Base: text-only playable questions while image uploads are pending.
+- Bad: hard-coding an authenticated R2 catalog endpoint as the only image source, bundling a 100MB raw scrape into client JavaScript, or leaking local WeChat/cache paths into public data.
+
+#### 6. Tests Required
+
+- Unit tests for URL joining, missing-base behavior, and data guard functions.
+- For upload scripts, run syntax/help checks and upload one known small object before sharing the command.
+- Build/type-check after adding public env keys or generated payload types.
+- Browser smoke for the mode entry and image fallback when the public image base is absent or inaccessible.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+const imageUrl = `https://catalog.cloudflarestorage.com/account/bucket/${record.local_path}`;
+```
+
+Correct:
+
+```typescript
+const imageUrl = buildQuestionImageUrl(
+  question.imagePath,
+  process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL,
+);
 ```
 
 ---

@@ -2,6 +2,7 @@ import { type QuestionType } from "~/types/question";
 
 export type GameModeSlug =
   | QuestionType
+  | "anime"
   | "tuxun"
   | "foreign"
   | "history-tuxun"
@@ -66,6 +67,18 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     accentClass: "text-violet-400",
     borderHoverClass: "hover:border-violet-500",
     enabled: false,
+  },
+  anime: {
+    type: "anime",
+    slug: "anime",
+    title: "猜动漫模式",
+    emoji: "🎞️",
+    description: "看动漫巡礼图，在日本地图上猜取景地",
+    tagline: "Anitabi 场景图 + 日本地图猜点",
+    accentClass: "text-pink-300",
+    borderHoverClass: "hover:border-pink-500",
+    enabled: true,
+    battleEnabled: false,
   },
   tuxun: {
     type: "tuxun",
@@ -134,6 +147,7 @@ export function isQuestionType(value: string): value is QuestionType {
 export function isGameModeSlug(value: string): value is GameModeSlug {
   return (
     isQuestionType(value) ||
+    value === "anime" ||
     value === "tuxun" ||
     value === "foreign" ||
     value === "history-tuxun" ||

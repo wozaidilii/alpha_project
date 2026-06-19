@@ -95,3 +95,10 @@
 - 根因：`GoogleStreetView` 创建/销毁第三方 `StreetViewPanorama` 的 effect 依赖了父组件传入的内联 `onUnavailable` 回调；对战页频繁重渲染会生成新函数引用，触发 cleanup 并重建街景实例。
 - 修复：将最新 `onUnavailable` 保存到 ref，街景实例 effect 只依赖 `lat`、`lng`、`panoId`、`heading`、`pitch` 等真实场景参数。
 - 预防：第三方地图、全景、播放器等昂贵实例的生命周期 effect 不应依赖每次 render 都可能变化的回调或对象 props；回调用 ref 保鲜，实例只在实际资源参数变化时重建。
+
+## 生成题库要复用前端运行时 guard
+
+- 问题：动漫巡礼题库转换后，浏览器页面提示“动漫题库格式不正确”，导致模式无法进入游戏。
+- 根因：转换脚本只按坐标、图片和置信度过滤源 JSON，没有把 `location` 等 nullable 字段归一成前端 `isAnimeGuessrQuestion` guard 要求的形状；单元测试只覆盖了手写样例，未校验生成产物。
+- 修复：转换时将缺失地区归一为 `subject_city` 或“日本”，并要求 id、标题、描述、年份等基础字段完整；重新生成 public JSON 后用字段检查确认 4909 条均合法。
+- 预防：所有由外部大 JSON 生成的前端 public 数据，都要在生成后用同一套前端 guard 或等价 schema 校验完整产物，不只校验少量样例。
