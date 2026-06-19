@@ -1,7 +1,9 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-
-export const ANIME_GUESSR_IMAGE_API_PREFIX = "/api/anime-guessr-image";
+import {
+  buildAnimeGuessrRemoteImageUrl,
+  normalizeAnimeGuessrImagePath,
+} from "~/lib/anime-guessr-image-url";
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -22,10 +24,7 @@ export function getAnimeGuessrLocalImageRoot() {
 }
 
 export function normalizeAnimeGuessrImageRelativePath(value: string) {
-  const normalized = value.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!normalized || normalized.includes("..")) return null;
-  if (!normalized.startsWith("anime/")) return null;
-  return normalized;
+  return normalizeAnimeGuessrImagePath(value) ?? null;
 }
 
 export function resolveLocalAnimeGuessrImagePath(relativePath: string) {
@@ -43,17 +42,19 @@ export function resolveLocalAnimeGuessrImagePath(relativePath: string) {
 }
 
 export function getAnimeGuessrRemoteImageUrl(relativePath: string) {
-  const normalized = normalizeAnimeGuessrImageRelativePath(relativePath);
-  if (!normalized) return null;
-
-  const baseUrl = process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL?.trim();
-  if (!baseUrl) return null;
-
-  return `${baseUrl.replace(/\/+$/, "")}/${normalized}`;
+  return (
+    buildAnimeGuessrRemoteImageUrl(
+      relativePath,
+      process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL,
+    ) ?? null
+  );
 }
 
 export function getAnimeGuessrImageContentType(filePath: string) {
-  return MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
+  return (
+    MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ??
+    "application/octet-stream"
+  );
 }
 
 export async function readLocalAnimeGuessrImage(relativePath: string) {
