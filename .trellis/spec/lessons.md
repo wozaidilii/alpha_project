@@ -215,9 +215,9 @@
 - 修复：同轮提交状态改为只合并不缩减，Pusher `game-started` / `round-started` / `round-results` 都加阶段和轮次 guard；离房间请求只在真实 `pagehide` 时发送，不在 React cleanup 中发送。
 - 预防：实时对战客户端也要遵守单调状态规则：旧快照和旧事件不能清空本地已经确认的提交、结果或玩家状态；React cleanup 不等同于用户主动离开，不能直接触发服务端移除玩家。
 
-## 对战伤害和终局条件不要散在组件里
+## 对战伤害等于分差，终局条件不要散在组件里
 
 - 问题：动漫对战有分差但没有扣血，最后一局或只剩一名存活玩家时，非房主可能停在回合结果页；结算地图也因为默认同色 marker 让答案点和猜测点不清楚。
-- 根因：扣血缩放把 `anime` 漏在街景类模式之外，正分差可能被除数取整为 0；终局推进只由房主路径处理，且“淘汰到只剩一人”仍被 ready gate 挡住；Google Maps 默认 marker 颜色没有和 UI 图例对应。
-- 修复：抽出 `calcBattleDamage`、`shouldFinishBattleFromResult` 和 ready/final helper，动漫街景类分差至少扣 1 HP，淘汰终局不等待 ready，最终结算可由任一客户端幂等写入；Google 结算 marker 改为绿色答案和琥珀猜测图钉。
+- 根因：扣血逻辑把分差按模式缩放，导致扣除 HP 不是两边本轮分差；终局推进只由房主路径处理，且“淘汰到只剩一人”仍被 ready gate 挡住；Google Maps 默认 marker 颜色没有和 UI 图例对应。
+- 修复：抽出 `calcBattleDamage`、`shouldFinishBattleFromResult` 和 ready/final helper，扣血直接等于本轮最高分与玩家分数的差值，淘汰终局不等待 ready，最终结算可由任一客户端幂等写入；Google 结算 marker 改为绿色答案和琥珀猜测图钉。
 - 预防：battle 的计分、伤害、ready 和终局规则必须集中在可测 helper 中；组件只编排事件和渲染，不能把模式名单、存活判断或最终结算条件散落在 JSX/handler 分支里。

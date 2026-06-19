@@ -50,7 +50,7 @@
 - Generated street-view battle modes, including `anime-tuxun`, must share full generated `BattleQuestion[]` through room state so both players see the same panorama and timed clue state.
 - `anime-tuxun` battle questions use Google Street View, reveal anime clues over time, and score by distance to the real-world anime location center.
 - Pusher events are fast notifications, not the only source of truth. Clients must be able to recover start, guess submission, round result, ready state, next round, and game-over state from `GET /api/battle/rooms/[roomId]`.
-- In multiplayer rounds, every player whose score is below the top score takes damage based on the gap to the top score. Tied top scorers take no damage.
+- In multiplayer rounds, every player whose score is below the top score loses HP equal to the exact score gap from the top score. Tied top scorers take no damage.
 - When all players leave, `leaveBattleRoom` deletes the room and returns `closed: true`.
 - The current room store is in-process. `globalThis` may stabilize same-process reloads, but multi-instance production deployments need a durable store such as Redis or a database-backed room table if desync remains visible.
 

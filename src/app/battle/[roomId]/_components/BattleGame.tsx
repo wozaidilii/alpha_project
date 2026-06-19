@@ -959,7 +959,7 @@ export function BattleGame({
       for (const id of playerIds) {
         const score = guesses[id]?.total ?? 0;
         if (score >= topScore) continue;
-        const dmg = calcBattleDamage(topScore, score, modeType);
+        const dmg = calcBattleDamage(topScore, score);
         damage[id] = dmg;
         hpAfter[id] = Math.max(0, (hpAfter[id] ?? 0) - dmg);
       }
