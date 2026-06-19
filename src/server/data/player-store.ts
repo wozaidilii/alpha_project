@@ -9,6 +9,7 @@ import {
   normalizeUsername,
   normalizeUsernameKey,
 } from "~/server/auth/player-credentials";
+import { classifyPlayerUniqueViolation } from "~/server/data/postgres-errors";
 import { hashPassword, verifyPassword } from "~/server/auth/password";
 import { sendEmailVerificationCode } from "~/server/email/verification-code";
 import { sql } from "~/server/db/client";
@@ -192,25 +193,15 @@ function normalizeWechatOpenId(openId: string) {
   return normalized;
 }
 
-function getUniqueViolationConstraint(error: unknown) {
+function assertEmailVerificationRequestConfigured() {
+  getEmailVerificationSecret();
+
   if (
-    typeof error !== "object" ||
-    error === null ||
-    !("code" in error) ||
-    error.code !== "23505"
+    env.NODE_ENV === "production" &&
+    (!env.RESEND_API_KEY || !env.EMAIL_FROM)
   ) {
-    return null;
+    throw new Error("Email delivery is not configured");
   }
-
-  if ("constraint_name" in error && typeof error.constraint_name === "string") {
-    return error.constraint_name;
-  }
-
-  if ("constraint" in error && typeof error.constraint === "string") {
-    return error.constraint;
-  }
-
-  return "";
 }
 
 async function createEmailVerificationCode(email: string, now: Date) {
@@ -415,6 +406,8 @@ export async function requestEmailLoginCode(
 ): Promise<EmailLoginCodeRequestResult> {
   const now = new Date();
   const email = normalizeEmail(emailInput);
+
+  assertEmailVerificationRequestConfigured();
   const verification = await createEmailVerificationCode(email, now);
 
   try {
@@ -452,11 +445,11 @@ export async function requestPasswordResetCode(
   const now = new Date();
   const email = normalizeEmail(emailInput);
 
+  assertEmailVerificationRequestConfigured();
   const [player] = await sql<{ id: string }[]>`
     select id
     from players
     where email = ${email}
-      and password_hash is not null
     limit 1
   `;
 
@@ -601,22 +594,62 @@ export async function registerPlayerWithPassword(
 
   try {
     const { token, user } = await sql.begin(async (tx) => {
-      const [existing] = await tx<
-        { email: string | null; username_key: string | null }[]
+      const [existingEmail] = await tx<
+        { id: string; password_hash: string | null }[]
       >`
-        select email, username_key
+        select id, password_hash
         from players
         where email = ${email}
-          or username_key = ${usernameKey}
         limit 1
       `;
 
-      if (existing?.email === email) {
+      const [existingUsername] = await tx<{ id: string }[]>`
+        select id
+        from players
+        where username_key = ${usernameKey}
+        limit 1
+      `;
+
+      if (existingUsername && existingUsername.id !== existingEmail?.id) {
+        throw new Error("Username already registered");
+      }
+
+      if (existingEmail?.password_hash) {
         throw new Error("Email already registered");
       }
 
-      if (existing?.username_key === usernameKey) {
-        throw new Error("Username already registered");
+      if (existingEmail) {
+        const [player] = await tx<PlayerRow[]>`
+          update players
+          set
+            username = ${username},
+            username_key = ${usernameKey},
+            name = ${name},
+            avatar_icon = ${avatar.icon},
+            avatar_color = ${avatar.color},
+            profile_completed = true,
+            solo_high_score = greatest(solo_high_score, 0),
+            password_hash = ${passwordHash},
+            updated_at = ${now}
+          where id = ${existingEmail.id}
+          returning
+            id,
+            email,
+            name,
+            avatar_icon,
+            avatar_color,
+            profile_completed,
+            solo_high_score,
+            created_at,
+            updated_at
+        `;
+
+        const token = await createSessionForPlayer(tx, player!.id, now);
+
+        return {
+          token,
+          user: toPublicPlayer(player!),
+        };
       }
 
       const [player] = await tx<PlayerRow[]>`
@@ -678,11 +711,11 @@ export async function registerPlayerWithPassword(
 
     return { token, user };
   } catch (error) {
-    const constraint = getUniqueViolationConstraint(error);
-    if (constraint?.includes("email")) {
+    const uniqueTarget = classifyPlayerUniqueViolation(error);
+    if (uniqueTarget === "email") {
       throw new Error("Email already registered");
     }
-    if (constraint !== null) {
+    if (uniqueTarget === "username" || uniqueTarget === "unknown") {
       throw new Error("Username already registered");
     }
     throw error;
@@ -770,7 +803,6 @@ export async function resetPlayerPasswordWithCode(
         password_hash = ${passwordHash},
         updated_at = ${now}
       where email = ${email}
-        and password_hash is not null
       returning
         id,
         email,
@@ -1003,7 +1035,7 @@ export async function updatePlayerProfile(input: {
 
     return toPublicPlayer(player!);
   } catch (error) {
-    if (getUniqueViolationConstraint(error) !== null) {
+    if (classifyPlayerUniqueViolation(error) !== null) {
       throw new Error("Username already registered");
     }
     throw error;

@@ -74,7 +74,7 @@ export default function LoginPage() {
         setMessage(
           result.delivery === "debug"
             ? "开发环境未配置邮件服务，请使用下方调试验证码重置密码。"
-            : "如果该邮箱已注册，重置验证码会发送到邮箱。",
+            : "如果这个邮箱已有账号，重置验证码会发送到邮箱。",
         );
         setDebugCode(result.debugCode ?? null);
       },
@@ -414,11 +414,14 @@ export default function LoginPage() {
               <form onSubmit={handleResetPassword} className="space-y-5">
                 <div>
                   <div className="text-sm font-bold text-cyan-100/80">
-                    重置验证码已发送至
+                    检查这个邮箱中的验证码
                   </div>
                   <div className="mt-1 text-lg font-black break-all text-pink-100">
                     {resetEmail}
                   </div>
+                  <p className="mt-2 text-sm leading-6 text-cyan-100/60">
+                    只有这个邮箱已经注册过账号时，才会收到重置验证码。
+                  </p>
                 </div>
 
                 <div>
