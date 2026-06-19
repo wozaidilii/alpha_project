@@ -18,6 +18,10 @@ export const LOCATION_JSON = path.join(
   ROOT,
   "scripts/python/rawdata/deepseek_location_questions.json",
 );
+export const ANIME_JSON = path.join(
+  ROOT,
+  "scripts/python/rawdata/deepseek_anime_questions.json",
+);
 export const IMAGES_SOURCE = path.join(ROOT, "scripts/python/rawdata/images");
 export const BLOB_URL_MAP = path.join(
   ROOT,

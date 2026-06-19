@@ -6,6 +6,7 @@ export type GameModeSlug =
   | "tuxun"
   | "foreign"
   | "history-tuxun"
+  | "anime-tuxun"
   | "history-year";
 
 export interface GameModeConfig {
@@ -102,6 +103,17 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     borderHoverClass: "hover:border-emerald-500",
     enabled: false,
   },
+  "anime-tuxun": {
+    type: "anime-tuxun",
+    slug: "anime-tuxun",
+    title: "动漫寻图模式",
+    emoji: "🎌",
+    description: "根据动漫线索观察 Google 街景，猜对应的日本城市",
+    tagline: "动漫线索 + Google 街景 + 日本地图猜点",
+    accentClass: "text-fuchsia-300",
+    borderHoverClass: "hover:border-fuchsia-500",
+    enabled: true,
+  },
   "history-tuxun": {
     type: "history-tuxun",
     slug: "history-tuxun",
@@ -151,6 +163,7 @@ export function isGameModeSlug(value: string): value is GameModeSlug {
     value === "tuxun" ||
     value === "foreign" ||
     value === "history-tuxun" ||
+    value === "anime-tuxun" ||
     value === "history-year"
   );
 }
