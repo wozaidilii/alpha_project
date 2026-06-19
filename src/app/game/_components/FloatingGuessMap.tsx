@@ -7,6 +7,7 @@ import {
   DEFAULT_FOREIGN_COUNTRY,
   type ForeignCountryConfig,
 } from "~/lib/foreign-map";
+import { type GoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
 
 interface FloatingGuessMapProps {
   guessLat: number | null;
@@ -18,6 +19,7 @@ interface FloatingGuessMapProps {
   title?: string;
   mapProvider?: "baidu" | "google";
   country?: ForeignCountryConfig;
+  googleMapLabels?: GoogleGuessMapLabels;
 }
 
 export function FloatingGuessMap({
@@ -30,6 +32,7 @@ export function FloatingGuessMap({
   title = "猜点地图",
   mapProvider = "baidu",
   country = DEFAULT_FOREIGN_COUNTRY,
+  googleMapLabels,
 }: FloatingGuessMapProps) {
   const [expanded, setExpanded] = useState(false);
   const hasGuess = guessLat !== null && guessLng !== null;
@@ -64,6 +67,7 @@ export function FloatingGuessMap({
               country={country}
               guess={guess}
               answer={null}
+              labels={googleMapLabels}
               minHeightClass="min-h-0"
               onGuess={(point) => onGuess(point.lat, point.lng)}
             />

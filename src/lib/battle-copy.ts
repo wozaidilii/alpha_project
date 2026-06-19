@@ -67,10 +67,8 @@ export type BattleCopy = {
   foreignGuessTitle: string;
   animeGuessTitle: string;
   historyGuessTitle: string;
-  baiduStreetViewFailed: string;
   googleStreetViewFailed: string;
   unsupportedMode: string;
-  insufficientBaiduScenes: (matched: number, count: number) => string;
   insufficientGoogleScenes: (matched: number, count: number) => string;
   insufficientHistoryScenes: (matched: number, count: number) => string;
   insufficientAnimeScenes: (matched: number, count: number) => string;
@@ -169,7 +167,7 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     lockedBody: "等待其他玩家或计时结束...",
     tuxunInstructionTitle: "观察全景，猜它在中国哪里",
     tuxunInstructionBody:
-      "从道路、建筑、招牌和地形里找线索，在右下角百度地图中点选位置。",
+      "从道路、建筑、招牌和地形里找线索，在右下角 Google 地图中点选位置。",
     foreignInstructionTitle: "观察街景，猜它在日本哪里",
     foreignInstructionBody:
       "从道路、建筑、招牌和地形里找线索，在右下角 Google 地图中点选位置。",
@@ -181,15 +179,12 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     foreignGuessTitle: "日本地图猜点",
     animeGuessTitle: "动漫对战猜点",
     historyGuessTitle: "历史图寻猜点",
-    baiduStreetViewFailed: "当前百度全景渲染失败，请返回大厅重新开局。",
     googleStreetViewFailed: "当前 Google 街景渲染失败，请返回大厅重新开局。",
     unsupportedMode: "暂不支持该对战模式",
-    insufficientBaiduScenes: (matched, count) =>
-      `只匹配到 ${matched} / ${count} 个百度 JS 街景点，未开始本局；请重新生成。`,
     insufficientGoogleScenes: (matched, count) =>
       `只匹配到 ${matched} / ${count} 个 Google 日本街景点，未开始本局；请重新生成。`,
     insufficientHistoryScenes: (matched, count) =>
-      `只匹配到 ${matched} / ${count} 道有百度街景的历史图寻题，未开始本局；请重新开始。`,
+      `只匹配到 ${matched} / ${count} 道有 Google 街景的历史图寻题，未开始本局；请重新开始。`,
     insufficientAnimeScenes: (matched, count) =>
       `只匹配到 ${matched} / ${count} 道有 Google 街景的动漫题，未开始本局；请重新开始。`,
     insufficientQuestions: "题库题目不足",
@@ -286,7 +281,7 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     lockedBody: "他のプレイヤーまたはタイマー終了を待っています...",
     tuxunInstructionTitle: "パノラマを見て、中国の場所を推理",
     tuxunInstructionBody:
-      "道路、建物、看板、地形から手がかりを探し、右下の百度地図で場所を選びます。",
+      "道路、建物、看板、地形から手がかりを探し、右下の Google マップで場所を選びます。",
     foreignInstructionTitle: "ストリートビューを見て、日本の場所を推理",
     foreignInstructionBody:
       "道路、建物、看板、地形から手がかりを探し、右下の Google マップで場所を選びます。",
@@ -298,23 +293,22 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     foreignGuessTitle: "日本地図で予想",
     animeGuessTitle: "アニメ対戦予想",
     historyGuessTitle: "歴史図尋予想",
-    baiduStreetViewFailed:
-      "百度パノラマの表示に失敗しました。ロビーに戻って作り直してください。",
     googleStreetViewFailed:
       "Google ストリートビューの表示に失敗しました。ロビーに戻って作り直してください。",
     unsupportedMode: "この対戦モードはまだ対応していません",
-    insufficientBaiduScenes: (matched, count) =>
-      `百度 JS パノラマ地点は ${matched} / ${count} 件のみでした。再生成してください。`,
     insufficientGoogleScenes: (matched, count) =>
       `Google 日本ストリートビュー地点は ${matched} / ${count} 件のみでした。再生成してください。`,
     insufficientHistoryScenes: (matched, count) =>
-      `百度ストリートビュー付き歴史問題は ${matched} / ${count} 件のみでした。作り直してください。`,
+      `Google ストリートビュー付き歴史問題は ${matched} / ${count} 件のみでした。作り直してください。`,
     insufficientAnimeScenes: (matched, count) =>
       `Google ストリートビュー付きアニメ問題は ${matched} / ${count} 件のみでした。作り直してください。`,
     insufficientQuestions: "問題数が足りません",
-    questionLoadFailed: "問題の読み込みに失敗しました。データベース接続を確認してください",
-    syncQuestionFailedRestart: "問題同期に失敗しました。ホストが再開始してください",
-    syncQuestionFailedNetwork: "問題同期に失敗しました。ネットワークを確認してください",
+    questionLoadFailed:
+      "問題の読み込みに失敗しました。データベース接続を確認してください",
+    syncQuestionFailedRestart:
+      "問題同期に失敗しました。ホストが再開始してください",
+    syncQuestionFailedNetwork:
+      "問題同期に失敗しました。ネットワークを確認してください",
     incompleteRoomState:
       "ルームは開始済みですが問題状態が不完全です。作り直してください",
     roundResultTitle: "ラウンド結果",
@@ -408,7 +402,7 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     lockedBody: "Waiting for other players or the timer...",
     tuxunInstructionTitle: "Study the panorama and guess where it is in China",
     tuxunInstructionBody:
-      "Use roads, buildings, signs, and terrain, then pick a place on the Baidu map.",
+      "Use roads, buildings, signs, and terrain, then pick a place on the Google map.",
     foreignInstructionTitle:
       "Study the Street View and guess where it is in Japan",
     foreignInstructionBody:
@@ -421,21 +415,18 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     foreignGuessTitle: "Japan map guess",
     animeGuessTitle: "Anime battle guess",
     historyGuessTitle: "History map guess",
-    baiduStreetViewFailed:
-      "Baidu panorama failed to render. Return to the lobby and recreate the room.",
     googleStreetViewFailed:
       "Google Street View failed to render. Return to the lobby and recreate the room.",
     unsupportedMode: "This battle mode is not supported yet.",
-    insufficientBaiduScenes: (matched, count) =>
-      `Only found ${matched} / ${count} Baidu JS panorama spots. Regenerate the match.`,
     insufficientGoogleScenes: (matched, count) =>
       `Only found ${matched} / ${count} Google Japan Street View spots. Regenerate the match.`,
     insufficientHistoryScenes: (matched, count) =>
-      `Only found ${matched} / ${count} history questions with Baidu Street View. Recreate the room.`,
+      `Only found ${matched} / ${count} history questions with Google Street View. Recreate the room.`,
     insufficientAnimeScenes: (matched, count) =>
       `Only found ${matched} / ${count} anime questions with Google Street View. Recreate the room.`,
     insufficientQuestions: "Not enough questions in the bank",
-    questionLoadFailed: "Question loading failed. Check the database connection.",
+    questionLoadFailed:
+      "Question loading failed. Check the database connection.",
     syncQuestionFailedRestart:
       "Question sync failed. Ask the host to restart the room.",
     syncQuestionFailedNetwork: "Question sync failed. Check your network.",
@@ -482,7 +473,9 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
   },
 };
 
-const BATTLE_MODE_COPY: Partial<Record<GameModeSlug, Record<AnimeLocale, BattleModeText>>> = {
+const BATTLE_MODE_COPY: Partial<
+  Record<GameModeSlug, Record<AnimeLocale, BattleModeText>>
+> = {
   anime: {
     zh: {
       title: "猜动漫模式",
@@ -524,17 +517,17 @@ const BATTLE_MODE_COPY: Partial<Record<GameModeSlug, Record<AnimeLocale, BattleM
   tuxun: {
     zh: {
       title: "图寻模式",
-      description: "百度全景中国版 GeoGuessr，观察街景猜位置",
+      description: "观察街景猜位置",
       tagline: "全景线索 + 中国地图猜点",
     },
     ja: {
       title: "図尋モード",
-      description: "百度パノラマで中国の場所を推理します",
+      description: "ストリートビューから場所を推理します",
       tagline: "パノラマ + 中国地図",
     },
     en: {
       title: "Tuxun",
-      description: "China panorama guessing with Baidu Street View.",
+      description: "Panorama location guessing.",
       tagline: "Panorama clues + China map",
     },
   },
@@ -559,7 +552,7 @@ const BATTLE_MODE_COPY: Partial<Record<GameModeSlug, Record<AnimeLocale, BattleM
     zh: {
       title: "历史图寻模式",
       description: "根据历史线索观察现代街景，猜它对应的地点",
-      tagline: "历史线索 + 百度全景 + 中国地图猜点",
+      tagline: "历史线索 + Google 街景 + 地图猜点",
     },
     ja: {
       title: "歴史図尋モード",
@@ -568,7 +561,8 @@ const BATTLE_MODE_COPY: Partial<Record<GameModeSlug, Record<AnimeLocale, BattleM
     },
     en: {
       title: "History street hunt",
-      description: "Use history clues and modern panorama scenes to find the place.",
+      description:
+        "Use history clues and modern panorama scenes to find the place.",
       tagline: "History clues + panorama + map guess",
     },
   },

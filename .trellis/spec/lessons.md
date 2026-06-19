@@ -207,3 +207,10 @@
 - 根因：battle 同时依赖 Pusher 事件和 HTTP 轮询恢复状态，旧的 `round-result` 快照晚于新一轮 `round-started` 抵达时会覆盖本地新回合；服务端 `startBattleRoomRound` 也没有拒绝同轮或更低轮次请求。另一个根因是 battle mode 列表仍暴露旧动漫寻图模式，而不是个人模式使用的 Anime Guessr 静态题库。
 - 修复：battle 只启用 `anime` 模式，加载个人 Anime Guessr 题库并渲染同款街景 + 图片线索；服务端拒绝同轮/低轮次 round-started 和旧 round-result，客户端忽略低轮次或同轮低状态的迟到快照。
 - 预防：所有 battle round 状态必须按 `roundIndex` 和 `playing < round-result < game-over` 单调应用；更改 battle mode 列表时用测试锁住 `anime` enabled、`anime-tuxun` disabled，并覆盖 stale round 请求。
+
+## 对战客户端不能让旧事件缩减已提交状态
+
+- 问题：两名玩家都提交后，页面偶尔回到“无人提交”状态，或第二名玩家在游戏中从房间列表消失。
+- 根因：客户端轮询到的旧同轮快照会直接替换本地 `guesses`，把已经收到的提交状态清空；迟到的同轮 `round-started` 事件也会重新 `beginRound`。同时 React effect cleanup 会在组件临时卸载时发送 `leave`，把仍在游戏中的玩家从房间移除。
+- 修复：同轮提交状态改为只合并不缩减，Pusher `game-started` / `round-started` / `round-results` 都加阶段和轮次 guard；离房间请求只在真实 `pagehide` 时发送，不在 React cleanup 中发送。
+- 预防：实时对战客户端也要遵守单调状态规则：旧快照和旧事件不能清空本地已经确认的提交、结果或玩家状态；React cleanup 不等同于用户主动离开，不能直接触发服务端移除玩家。

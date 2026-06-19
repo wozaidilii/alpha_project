@@ -1,21 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import "leaflet/dist/leaflet.css";
 import { type BattleRoundResult, type BattlePlayer } from "~/types/battle";
 import { formatAnswerYear, formatYear } from "~/lib/scoring";
-import {
-  mountResultMap,
-  type ChinaResultLine,
-  type ChinaResultMapHandle,
-  type ChinaResultMarker,
-} from "~/lib/china-leaflet";
 import {
   getBattleAnswerPoint,
   getBattleQuestionSubtitle,
   getBattleQuestionTitle,
-  isAnimeTuxunBattleQuestion,
-  isForeignBattleQuestion,
   isLocationOnlyBattleQuestion,
   isStandardBattleQuestion,
 } from "~/lib/battle-question";
@@ -26,11 +16,11 @@ import {
 } from "~/types/question";
 import { type GameModeSlug } from "~/lib/game-mode";
 import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
-import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import { type AnimeLocale } from "~/lib/anime-locale";
 import { formatBattleDistance, getBattleCopy } from "~/lib/battle-copy";
+import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
 
 interface Props {
   result: BattleRoundResult;
@@ -54,8 +44,7 @@ export function BattleRoundResultView({
   onReady,
 }: Props) {
   const copy = getBattleCopy(locale);
-  const mapRef = useRef<ChinaResultMapHandle | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const mapLabels = getGoogleGuessMapLabels(locale);
   const { question } = result;
   const standardQuestion = isStandardBattleQuestion(question) ? question : null;
   const historicalQuestion =
@@ -72,8 +61,6 @@ export function BattleRoundResultView({
       : null;
   const showMap = questionType === "historical" && historicalQuestion !== null;
   const showLocationOnlyMap = locationOnlyAnswer !== null;
-  const showForeignMap =
-    isForeignBattleQuestion(question) || isAnimeTuxunBattleQuestion(question);
   const yearEnd = standardQuestion
     ? getQuestionYearEnd(standardQuestion)
     : undefined;
@@ -81,66 +68,6 @@ export function BattleRoundResultView({
   const iAmReady = roundReady[myId] === true;
   const allReady =
     playerIds.length >= 2 && playerIds.every((id) => roundReady[id] === true);
-
-  useEffect(() => {
-    if (!showMap || !historicalQuestion || !containerRef.current) return;
-
-    const container = containerRef.current;
-    let active = true;
-
-    const guessEntries = Object.entries(result.guesses);
-    const markers: ChinaResultMarker[] = [
-      {
-        point: { lat: historicalQuestion.lat, lng: historicalQuestion.lng },
-        color: "#22c55e",
-        label: copy.actualLocation,
-        radius: 12,
-      },
-    ];
-    const lines: ChinaResultLine[] = [];
-    const colors = ["#f59e0b", "#a78bfa"];
-
-    guessEntries.forEach(([pid, guess], index) => {
-      const color = colors[index % colors.length]!;
-      markers.push({
-        point: { lat: guess.lat, lng: guess.lng },
-        color,
-        label: players[pid]?.name ?? pid,
-        radius: 10,
-      });
-      lines.push({
-        from: { lat: guess.lat, lng: guess.lng },
-        to: { lat: historicalQuestion.lat, lng: historicalQuestion.lng },
-        color,
-      });
-    });
-
-    void mountResultMap(
-      container,
-      markers,
-      lines,
-      () => active && containerRef.current === container,
-    ).then((handle) => {
-      if (!active) {
-        handle.destroy();
-        return;
-      }
-      mapRef.current = handle;
-    });
-
-    return () => {
-      active = false;
-      mapRef.current?.destroy();
-      mapRef.current = null;
-    };
-  }, [
-    copy.actualLocation,
-    showMap,
-    result.roundIndex,
-    historicalQuestion,
-    players,
-    result.guesses,
-  ]);
 
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
     if (standardQuestion && isFunfactQuestion(standardQuestion)) {
@@ -248,19 +175,12 @@ export function BattleRoundResultView({
       </div>
 
       <div className="flex-1 overflow-auto">
-        {showMap && (
-          <div
-            ref={containerRef}
-            className="w-full border-b border-white/10"
-            style={{ height: "min(42vh, 420px)", minHeight: 320 }}
-          />
-        )}
-        {showLocationOnlyMap && (
+        {(showMap || showLocationOnlyMap) && (
           <div
             className="w-full border-b border-white/10"
             style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           >
-            {showForeignMap ? (
+            {locationOnlyAnswer ? (
               <GoogleGuessMap
                 country={DEFAULT_FOREIGN_COUNTRY}
                 guess={locationOnlyGuess}
@@ -268,16 +188,38 @@ export function BattleRoundResultView({
                 answerLabel={locationOnlyAnswer.label}
                 distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
                 disabled
+                labels={mapLabels}
+                formatDistance={(distanceKm) =>
+                  formatBattleDistance(distanceKm, locale)
+                }
+                restrictToCountry={false}
                 minHeightClass="min-h-0"
                 onGuess={() => undefined}
               />
             ) : (
-              <BaiduGuessMap
-                guess={locationOnlyGuess}
-                answer={locationOnlyAnswer}
-                answerLabel={locationOnlyAnswer.label}
+              <GoogleGuessMap
+                country={DEFAULT_FOREIGN_COUNTRY}
+                guess={
+                  myGuess?.submitted
+                    ? { lat: myGuess.lat, lng: myGuess.lng }
+                    : null
+                }
+                answer={
+                  historicalQuestion
+                    ? {
+                        lat: historicalQuestion.lat,
+                        lng: historicalQuestion.lng,
+                      }
+                    : null
+                }
+                answerLabel={historicalQuestion?.location}
                 distanceKm={myGuess?.submitted ? myGuess.distanceKm : undefined}
                 disabled
+                labels={mapLabels}
+                formatDistance={(distanceKm) =>
+                  formatBattleDistance(distanceKm, locale)
+                }
+                restrictToCountry={false}
                 minHeightClass="min-h-0"
                 onGuess={() => undefined}
               />
