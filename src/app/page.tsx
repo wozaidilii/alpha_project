@@ -48,6 +48,7 @@ const COPY: Record<
     saved: string;
     leaderboardTitle: string;
     leaderboardEmpty: string;
+    leaderboardRounds: (rounds: number) => string;
     myRank: string;
     points: string;
     loading: string;
@@ -80,6 +81,7 @@ const COPY: Record<
     saved: "已保存",
     leaderboardTitle: "排行榜",
     leaderboardEmpty: "暂无上榜成绩",
+    leaderboardRounds: (rounds) => `${rounds} 轮榜`,
     myRank: "我的排名",
     points: "分",
     loading: "加载中...",
@@ -111,6 +113,7 @@ const COPY: Record<
     saved: "保存しました",
     leaderboardTitle: "ランキング",
     leaderboardEmpty: "まだ記録がありません",
+    leaderboardRounds: (rounds) => `${rounds} ラウンド`,
     myRank: "自分の順位",
     points: "点",
     loading: "読み込み中...",
@@ -143,6 +146,7 @@ const COPY: Record<
     saved: "Saved",
     leaderboardTitle: "Leaderboard",
     leaderboardEmpty: "No ranked scores yet",
+    leaderboardRounds: (rounds) => `${rounds}-round`,
     myRank: "My rank",
     points: "pts",
     loading: "Loading...",
@@ -158,13 +162,17 @@ function avatarImageStyle(
 
 export default function Home() {
   const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
+  const [leaderboardRounds, setLeaderboardRounds] = useState<5 | 10>(5);
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileCountryCode, setProfileCountryCode] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const copy = COPY[locale];
-  const playUrl = withAnimeLocale("/game/anime", locale);
+  const playUrl = withAnimeLocale(
+    `/game/anime?rounds=${leaderboardRounds}`,
+    locale,
+  );
   const loginUrl = `/login?next=${encodeURIComponent(playUrl)}`;
   const battleUrl = session
     ? "/battle"
@@ -174,7 +182,7 @@ export default function Home() {
     { enabled: Boolean(session?.token), retry: false },
   );
   const leaderboardQuery = api.player.leaderboard.useQuery(
-    { token: session?.token, limit: 8 },
+    { token: session?.token, limit: 8, rounds: leaderboardRounds },
     { retry: false },
   );
   const updateProfile = api.player.updateProfile.useMutation({
@@ -476,13 +484,26 @@ export default function Home() {
 
             <div>
               <section className="anime-panel p-4">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-black text-white">
                     {copy.leaderboardTitle}
                   </h2>
-                  <span className="text-xs font-bold text-cyan-100/70">
-                    Top 8
-                  </span>
+                  <div className="flex overflow-hidden rounded-full border border-white/10">
+                    {([5, 10] as const).map((rounds) => (
+                      <button
+                        key={rounds}
+                        type="button"
+                        onClick={() => setLeaderboardRounds(rounds)}
+                        className={`px-3 py-1 text-xs font-black transition ${
+                          leaderboardRounds === rounds
+                            ? "bg-cyan-200/20 text-cyan-50"
+                            : "bg-white/5 text-pink-50/70 hover:bg-white/10"
+                        }`}
+                      >
+                        {copy.leaderboardRounds(rounds)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid gap-2">

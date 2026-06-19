@@ -332,6 +332,7 @@ export const playerRouter = createTRPCRouter({
         .object({
           token: z.string().min(1).optional(),
           limit: z.number().int().min(1).max(50).optional(),
+          rounds: z.union([z.literal(5), z.literal(10)]).optional(),
         })
         .optional(),
     )

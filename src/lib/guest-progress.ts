@@ -96,11 +96,21 @@ export function markGuestGameStarted(progress: GuestProgress): GuestProgress {
   };
 }
 
+export function getGuestBestScoreForRounds(
+  progress: GuestProgress,
+  rounds: number,
+) {
+  return progress.history
+    .filter((entry) => entry.rounds === rounds)
+    .reduce((max, entry) => Math.max(max, entry.score), 0);
+}
+
 export function saveGuestGameResult(
   progress: GuestProgress,
   result: AnimeRoundResultSummary,
 ): GuestResultSave {
-  const isNewBest = result.score > progress.bestScore;
+  const previousBest = getGuestBestScoreForRounds(progress, result.rounds);
+  const isNewBest = result.score > previousBest;
   const entry: GuestHistoryEntry = {
     id: result.id,
     score: result.score,

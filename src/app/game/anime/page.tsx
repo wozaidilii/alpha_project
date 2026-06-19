@@ -8,14 +8,20 @@ import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
 import {
   ANIME_GUESSR_IMAGE_BASE_URL,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
+  ANIME_GUESSR_ROUND_OPTIONS,
   ANIME_GUESSR_ROUNDS,
   buildAnimeGuessrImageUrl,
   fetchAnimeGuessrQuestions,
   getAnimeGuessrQuestionText,
+  getAnimeGuessrRoundCountFromSearch,
+  getStoredAnimeGuessrRoundCount,
+  normalizeAnimeGuessrRoundCount,
   pickAnimeGuessrQuestions,
+  saveAnimeGuessrRoundCount,
   toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
   type AnimeGuessrQuestionText,
+  type AnimeGuessrRoundCount,
 } from "~/lib/anime-guessr";
 import {
   DEFAULT_ANIME_LOCALE,
@@ -26,7 +32,6 @@ import {
   type AnimeLocale,
 } from "~/lib/anime-locale";
 import {
-  ANIME_GUESSR_TIME_LIMIT_SECONDS,
   clearPendingAnimeFinalResult,
   formatAnimeGameCountdown,
   loadPendingAnimeFinalResult,
@@ -43,6 +48,7 @@ import {
 import { AuthLoading, useEmailSession } from "~/lib/player-session-guard";
 import {
   canStartGuestGame,
+  getGuestBestScoreForRounds,
   getGuestGamesRemaining,
   loadGuestProgress,
   markGuestGameStarted,
@@ -72,19 +78,19 @@ type GameCopy = {
   emptyBank: string;
   reload: string;
   restored: string;
-  notEnoughQuestions: (found: number) => string;
+  notEnoughQuestions: (found: number, total: number) => string;
   bankLoadFailed: string;
   noGoogleKey: string;
   noStreetViewQuestions: string;
   skippedStreetView: string;
   imageUnavailable: string;
   imageMissingBase: string;
-  timedOutEvent: string;
-  timedOutFinal: string;
   guestRemaining: (remaining: number, bestScore: number) => string;
   guestRemainingShort: (remaining: number) => string;
   roundStatus: (round: number, total: number, isResult: boolean) => string;
-  remaining: (time: string) => string;
+  totalElapsed: (time: string) => string;
+  roundsLabel: string;
+  roundsOption: (rounds: number) => string;
   animeClue: string;
   scene: string;
   answer: string;
@@ -154,8 +160,8 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     emptyBank: "动漫题库为空，请重新生成题库。",
     reload: "重新加载",
     restored: "登录成功，已回到刚才的成绩页。",
-    notEnoughQuestions: (found) =>
-      `只找到 ${found} / ${ANIME_GUESSR_ROUNDS} 道可用动漫题，请重新生成题库。`,
+    notEnoughQuestions: (found, total) =>
+      `只找到 ${found} / ${total} 道可用动漫题，请重新生成题库。`,
     bankLoadFailed: "动漫题库加载失败",
     noGoogleKey:
       "未配置 Google Maps AK，无法加载猜动漫模式的现实街景；请配置 NEXT_PUBLIC_GOOGLE_MAP_AK 后重试。",
@@ -164,14 +170,14 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
       "上一道动漫巡礼题的现实街景加载失败，已跳过并切换到下一题。",
     imageUnavailable: "题目图片暂不可用，已显示占位图",
     imageMissingBase: "图片前缀未配置，已显示占位图",
-    timedOutEvent: "anime_game_timed_out",
-    timedOutFinal: "时间到，已自动结算当前成绩。",
     guestRemaining: (remaining, bestScore) =>
-      `游客今日剩余 ${remaining} 局 · 本地最高 ${bestScore.toLocaleString()} 分`,
+      `游客今日剩余 ${remaining} 局 · 本模式本地最高 ${bestScore.toLocaleString()} 分`,
     guestRemainingShort: (remaining) => `游客 · 今日剩余 ${remaining} 局`,
     roundStatus: (round, total, isResult) =>
       `第 ${round} / ${total} 轮${isResult ? "结果" : ""}`,
-    remaining: (time) => `剩余 ${time}`,
+    totalElapsed: (time) => `总用时 ${time}`,
+    roundsLabel: "局数",
+    roundsOption: (rounds) => `${rounds} 轮`,
     animeClue: "动漫线索",
     scene: "场景",
     answer: "答案",
@@ -241,8 +247,8 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     emptyBank: "問題データが空です。問題データを再生成してください。",
     reload: "再読み込み",
     restored: "ログインしました。直前の結果画面に戻りました。",
-    notEnoughQuestions: (found) =>
-      `利用可能な問題は ${found} / ${ANIME_GUESSR_ROUNDS} 問だけです。問題データを再生成してください。`,
+    notEnoughQuestions: (found, total) =>
+      `利用可能な問題は ${found} / ${total} 問だけです。問題データを再生成してください。`,
     bankLoadFailed: "問題データの読み込みに失敗しました",
     noGoogleKey:
       "Google Maps AK が未設定のため、現実のストリートビューを読み込めません。NEXT_PUBLIC_GOOGLE_MAP_AK を設定してください。",
@@ -252,14 +258,14 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
       "前の問題のストリートビューを読み込めなかったため、次の問題に切り替えました。",
     imageUnavailable: "問題画像を表示できないため、仮画像を表示しています",
     imageMissingBase: "画像公開 URL が未設定のため、仮画像を表示しています",
-    timedOutEvent: "anime_game_timed_out",
-    timedOutFinal: "時間切れです。現在の成績で集計しました。",
     guestRemaining: (remaining, bestScore) =>
-      `ゲスト残り ${remaining} 回 · ローカル最高 ${bestScore.toLocaleString()} 点`,
+      `ゲスト残り ${remaining} 回 · このモード最高 ${bestScore.toLocaleString()} 点`,
     guestRemainingShort: (remaining) => `ゲスト · 本日残り ${remaining} 回`,
     roundStatus: (round, total, isResult) =>
       `${round} / ${total} ラウンド${isResult ? "結果" : ""}`,
-    remaining: (time) => `残り ${time}`,
+    totalElapsed: (time) => `合計 ${time}`,
+    roundsLabel: "ラウンド数",
+    roundsOption: (rounds) => `${rounds} ラウンド`,
     animeClue: "アニメヒント",
     scene: "シーン",
     answer: "答え",
@@ -331,8 +337,8 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
       "The anime question bank is empty. Regenerate the question data.",
     reload: "Reload",
     restored: "Login complete. You are back on your result page.",
-    notEnoughQuestions: (found) =>
-      `Only ${found} / ${ANIME_GUESSR_ROUNDS} anime questions are available. Regenerate the question data.`,
+    notEnoughQuestions: (found, total) =>
+      `Only ${found} / ${total} anime questions are available. Regenerate the question data.`,
     bankLoadFailed: "Failed to load anime question data",
     noGoogleKey:
       "Google Maps AK is not configured, so the real Street View cannot load. Set NEXT_PUBLIC_GOOGLE_MAP_AK and retry.",
@@ -343,14 +349,14 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     imageUnavailable: "Question image unavailable. Showing the placeholder.",
     imageMissingBase:
       "Image public base URL is not configured. Showing the placeholder.",
-    timedOutEvent: "anime_game_timed_out",
-    timedOutFinal: "Time is up. Your current score has been finalized.",
     guestRemaining: (remaining, bestScore) =>
-      `Guest runs left today: ${remaining} · Local best ${bestScore.toLocaleString()} pts`,
+      `Guest runs left today: ${remaining} · Mode best ${bestScore.toLocaleString()} pts`,
     guestRemainingShort: (remaining) => `Guest · ${remaining} left today`,
     roundStatus: (round, total, isResult) =>
       `Round ${round} / ${total}${isResult ? " result" : ""}`,
-    remaining: (time) => `${time} left`,
+    totalElapsed: (time) => `Total ${time}`,
+    roundsLabel: "Rounds",
+    roundsOption: (rounds) => `${rounds} rounds`,
     animeClue: "Anime clue",
     scene: "Scene",
     answer: "Answer",
@@ -405,6 +411,58 @@ function formatElapsed(seconds: number, locale: AnimeLocale): string {
   const elapsed = Math.max(0, Math.round(seconds));
   if (locale === "en") return `${elapsed}s`;
   return `${elapsed} 秒`;
+}
+
+function useElapsedSeconds(active: boolean, resetKey: string) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+
+    setElapsed(0);
+    const timer = window.setInterval(() => {
+      setElapsed((value) => value + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [active, resetKey]);
+
+  return elapsed;
+}
+
+function RoundCountSelector({
+  value,
+  disabled,
+  copy,
+  onChange,
+}: {
+  value: AnimeGuessrRoundCount;
+  disabled: boolean;
+  copy: GameCopy;
+  onChange: (rounds: AnimeGuessrRoundCount) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-bold text-cyan-100/60">{copy.roundsLabel}</span>
+      <div className="flex overflow-hidden rounded-full border border-white/10">
+        {ANIME_GUESSR_ROUND_OPTIONS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(normalizeAnimeGuessrRoundCount(option))}
+            className={`min-h-8 px-3 text-xs font-black transition focus:ring-2 focus:ring-cyan-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+              value === option
+                ? "bg-cyan-200/20 text-cyan-50"
+                : "bg-white/5 text-pink-50/70 hover:bg-white/10"
+            }`}
+          >
+            {copy.roundsOption(option)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function getRank(score: number, locale: AnimeLocale) {
@@ -528,13 +586,10 @@ export default function AnimeGuessrPage() {
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [results, setResults] = useState<AnimeRoundResult[]>([]);
-  const [timeLeftSeconds, setTimeLeftSeconds] = useState(
-    ANIME_GUESSR_TIME_LIMIT_SECONDS,
+  const [roundCount, setRoundCount] = useState<AnimeGuessrRoundCount>(
+    ANIME_GUESSR_ROUNDS,
   );
-  const [gameTimedOut, setGameTimedOut] = useState(false);
-  const gameStartedAtRef = useRef(Date.now());
   const roundStartedAtRef = useRef(Date.now());
-  const timeExpiredRef = useRef(false);
   const recordedStartKeyRef = useRef<string | null>(null);
   const recordedCompletionKeyRef = useRef<string | null>(null);
   const recordActivity = api.player.recordActivity.useMutation();
@@ -575,6 +630,11 @@ export default function AnimeGuessrPage() {
     () => (current ? toAnimeStreetViewLocation(current, locale) : null),
     [current, locale],
   );
+  const gameTimerKey = `${reloadKey}:${roundCount}:${questions.map((question) => question.id).join(",")}`;
+  const totalElapsedSeconds = useElapsedSeconds(
+    loadState === "ready" && phase !== "final" && !guestBlocked,
+    gameTimerKey,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -583,16 +643,36 @@ export default function AnimeGuessrPage() {
       getStoredAnimeLocale();
     setLocale(nextLocale);
     saveAnimeLocale(nextLocale);
+
+    const roundsFromSearch = getAnimeGuessrRoundCountFromSearch(
+      window.location.search,
+    );
+    const nextRoundCount = roundsFromSearch ?? getStoredAnimeGuessrRoundCount();
+    setRoundCount(nextRoundCount);
+    saveAnimeGuessrRoundCount(nextRoundCount);
   }, []);
+
+  const handleRoundCountChange = useCallback(
+    (nextRoundCount: AnimeGuessrRoundCount) => {
+      if (nextRoundCount === roundCount) return;
+      saveAnimeGuessrRoundCount(nextRoundCount);
+      setRoundCount(nextRoundCount);
+      setReloadKey((value) => value + 1);
+    },
+    [roundCount],
+  );
+
+  const canChangeRoundCount =
+    loadState !== "ready" || phase === "final" || questions.length === 0;
 
   const persistPendingFinalResult = useCallback(() => {
     if (phase !== "final") return;
     savePendingAnimeFinalResult({
       questions,
       results,
-      gameTimedOut,
+      gameTimedOut: false,
     });
-  }, [gameTimedOut, phase, questions, results]);
+  }, [phase, questions, results]);
 
   const restorePendingFinalResult = useCallback(() => {
     const pending = loadPendingAnimeFinalResult();
@@ -614,9 +694,6 @@ export default function AnimeGuessrPage() {
     setGuestBlocked(false);
     setAuthPromptReason(null);
     setShareMessage(copy.restored);
-    setTimeLeftSeconds(0);
-    setGameTimedOut(pending.gameTimedOut);
-    timeExpiredRef.current = pending.gameTimedOut;
     return true;
   }, [copy.restored]);
 
@@ -631,30 +708,22 @@ export default function AnimeGuessrPage() {
     setPhase("playing");
     setGuestBlocked(false);
     setShareMessage("");
-    setTimeLeftSeconds(ANIME_GUESSR_TIME_LIMIT_SECONDS);
-    setGameTimedOut(false);
-    gameStartedAtRef.current = Date.now();
     roundStartedAtRef.current = Date.now();
-    timeExpiredRef.current = false;
     recordedCompletionKeyRef.current = null;
 
     void fetchAnimeGuessrQuestions()
       .then((pool) => {
         if (!active) return;
-        const picked = pickAnimeGuessrQuestions(pool, ANIME_GUESSR_ROUNDS);
-        if (picked.length < ANIME_GUESSR_ROUNDS) {
+        const picked = pickAnimeGuessrQuestions(pool, roundCount);
+        if (picked.length < roundCount) {
           setLoadState("error");
-          setLoadMessage(copy.notEnoughQuestions(picked.length));
+          setLoadMessage(copy.notEnoughQuestions(picked.length, roundCount));
           return;
         }
         setQuestions(picked);
         setLoadMessage("");
         setLoadState("ready");
-        setTimeLeftSeconds(ANIME_GUESSR_TIME_LIMIT_SECONDS);
-        setGameTimedOut(false);
-        gameStartedAtRef.current = Date.now();
         roundStartedAtRef.current = Date.now();
-        timeExpiredRef.current = false;
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -667,7 +736,7 @@ export default function AnimeGuessrPage() {
     return () => {
       active = false;
     };
-  }, [copy]);
+  }, [copy, roundCount]);
 
   useEffect(() => {
     if (!ready) return;
@@ -684,49 +753,6 @@ export default function AnimeGuessrPage() {
     if (phase !== "playing" || !current) return;
     roundStartedAtRef.current = Date.now();
   }, [current, phase]);
-
-  useEffect(() => {
-    if (
-      phase === "final" ||
-      loadState !== "ready" ||
-      questions.length === 0 ||
-      guestBlocked
-    ) {
-      return;
-    }
-
-    const tick = () => {
-      const elapsed = Math.floor(
-        (Date.now() - gameStartedAtRef.current) / 1000,
-      );
-      const remaining = Math.max(0, ANIME_GUESSR_TIME_LIMIT_SECONDS - elapsed);
-      setTimeLeftSeconds(remaining);
-
-      if (remaining > 0 || timeExpiredRef.current) return;
-      timeExpiredRef.current = true;
-      setGameTimedOut(true);
-      setPhase("final");
-      capturePostHogEvent(
-        "anime_game_timed_out",
-        {
-          rounds_completed: results.length,
-          auth_state: session ? "logged_in" : "guest",
-        },
-        session?.user.id,
-      );
-    };
-
-    tick();
-    const timer = window.setInterval(tick, 250);
-    return () => window.clearInterval(timer);
-  }, [
-    guestBlocked,
-    loadState,
-    phase,
-    questions.length,
-    results.length,
-    session,
-  ]);
 
   useEffect(() => {
     if (loadState !== "ready" || questions.length === 0) return;
@@ -771,7 +797,7 @@ export default function AnimeGuessrPage() {
   }, [loadState, questions, recordActivity, reloadKey, session]);
 
   function handleSubmit() {
-    if (!current || !guess || guestBlocked || timeLeftSeconds <= 0) return;
+    if (!current || !guess || guestBlocked) return;
 
     const distanceKm = haversineDistance(
       current.lat,
@@ -783,7 +809,7 @@ export default function AnimeGuessrPage() {
     const score = locationRoundScore({
       distanceKm,
       elapsedSeconds,
-      speedCompensationWindowSeconds: ANIME_GUESSR_TIME_LIMIT_SECONDS,
+      soloAnimeScoring: true,
     });
     setResults((prev) => [
       ...prev,
@@ -869,17 +895,16 @@ export default function AnimeGuessrPage() {
       results.length > 0
         ? results.map((result) => result.question.id).join(",")
         : questions.map((question) => question.id).join(",");
-    const key = `${reloadKey}:${questionKey}:${totalScore}:${gameTimedOut ? "timeout" : "complete"}`;
+    const key = `${reloadKey}:${roundCount}:${questionKey}:${totalScore}:complete`;
     if (recordedCompletionKeyRef.current === key) return;
     recordedCompletionKeyRef.current = key;
 
-    const maxScore =
-      Math.max(results.length, questions.length) * LOCATION_ROUND_SCORE_MAX;
+    const maxScore = roundCount * LOCATION_ROUND_SCORE_MAX;
     const summary = {
       id: key,
       score: totalScore,
       maxScore,
-      rounds: results.length,
+      rounds: roundCount,
       playedAt: new Date().toISOString(),
     };
 
@@ -888,9 +913,9 @@ export default function AnimeGuessrPage() {
         token: session.token,
         eventType: "anime_game_completed",
         payload: {
-          rounds: results.length,
+          rounds: roundCount,
           totalScore,
-          timedOut: gameTimedOut,
+          totalElapsedSeconds,
         },
         route: "/game/anime",
       });
@@ -899,15 +924,15 @@ export default function AnimeGuessrPage() {
         score: totalScore,
         country: "japan",
         mode: "anime",
-        rounds: results.length,
+        rounds: roundCount,
       });
       capturePostHogEvent(
         "anime_game_completed",
         {
           score: totalScore,
-          rounds: results.length,
+          rounds: roundCount,
+          total_elapsed_seconds: totalElapsedSeconds,
           auth_state: "logged_in",
-          timed_out: gameTimedOut,
         },
         session.user.id,
       );
@@ -923,14 +948,14 @@ export default function AnimeGuessrPage() {
       score: totalScore,
       country: "japan",
       mode: "anime",
-      rounds: results.length,
+      rounds: roundCount,
     });
     capturePostHogEvent("anime_game_completed", {
       score: totalScore,
-      rounds: results.length,
+      rounds: roundCount,
+      total_elapsed_seconds: totalElapsedSeconds,
       auth_state: "guest",
       is_new_best: saved.isNewBest,
-      timed_out: gameTimedOut,
     });
 
     if (saved.isNewBest) {
@@ -938,13 +963,14 @@ export default function AnimeGuessrPage() {
     }
   }, [
     phase,
-    gameTimedOut,
     questions,
     recordActivity,
     recordGameSession,
     reloadKey,
     results,
+    roundCount,
     session,
+    totalElapsedSeconds,
     totalScore,
   ]);
 
@@ -1041,6 +1067,12 @@ export default function AnimeGuessrPage() {
         <p className="max-w-md text-sm leading-6 text-pink-50/70">
           {loadMessage || copy.emptyBank}
         </p>
+        <RoundCountSelector
+          value={roundCount}
+          disabled={false}
+          copy={copy}
+          onChange={handleRoundCountChange}
+        />
         <div className="flex gap-3">
           <button
             type="button"
@@ -1058,9 +1090,11 @@ export default function AnimeGuessrPage() {
   }
 
   if (phase === "final") {
-    const maxScore =
-      Math.max(results.length, questions.length) * LOCATION_ROUND_SCORE_MAX;
+    const maxScore = roundCount * LOCATION_ROUND_SCORE_MAX;
     const rank = getRank(totalScore, locale);
+    const guestModeBest = guestProgress
+      ? getGuestBestScoreForRounds(guestProgress, roundCount)
+      : 0;
 
     return (
       <main className="anime-shell flex min-h-screen flex-col text-white">
@@ -1096,19 +1130,28 @@ export default function AnimeGuessrPage() {
             <div className="mt-1 text-pink-50/60">
               / {maxScore.toLocaleString()} {copy.scoreUnit}
             </div>
-            {gameTimedOut && (
-              <div className="mt-4 rounded-xl border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-sm font-bold text-amber-50">
-                {copy.timedOutFinal}
-              </div>
-            )}
+            <div className="mt-3 text-sm font-bold text-cyan-100/80">
+              {copy.totalElapsed(
+                formatAnimeGameCountdown(totalElapsedSeconds),
+              )}
+            </div>
             {!session && guestProgress && (
               <div className="mt-4 rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">
                 {copy.guestRemaining(
                   getGuestGamesRemaining(guestProgress),
-                  guestProgress.bestScore,
+                  guestModeBest,
                 )}
               </div>
             )}
+          </div>
+
+          <div className="mb-6 flex justify-center">
+            <RoundCountSelector
+              value={roundCount}
+              disabled={!canChangeRoundCount}
+              copy={copy}
+              onChange={handleRoundCountChange}
+            />
           </div>
 
           <div className="space-y-3">
@@ -1222,14 +1265,8 @@ export default function AnimeGuessrPage() {
               Boolean(roundResult),
             )}
           </span>
-          <span
-            className={`rounded-full border px-3 py-1 text-xs font-black ${
-              timeLeftSeconds <= 15
-                ? "border-rose-300/40 bg-rose-300/15 text-rose-50"
-                : "border-amber-200/30 bg-amber-200/10 text-amber-50"
-            }`}
-          >
-            {copy.remaining(formatAnimeGameCountdown(timeLeftSeconds))}
+          <span className="rounded-full border border-amber-200/30 bg-amber-200/10 px-3 py-1 text-xs font-black text-amber-50">
+            {copy.totalElapsed(formatAnimeGameCountdown(totalElapsedSeconds))}
           </span>
         </div>
       </header>

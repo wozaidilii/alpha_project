@@ -33,9 +33,13 @@ export const LOCATION_FAR_DISTANCE_KM = 400;
 export const LOCATION_FAR_DISTANCE_MAX_PTS = 40;
 /** 距离分衰减至 0 的公里数（>400 km 段线性归零） */
 export const LOCATION_ROUND_ZERO_DISTANCE_KM = 2500;
-export const LOCATION_SPEED_COMPENSATION_MAX = 10;
+export const LOCATION_SPEED_COMPENSATION_MAX = 20;
 export const LOCATION_SPEED_DEDUCTION_INTERVAL_SECONDS = 10;
 export const LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS = 60;
+/** 单人猜动漫：此秒数内仍可凭距离+时间凑满 100 分 */
+export const LOCATION_SOLO_ANIME_TIME_CAP_SECONDS = 100;
+/** 单人猜动漫：超过 TIME_CAP 后单轮总分上限 */
+export const LOCATION_SOLO_ANIME_OVER_TIME_MAX = 90;
 export const HISTORY_YEAR_SCORE_MAX = 10000;
 export const HISTORY_YEAR_MIN_CLUE_MULTIPLIER = 0.4;
 
@@ -52,6 +56,8 @@ export interface LocationRoundScoreInput {
   distanceKm: number;
   elapsedSeconds?: number;
   speedCompensationWindowSeconds?: number;
+  /** 单人猜动漫：100 秒内可满分，超过后单轮最高 90 */
+  soloAnimeScoring?: boolean;
 }
 
 export interface LocationRoundScoreResult {
@@ -121,17 +127,27 @@ export function locationSpeedCompensationScore(
 export function locationRoundScore({
   distanceKm,
   elapsedSeconds,
+  soloAnimeScoring = false,
 }: LocationRoundScoreInput): LocationRoundScoreResult {
   const distancePts = locationDistanceScore(distanceKm);
   const speedCompensationPts = locationSpeedCompensationScore(elapsedSeconds);
+  const rawTotal = distancePts + speedCompensationPts;
+
+  let total: number;
+  if (soloAnimeScoring) {
+    const elapsed = Math.max(0, elapsedSeconds ?? 0);
+    total =
+      elapsed <= LOCATION_SOLO_ANIME_TIME_CAP_SECONDS
+        ? Math.min(LOCATION_ROUND_SCORE_MAX, rawTotal)
+        : Math.min(LOCATION_SOLO_ANIME_OVER_TIME_MAX, rawTotal);
+  } else {
+    total = Math.min(LOCATION_ROUND_SCORE_MAX, rawTotal);
+  }
 
   return {
     distancePts,
     speedCompensationPts,
-    total: Math.min(
-      LOCATION_ROUND_SCORE_MAX,
-      distancePts + speedCompensationPts,
-    ),
+    total,
   };
 }
 

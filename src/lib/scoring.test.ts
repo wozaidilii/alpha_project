@@ -15,6 +15,8 @@ import {
   LOCATION_FAR_DISTANCE_KM,
   LOCATION_FAR_DISTANCE_MAX_PTS,
   LOCATION_SPEED_COMPENSATION_MAX,
+  LOCATION_SOLO_ANIME_OVER_TIME_MAX,
+  LOCATION_SOLO_ANIME_TIME_CAP_SECONDS,
   getTargetYear,
   formatAnswerYear,
   quizScore,
@@ -235,36 +237,40 @@ describe("locationDistanceScore", () => {
 });
 
 describe("locationSpeedCompensationScore", () => {
-  it("开局 10 分，每 10 秒扣 1 分", () => {
-    expect(locationSpeedCompensationScore(0)).toBe(10);
-    expect(locationSpeedCompensationScore(9)).toBe(10);
-    expect(locationSpeedCompensationScore(10)).toBe(9);
-    expect(locationSpeedCompensationScore(50)).toBe(5);
-    expect(locationSpeedCompensationScore(100)).toBe(0);
-    expect(locationSpeedCompensationScore(120)).toBe(0);
+  it("开局 20 分，每 10 秒扣 1 分，200 秒扣光", () => {
+    expect(locationSpeedCompensationScore(0)).toBe(20);
+    expect(locationSpeedCompensationScore(9)).toBe(20);
+    expect(locationSpeedCompensationScore(10)).toBe(19);
+    expect(locationSpeedCompensationScore(100)).toBe(10);
+    expect(locationSpeedCompensationScore(190)).toBe(1);
+    expect(locationSpeedCompensationScore(200)).toBe(0);
+    expect(locationSpeedCompensationScore(240)).toBe(0);
   });
 });
 
 describe("locationRoundScore", () => {
-  it("精确命中且即时提交时距离满分、速度满分，总分封顶 100", () => {
+  it("精确命中且 100 秒内提交时可拿满分", () => {
     const result = locationRoundScore({
       distanceKm: 0,
-      elapsedSeconds: 0,
+      elapsedSeconds: 50,
+      soloAnimeScoring: true,
     });
 
     expect(result.distancePts).toBe(LOCATION_ROUND_SCORE_MAX);
-    expect(result.speedCompensationPts).toBe(LOCATION_SPEED_COMPENSATION_MAX);
+    expect(result.speedCompensationPts).toBe(15);
     expect(result.total).toBe(LOCATION_ROUND_SCORE_MAX);
   });
 
-  it("距离分相同时，提交越快速度补偿越高", () => {
+  it("100 秒内距离分相同时，提交越快速度补偿越高", () => {
     const fast = locationRoundScore({
       distanceKm: 50,
       elapsedSeconds: 0,
+      soloAnimeScoring: true,
     });
     const slow = locationRoundScore({
       distanceKm: 50,
       elapsedSeconds: 50,
+      soloAnimeScoring: true,
     });
 
     expect(fast.distancePts).toBe(slow.distancePts);
@@ -275,10 +281,31 @@ describe("locationRoundScore", () => {
     expect(fast.total).toBeLessThanOrEqual(LOCATION_ROUND_SCORE_MAX);
   });
 
-  it("极远误差时距离分归零，仅剩少量速度补偿", () => {
+  it("超过 100 秒后即使距离满分也不能再到 100", () => {
+    const result = locationRoundScore({
+      distanceKm: 0,
+      elapsedSeconds: 101,
+      soloAnimeScoring: true,
+    });
+
+    expect(result.distancePts).toBe(LOCATION_ROUND_SCORE_MAX);
+    expect(result.total).toBe(LOCATION_SOLO_ANIME_OVER_TIME_MAX);
+  });
+
+  it("非单人模式仍按 100 分封顶", () => {
+    const result = locationRoundScore({
+      distanceKm: 0,
+      elapsedSeconds: 0,
+    });
+
+    expect(result.total).toBe(LOCATION_ROUND_SCORE_MAX);
+  });
+
+  it("极远误差时距离分归零，仍可叠加时间补偿", () => {
     const result = locationRoundScore({
       distanceKm: LOCATION_ROUND_ZERO_DISTANCE_KM,
       elapsedSeconds: 0,
+      soloAnimeScoring: true,
     });
 
     expect(result.distancePts).toBe(0);

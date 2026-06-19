@@ -6,6 +6,9 @@ import {
 } from "~/lib/anime-locale";
 
 export const ANIME_GUESSR_ROUNDS = 5;
+export const ANIME_GUESSR_ROUND_OPTIONS = [5, 10] as const;
+export type AnimeGuessrRoundCount = (typeof ANIME_GUESSR_ROUND_OPTIONS)[number];
+export const ANIME_GUESSR_ROUNDS_STORAGE_KEY = "aniguessr_round_count";
 export const ANIME_GUESSR_DATA_URL = "/data/anime-guessr-questions.json";
 export const ANIME_GUESSR_PLACEHOLDER_IMAGE_URL =
   "/images/anime-placeholder.jpg";
@@ -224,4 +227,43 @@ export function toAnimeStreetViewLocation(
     pitch: 0,
     hint: text.description,
   };
+}
+
+export function normalizeAnimeGuessrRoundCount(
+  value: unknown,
+): AnimeGuessrRoundCount {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : NaN;
+  return parsed === 10 ? 10 : ANIME_GUESSR_ROUNDS;
+}
+
+export function getStoredAnimeGuessrRoundCount(): AnimeGuessrRoundCount {
+  if (typeof window === "undefined") return ANIME_GUESSR_ROUNDS;
+  try {
+    const raw = window.localStorage.getItem(ANIME_GUESSR_ROUNDS_STORAGE_KEY);
+    if (!raw) return ANIME_GUESSR_ROUNDS;
+    return normalizeAnimeGuessrRoundCount(JSON.parse(raw));
+  } catch {
+    return normalizeAnimeGuessrRoundCount(
+      window.localStorage.getItem(ANIME_GUESSR_ROUNDS_STORAGE_KEY),
+    );
+  }
+}
+
+export function saveAnimeGuessrRoundCount(rounds: AnimeGuessrRoundCount) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ANIME_GUESSR_ROUNDS_STORAGE_KEY, String(rounds));
+}
+
+export function getAnimeGuessrRoundCountFromSearch(
+  search: string,
+): AnimeGuessrRoundCount | null {
+  const params = new URLSearchParams(search);
+  const value = params.get("rounds");
+  if (value == null) return null;
+  return normalizeAnimeGuessrRoundCount(value);
 }

@@ -531,9 +531,11 @@ export async function getAnimeLeaderboard(
   input: {
     token?: string;
     limit?: number;
+    rounds?: number;
   } = {},
 ): Promise<LeaderboardResult> {
   const limit = Math.min(Math.max(Math.round(input.limit ?? 20), 1), 50);
+  const rounds = input.rounds === 10 ? 10 : 5;
   const currentUser = input.token
     ? await requirePlayerByToken(input.token)
     : null;
@@ -553,6 +555,7 @@ export async function getAnimeLeaderboard(
       from game_sessions gs
       where gs.user_id is not null
         and gs.mode = 'anime'
+        and gs.rounds = ${rounds}
     ),
     ranked as (
       select
@@ -598,6 +601,7 @@ export async function getAnimeLeaderboard(
         from game_sessions gs
         where gs.user_id is not null
           and gs.mode = 'anime'
+          and gs.rounds = ${rounds}
       ),
       ranked as (
         select
