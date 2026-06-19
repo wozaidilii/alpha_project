@@ -179,3 +179,10 @@
 - 根因：浏览器会长期缓存 `/favicon.ico`，且不同设备会优先读取 PNG icon 或 Apple touch icon；页面 metadata 只声明了无版本的 `/favicon.ico`。
 - 修复：从占位动漫图重新生成 192/512 PNG、Apple touch PNG 和多尺寸 ICO，并在 Next metadata 中声明带版本 query 的 icon URL。
 - 预防：以后更新网站 icon 时，同时更新现代 PNG、touch icon、legacy ICO 和 versioned metadata；上线后用 curl 检查 HTML icon 标签和图标文件 hash。
+
+## 默认语言变更要保护显式语言回退
+
+- 问题：把猜动漫默认语言从中文改成英文后，显式选择中文但题目没有 `locales.zh` 时会错误回退到英文文本。
+- 根因：题目本体基础字段仍是中文，原先 `DEFAULT_ANIME_LOCALE = "zh"` 时缺失 locale 会自然落回基础字段；默认值变成 `en` 后，共享 fallback 逻辑开始把显式中文请求导向 `locales.en`。
+- 修复：`getAnimeGuessrQuestionText` 对显式 `zh` 缺失 locale 时保留基础字段，未指定语言或其他语言缺失时才使用英文默认 locale，并增加回归测试。
+- 预防：修改全站默认 locale 时，必须检查“未指定语言”和“显式选择某语言但 locale 缺失”两个路径；不要把默认 locale fallback 直接等同于所有显式语言的 fallback。

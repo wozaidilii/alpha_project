@@ -9,7 +9,7 @@ export function isEmailLoginCode(value: string) {
 }
 
 export function displayNameFromEmail(email: string) {
-  const localPart = email.split("@")[0]?.trim() ?? "邮箱玩家";
+  const localPart = email.split("@")[0]?.trim() ?? "Player";
   const normalized = localPart.replace(/[^\p{L}\p{N}_-]+/gu, "").slice(0, 12);
-  return normalized || "邮箱玩家";
+  return normalized || "Player";
 }

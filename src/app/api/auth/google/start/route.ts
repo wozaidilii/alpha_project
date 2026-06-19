@@ -12,7 +12,7 @@ import {
 export function GET(request: NextRequest) {
   if (!env.GOOGLE_CLIENT_ID) {
     return NextResponse.json(
-      { error: "Google 登录未配置 GOOGLE_CLIENT_ID" },
+      { error: "Google login is missing GOOGLE_CLIENT_ID" },
       { status: 503 },
     );
   }

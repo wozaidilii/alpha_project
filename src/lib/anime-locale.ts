@@ -1,7 +1,7 @@
 export const ANIME_LOCALES = ["zh", "ja", "en"] as const;
 export type AnimeLocale = (typeof ANIME_LOCALES)[number];
 
-export const DEFAULT_ANIME_LOCALE: AnimeLocale = "zh";
+export const DEFAULT_ANIME_LOCALE: AnimeLocale = "en";
 export const ANIME_LOCALE_STORAGE_KEY = "aniguessr_locale";
 
 export function isAnimeLocale(value: unknown): value is AnimeLocale {

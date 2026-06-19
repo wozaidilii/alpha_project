@@ -178,7 +178,7 @@ export default function Home() {
     `/game/anime?rounds=${leaderboardRounds}`,
     locale,
   );
-  const loginUrl = `/login?next=${encodeURIComponent(playUrl)}`;
+  const loginUrl = withAnimeLocale("/login", locale);
   const battleUrl = session
     ? "/battle"
     : `/login?next=${encodeURIComponent("/battle")}`;

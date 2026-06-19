@@ -7,6 +7,7 @@ import { Geist } from "next/font/google";
 
 import { PostHogRouteTracker } from "~/components/PostHogRouteTracker";
 import { PostHogScript } from "~/components/PostHogScript";
+import { DEFAULT_ANIME_LOCALE } from "~/lib/anime-locale";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
@@ -44,7 +45,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh" className={`${geist.variable}`}>
+    <html lang={DEFAULT_ANIME_LOCALE} className={`${geist.variable}`}>
       <body>
         <PostHogScript />
         <TRPCReactProvider>

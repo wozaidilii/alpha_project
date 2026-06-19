@@ -62,6 +62,7 @@
 - Verification codes are never stored in plaintext; store only an HMAC hash keyed by `EMAIL_VERIFICATION_SECRET`.
 - Codes expire after 10 minutes, are consumed on success, and are consumed after too many failed attempts.
 - Development may return `debugCode` when no email provider is configured. Production must not return debug codes and must fail if delivery or signing is not configured, even when the requested reset email does not belong to an account.
+- Verification-code emails default to English copy unless a caller explicitly adds a locale contract. Password reset subjects should read like `Your AniGuessr password reset code`; do not send Chinese reset email by default.
 - Successful email verification creates or reuses a `players.email` record, creates a `player_sessions.token`, and records `email_login_completed`.
 - Password reset may use email verification codes, but the UI must present it as a separate "forgot password" flow and not as the default login path. Reset-code requests should send to any existing `players.email` account, including legacy rows without `password_hash`; if the email is unknown, return the same generic success shape without creating a usable code.
 - Game clients may record player behavior only with a valid session token. Invalid tokens must return unauthorized errors and must not write activity rows.
@@ -71,17 +72,17 @@
 ### 4. Validation & Error Matrix
 
 - Invalid email or non-six-digit code -> tRPC validation error.
-- Duplicate password registration email with an existing password hash -> `BAD_REQUEST` with "该邮箱已注册，请直接登录".
+- Duplicate password registration email with an existing password hash -> `BAD_REQUEST` with "This email is already registered. Log in instead."
 - Password registration email with an existing email-code-only row -> update that row with password credentials and return `PlayerSession`.
-- Duplicate username -> `BAD_REQUEST` with "该用户名已被使用，请换一个".
-- Wrong password, unknown identifier, or no password hash for that account -> `UNAUTHORIZED` with "账号或密码不正确".
-- No active code for email -> `BAD_REQUEST` with "验证码不正确".
-- Expired code -> `BAD_REQUEST` with "验证码已过期，请重新获取".
+- Duplicate username -> `BAD_REQUEST` with "This username is already taken. Try another one."
+- Wrong password, unknown identifier, or no password hash for that account -> `UNAUTHORIZED` with "Incorrect account or password."
+- No active code for email -> `BAD_REQUEST` with "The code is incorrect."
+- Expired code -> `BAD_REQUEST` with "The code has expired. Request a new one."
 - Too many failed attempts -> `TOO_MANY_REQUESTS`.
 - Missing production `EMAIL_VERIFICATION_SECRET`, `RESEND_API_KEY`, or `EMAIL_FROM` -> `SERVICE_UNAVAILABLE`.
 - Resend API failure -> `BAD_GATEWAY`.
 - Invalid activity token -> `UNAUTHORIZED`.
-- Duplicate profile username -> `BAD_REQUEST` with "该用户名已被使用，请换一个".
+- Duplicate profile username -> `BAD_REQUEST` with "This username is already taken. Try another one."
 - Invalid leaderboard token -> `UNAUTHORIZED`; missing token should still return the public leaderboard.
 
 ### 5. Good/Base/Bad Cases
@@ -190,6 +191,7 @@ recordActivity({
 ### 3. Contracts
 
 - The homepage primary CTA must go directly to `/game/anime`; it must not force `/login` before first play.
+- The homepage login/profile entry must not attach `next=/game/anime`. A plain `/login` visit, including Google login started from that page, should default to `/` after success; only game retention prompts and battle entry should pass an explicit `next`.
 - Guest mode stores quota, best score, and recent history in LocalStorage under `aniguessr_guest_progress`.
 - Unauthenticated guests may start at most 3 games per local calendar day. A new local day resets only `startedToday`, not best score or history.
 - Guest completion should save the score locally and may write an anonymous `game_sessions.guest_id` row for aggregate analytics.
@@ -200,7 +202,7 @@ recordActivity({
 - Client events must go through `capturePostHogEvent`; do not call `window.posthog.capture` directly from pages or components. The helper must prefer the browser SDK and keep a direct early-load fallback to PostHog's ingestion endpoint `${NEXT_PUBLIC_POSTHOG_HOST}/i/v0/e/`.
 - After a user session is created or restored, call `identifyPostHogUser` so PostHog links future events to `players.id`. On logout, call `resetPostHogUser` and restore guest registration.
 - Do not include passwords, verification codes, room invite codes, raw OAuth tokens, or nested objects in PostHog event properties. Email/name/provider/country may be sent only as PostHog identify person properties, not as arbitrary event payloads.
-- Google OAuth must sanitize `next` paths and reject external redirects.
+- Google OAuth must sanitize `next` paths, reject external redirects, and fall back to `/` when no valid `next` is present.
 
 ### 4. Validation & Error Matrix
 
@@ -242,6 +244,18 @@ Correct:
 
 ```typescript
 const PLAY_URL = "/game/anime";
+```
+
+Wrong:
+
+```typescript
+const loginUrl = `/login?next=${encodeURIComponent("/game/anime")}`;
+```
+
+Correct:
+
+```typescript
+const loginUrl = "/login";
 ```
 
 Wrong:

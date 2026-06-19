@@ -11,8 +11,9 @@ import {
 describe("google oauth helpers", () => {
   it("sanitizes next paths", () => {
     expect(sanitizeNextPath("/game/anime")).toBe("/game/anime");
-    expect(sanitizeNextPath("//evil.example")).toBe("/game/anime");
-    expect(sanitizeNextPath("https://evil.example")).toBe("/game/anime");
+    expect(sanitizeNextPath("//evil.example")).toBe("/");
+    expect(sanitizeNextPath("https://evil.example")).toBe("/");
+    expect(sanitizeNextPath(undefined)).toBe("/");
   });
 
   it("builds redirect uri from request origin when not configured", () => {

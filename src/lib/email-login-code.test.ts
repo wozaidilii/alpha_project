@@ -20,6 +20,6 @@ describe("email-login-code", () => {
     expect(displayNameFromEmail("sakura.reader@example.com")).toBe(
       "sakurareader",
     );
-    expect(displayNameFromEmail("@example.com")).toBe("邮箱玩家");
+    expect(displayNameFromEmail("@example.com")).toBe("Player");
   });
 });
