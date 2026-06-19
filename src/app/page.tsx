@@ -43,6 +43,9 @@ const COPY: Record<
     round: string;
     panelTitle: string;
     panelBody: string;
+    howTitle: string;
+    howBody: string;
+    steps: Array<{ title: string; body: string }>;
     profileTitle: string;
     profileGuest: string;
     username: string;
@@ -61,21 +64,38 @@ const COPY: Record<
 > = {
   zh: {
     lang: "中文",
-    kicker: "二次元街景猜谜",
+    kicker: "第零观测班 · 街景圣地档案",
     title: "AniGuessr",
-    subtitle: "看现实街景，凭左上角动漫线索猜出取景地。",
-    start: "开始猜动漫",
-    continue: "进入当前玩法",
+    subtitle:
+      "次元裂缝把番剧画面投进现实街角。读取线索、审判街景、把坐标钉回世界地图。",
+    start: "开启圣地判定",
+    continue: "进入档案",
     battle: "对战模式",
     login: "登录",
     logout: "退出登录",
-    clue: "动漫截图线索",
-    street: "现实街景观察",
-    map: "日本地图猜点",
-    round: "5 轮挑战",
-    panelTitle: "现实与番剧重叠的瞬间",
+    clue: "截取命运画面",
+    street: "读取现实痕迹",
+    map: "封印世界坐标",
+    round: "首轮契约 · 5 轮",
+    panelTitle: "左眼看番剧，右眼校准现实",
     panelBody:
-      "主画面保持真实街景，动漫图案只作为线索出现。当前地图锚定日本；可走动街景会作为后续玩法扩展。",
+      "动漫图只是一枚线索碎片，真正的战场是街景里的路牌、天际线、店招和季节气味。猜中坐标，完成一次圣地封印。",
+    howTitle: "巡礼者的三段仪式",
+    howBody: "每局都从一张番剧线索开始，在真实街景中完成坐标审判。",
+    steps: [
+      {
+        title: "召唤线索",
+        body: "左上角出现动漫画面，不泄露地点，只留下构图、色彩和故事气息。",
+      },
+      {
+        title: "观测街景",
+        body: "主画面永远是真实街景，所有答案都藏在现实世界的微小痕迹里。",
+      },
+      {
+        title: "钉下坐标",
+        body: "在地图上落点，分数由距离、速度和判断力共同裁决。",
+      },
+    ],
     profileTitle: "玩家 Profile",
     profileGuest: "登录后可保存用户名、地区和排行榜成绩。",
     username: "用户名",
@@ -93,21 +113,38 @@ const COPY: Record<
   },
   ja: {
     lang: "日本語",
-    kicker: "アニメ聖地ストリートビュー",
+    kicker: "第零観測班 · 聖地座標記録",
     title: "AniGuessr",
     subtitle: "現実の街並みを見て、左上のアニメ手がかりから場所を当てよう。",
-    start: "プレイ開始",
-    continue: "ゲームへ",
+    start: "聖地判定を始める",
+    continue: "記録へ",
     battle: "対戦モード",
     login: "ログイン",
     logout: "ログアウト",
-    clue: "アニメ画像ヒント",
-    street: "現実のストリートビュー",
-    map: "日本地図で推理",
-    round: "5 ラウンド",
-    panelTitle: "現実と物語が重なる場所",
+    clue: "運命のカット",
+    street: "現実痕跡の観測",
+    map: "世界座標を封印",
+    round: "初回契約 · 5 ラウンド",
+    panelTitle: "片目はアニメ、片目は現実へ",
     panelBody:
-      "メイン画面はあくまで実写の街景。アニメ画像はヒントとして表示され、現在の地図は日本に固定されています。",
+      "アニメ画像は小さな手がかり。勝負の場はストリートビューに残る看板、地形、空気感。座標を当てて聖地を記録しよう。",
+    howTitle: "巡礼者の三つの儀式",
+    howBody:
+      "一枚のアニメカットから始まり、現実の街景で答えを見抜く推理ゲームです。",
+    steps: [
+      {
+        title: "手がかりを読む",
+        body: "場所名は隠されたまま、構図や色、作品の気配だけが残ります。",
+      },
+      {
+        title: "街景を観測",
+        body: "主画面は現実のストリートビュー。答えは細部の違和感に潜みます。",
+      },
+      {
+        title: "座標を刻む",
+        body: "地図にピンを置き、距離と判断速度でスコアが裁定されます。",
+      },
+    ],
     profileTitle: "プレイヤー",
     profileGuest: "ログインすると名前、地域、ランキング記録を保存できます。",
     username: "ユーザー名",
@@ -125,22 +162,39 @@ const COPY: Record<
   },
   en: {
     lang: "English",
-    kicker: "Anime street-view mystery",
+    kicker: "Zeroth Observation Unit",
     title: "AniGuessr",
     subtitle:
-      "Read the anime clue, scan the real street view, and pin the filming spot.",
-    start: "Start Anime Guessr",
-    continue: "Open game",
+      "A frame tears through the veil. Read the anime clue, interrogate the real street, and seal the coordinate before the trace fades.",
+    start: "Begin the rite",
+    continue: "Open archive",
     battle: "Battle mode",
     login: "Log in",
     logout: "Log out",
-    clue: "Anime clue image",
-    street: "Real street view",
-    map: "Japan map guess",
-    round: "5 rounds",
-    panelTitle: "Where frames meet the real world",
+    clue: "Summon the frame",
+    street: "Read the real trace",
+    map: "Seal the world point",
+    round: "First contract · 5 rounds",
+    panelTitle: "One eye on anime. One eye on reality.",
     panelBody:
-      "The main scene stays as real-world Street View. Anime artwork appears only as the clue, and the current map is anchored to Japan.",
+      "The anime still is only a shard. The answer lives in Street View: signage, skyline, road texture, storefronts, and the uneasy overlap between fiction and the real map.",
+    howTitle: "The pilgrim rite",
+    howBody:
+      "Each run is a compact deduction ritual: one clue, one real street, one coordinate judgment.",
+    steps: [
+      {
+        title: "Invoke the clue",
+        body: "The anime frame appears without the place name, leaving composition and atmosphere as evidence.",
+      },
+      {
+        title: "Interrogate reality",
+        body: "Street View is the main field. The smallest sign, road edge, or skyline can break the seal.",
+      },
+      {
+        title: "Seal the point",
+        body: "Drop your pin on the map. Distance, speed, and nerve decide the score.",
+      },
+    ],
     profileTitle: "Player profile",
     profileGuest: "Log in to save your name, region, and leaderboard score.",
     username: "Username",
@@ -265,7 +319,7 @@ export default function Home() {
     !leaderboard.some((entry) => entry.userId === currentUserEntry.userId);
 
   return (
-    <main className="anime-shell min-h-screen overflow-hidden text-white">
+    <main className="anime-shell min-h-screen overflow-x-hidden text-white">
       <section className="relative min-h-screen px-5 py-5 sm:px-8 lg:px-12">
         <div className="absolute inset-0 -z-10">
           <div className="h-full w-full bg-[url('/images/anime-placeholder.jpg')] bg-cover bg-center opacity-35" />
@@ -380,7 +434,7 @@ export default function Home() {
                         <div
                           role="radiogroup"
                           aria-label={copy.country}
-                          className="grid grid-cols-6 gap-2"
+                          className="grid max-h-48 grid-cols-6 gap-2 overflow-y-auto pr-1"
                         >
                           <button
                             type="button"
@@ -465,13 +519,13 @@ export default function Home() {
           </div>
         </nav>
 
-        <div className="mx-auto grid min-h-[calc(100vh-92px)] w-full max-w-6xl items-center gap-8 py-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="mx-auto grid min-h-[calc(100vh-92px)] w-full max-w-6xl items-center gap-8 py-8 lg:grid-cols-[1.04fr_0.96fr]">
           <div className="max-w-2xl">
             <div className="anime-chip mb-5 w-fit">{copy.kicker}</div>
-            <h1 className="text-[clamp(3.25rem,8vw,7rem)] leading-[0.86] font-black text-white">
+            <h1 className="text-[clamp(3.1rem,7vw,6rem)] leading-[0.9] font-black text-balance text-white">
               {copy.title}
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-pink-50/80 sm:text-xl">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-pretty text-pink-50/80 sm:text-xl">
               {copy.subtitle}
             </p>
 
@@ -501,17 +555,32 @@ export default function Home() {
               </Link>
             </div>
 
-            <div className="mt-9 grid max-w-xl gap-3 sm:grid-cols-3">
-              {[copy.clue, copy.street, copy.map].map((item, index) => (
-                <div key={item} className="anime-stat">
-                  <div className="text-xs font-black text-cyan-200">
-                    0{index + 1}
-                  </div>
-                  <div className="mt-2 text-sm font-bold text-white">
-                    {item}
-                  </div>
-                </div>
-              ))}
+            <div className="mt-10 max-w-2xl border-y border-white/10 py-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <h2 className="text-2xl font-black text-white">
+                  {copy.howTitle}
+                </h2>
+                <p className="max-w-sm text-sm leading-6 text-pink-50/70">
+                  {copy.howBody}
+                </p>
+              </div>
+              <ol className="mt-5 grid gap-4 sm:grid-cols-3">
+                {copy.steps.map((step, index) => (
+                  <li key={step.title} className="flex gap-3">
+                    <span className="mt-0.5 text-sm font-black text-cyan-200">
+                      0{index + 1}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-black text-white">
+                        {step.title}
+                      </span>
+                      <span className="mt-1 block text-sm leading-6 text-pink-50/60">
+                        {step.body}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
 
@@ -530,8 +599,11 @@ export default function Home() {
                       {copy.panelTitle}
                     </h2>
                   </div>
-                  <div className="grid h-16 w-16 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-xl font-black text-cyan-100">
-                    S
+                  <div
+                    aria-hidden="true"
+                    className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-xl font-black text-cyan-100"
+                  >
+                    R1
                   </div>
                 </div>
                 <p className="mt-4 text-sm leading-7 text-white/70">
