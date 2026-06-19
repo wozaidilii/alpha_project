@@ -25,6 +25,7 @@ import {
   AuthLoading,
   useCompletedPlayerSession,
 } from "~/lib/player-session-guard";
+import { api } from "~/trpc/react";
 
 type Phase = "playing" | "result" | "final";
 type LoadState = "loading" | "ready" | "error";
@@ -91,7 +92,7 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
 }
 
 export default function AnimeGuessrPage() {
-  const { ready } = useCompletedPlayerSession();
+  const { ready, session } = useCompletedPlayerSession();
   const [questions, setQuestions] = useState<AnimeGuessrQuestion[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadMessage, setLoadMessage] = useState("正在加载动漫巡礼题库...");
@@ -101,6 +102,8 @@ export default function AnimeGuessrPage() {
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [results, setResults] = useState<AnimeRoundResult[]>([]);
   const roundStartedAtRef = useRef(Date.now());
+  const recordedStartKeyRef = useRef<string | null>(null);
+  const recordActivity = api.player.recordActivity.useMutation();
 
   const current = questions[round];
   const latestResult = results[results.length - 1];
@@ -171,8 +174,21 @@ export default function AnimeGuessrPage() {
     roundStartedAtRef.current = Date.now();
   }, [current, phase]);
 
+  useEffect(() => {
+    if (!session || loadState !== "ready" || questions.length === 0) return;
+    const key = `${reloadKey}:${questions.map((question) => question.id).join(",")}`;
+    if (recordedStartKeyRef.current === key) return;
+    recordedStartKeyRef.current = key;
+    recordActivity.mutate({
+      token: session.token,
+      eventType: "anime_game_started",
+      payload: { rounds: questions.length },
+      route: "/game/anime",
+    });
+  }, [loadState, questions, recordActivity, reloadKey, session]);
+
   function handleSubmit() {
-    if (!current || !guess) return;
+    if (!current || !guess || !session) return;
 
     const distanceKm = haversineDistance(
       current.lat,
@@ -194,11 +210,34 @@ export default function AnimeGuessrPage() {
         score: score.total,
       },
     ]);
+    recordActivity.mutate({
+      token: session.token,
+      eventType: "anime_round_submitted",
+      payload: {
+        round: round + 1,
+        questionId: current.id,
+        score: score.total,
+        distanceKm: Number(distanceKm.toFixed(3)),
+        elapsedSeconds: Math.round(elapsedSeconds),
+      },
+      route: "/game/anime",
+    });
     setPhase("result");
   }
 
   function handleNext() {
     if (round + 1 >= questions.length) {
+      if (session) {
+        recordActivity.mutate({
+          token: session.token,
+          eventType: "anime_game_completed",
+          payload: {
+            rounds: results.length,
+            totalScore,
+          },
+          route: "/game/anime",
+        });
+      }
       setPhase("final");
       return;
     }
@@ -247,7 +286,7 @@ export default function AnimeGuessrPage() {
     );
   }, [current, questions, results.length, round]);
 
-  if (!ready) return <AuthLoading />;
+  if (!ready || !session) return <AuthLoading />;
 
   if (loadState === "loading") {
     return (

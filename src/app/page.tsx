@@ -71,6 +71,7 @@ const COPY: Record<
 };
 
 const LOCALES: Locale[] = ["zh", "ja", "en"];
+const PLAY_URL = "/login?next=/game/anime";
 
 export default function Home() {
   const [locale, setLocale] = useState<Locale>("zh");
@@ -86,7 +87,7 @@ export default function Home() {
 
         <nav className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
           <Link
-            href="/game/anime"
+            href={PLAY_URL}
             className="text-lg font-black tracking-[0.18em] text-pink-100 uppercase focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
           >
             AniGuessr
@@ -124,10 +125,10 @@ export default function Home() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/game/anime" className="anime-button">
+              <Link href={PLAY_URL} className="anime-button">
                 {copy.start}
               </Link>
-              <Link href="/game/anime" className="anime-button-secondary">
+              <Link href={PLAY_URL} className="anime-button-secondary">
                 {copy.continue}
               </Link>
             </div>

@@ -2,10 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { type PlayerSession } from "~/types/player";
-import {
-  getDemoPlayerSession,
-  getStoredPlayerSession,
-} from "~/lib/player-session";
+import { getStoredPlayerSession } from "~/lib/player-session";
 
 interface GuardState {
   ready: boolean;
@@ -21,7 +18,7 @@ export function useEmailSession(): GuardState {
   useEffect(() => {
     setState({
       ready: true,
-      session: getStoredPlayerSession() ?? getDemoPlayerSession(),
+      session: getStoredPlayerSession(),
     });
   }, []);
 
@@ -35,10 +32,16 @@ export function useCompletedPlayerSession(): GuardState {
   });
 
   useEffect(() => {
+    const session = getStoredPlayerSession();
     setState({
       ready: true,
-      session: getStoredPlayerSession() ?? getDemoPlayerSession(),
+      session,
     });
+
+    if (!session) {
+      const next = `${window.location.pathname}${window.location.search}`;
+      window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+    }
   }, []);
 
   return state;
@@ -46,7 +49,7 @@ export function useCompletedPlayerSession(): GuardState {
 
 export function AuthLoading() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-stone-900 text-stone-400">
+    <main className="anime-shell flex min-h-screen items-center justify-center text-pink-50/70">
       加载中...
     </main>
   );

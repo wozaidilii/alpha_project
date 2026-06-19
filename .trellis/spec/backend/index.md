@@ -12,3 +12,4 @@
 | [History Game Question Contracts](./history-game-question-contracts.md) | History year-mode tRPC question and scoring contracts              | Active |
 | [History Tuxun Street View Cache](./history-tuxun-street-view-cache.md) | Baidu street-view scene cache DB, tRPC, and fallback contracts     | Active |
 | [Battle Room Session Contracts](./battle-room-session-contracts.md)     | Battle room state API, start sync, and empty-room cleanup          | Active |
+| [Email Login And Player Activity](./email-login-and-activity.md)        | Email verification-code login, sessions, and behavior event rows   | Active |

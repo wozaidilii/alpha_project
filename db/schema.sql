@@ -38,6 +38,42 @@ create table if not exists player_sessions (
 create index if not exists player_sessions_player_id_created_at_idx
   on player_sessions(player_id, created_at desc);
 
+create table if not exists player_email_verification_codes (
+  id text primary key,
+  email text not null,
+  code_hash text not null,
+  attempts integer not null default 0 check (attempts >= 0),
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists player_email_codes_email_created_at_idx
+  on player_email_verification_codes(email, created_at desc);
+
+create index if not exists player_email_codes_expires_at_idx
+  on player_email_verification_codes(expires_at);
+
+create table if not exists player_activity_events (
+  id text primary key,
+  player_id text references players(id) on delete set null,
+  email text,
+  event_type text not null,
+  event_payload jsonb not null default '{}'::jsonb,
+  route text,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists player_activity_events_player_created_at_idx
+  on player_activity_events(player_id, created_at desc);
+
+create index if not exists player_activity_events_email_created_at_idx
+  on player_activity_events(email, created_at desc);
+
+create index if not exists player_activity_events_type_created_at_idx
+  on player_activity_events(event_type, created_at desc);
+
 create table if not exists battle_history_records (
   id text primary key,
   player_id text not null references players(id) on delete cascade,

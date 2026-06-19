@@ -4,12 +4,18 @@ import {
   getBattleHistory,
   getPlayerProfile,
   loginPlayer,
-  loginPlayerByEmail,
   recordBattleHistory,
+  recordPlayerActivity,
+  requestEmailLoginCode,
   updatePlayerProfile,
   updateSoloHighScore,
+  verifyEmailLoginCode,
 } from "~/server/data/player-store";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+
+const activityPayloadSchema = z.record(
+  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+);
 
 const avatarSchema = z.object({
   icon: z.string().trim().min(1).max(4),
@@ -34,15 +40,80 @@ async function withSessionError<T>(fn: () => Promise<T>) {
   }
 }
 
+async function withEmailLoginError<T>(fn: () => Promise<T>) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof Error) {
+      if (
+        error.message === "Invalid email verification code" ||
+        error.message === "Email verification code expired"
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error.message === "Email verification code expired"
+              ? "验证码已过期，请重新获取"
+              : "验证码不正确",
+        });
+      }
+      if (error.message === "Too many email verification attempts") {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "验证码错误次数过多，请重新获取",
+        });
+      }
+      if (
+        error.message === "Email delivery is not configured" ||
+        error.message === "Email verification secret is not configured"
+      ) {
+        throw new TRPCError({
+          code: "SERVICE_UNAVAILABLE",
+          message: "邮箱登录服务未配置，请稍后再试",
+        });
+      }
+      if (error.message === "Email verification delivery failed") {
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message: "验证码邮件发送失败，请稍后再试",
+        });
+      }
+    }
+    throw error;
+  }
+}
+
 export const playerRouter = createTRPCRouter({
-  loginWithEmail: publicProcedure
+  requestEmailLoginCode: publicProcedure
     .input(
       z.object({
         email: z.string().trim().email().max(254),
       }),
     )
-    .mutation(({ input }) => {
-      return loginPlayerByEmail(input.email);
+    .mutation(({ input, ctx }) => {
+      return withEmailLoginError(() =>
+        requestEmailLoginCode(input.email, {
+          userAgent: ctx.headers.get("user-agent"),
+        }),
+      );
+    }),
+
+  verifyEmailLoginCode: publicProcedure
+    .input(
+      z.object({
+        email: z.string().trim().email().max(254),
+        code: z
+          .string()
+          .trim()
+          .regex(/^\d{6}$/),
+      }),
+    )
+    .mutation(({ input, ctx }) => {
+      return withEmailLoginError(() =>
+        verifyEmailLoginCode(input.email, input.code, {
+          userAgent: ctx.headers.get("user-agent"),
+        }),
+      );
     }),
 
   login: publicProcedure
@@ -85,6 +156,31 @@ export const playerRouter = createTRPCRouter({
   history: publicProcedure.input(tokenSchema).query(({ input }) => {
     return withSessionError(() => getBattleHistory(input.token));
   }),
+
+  recordActivity: publicProcedure
+    .input(
+      tokenSchema.extend({
+        eventType: z
+          .string()
+          .trim()
+          .min(1)
+          .max(80)
+          .regex(/^[a-z0-9_.:-]+$/i),
+        payload: activityPayloadSchema.optional(),
+        route: z.string().trim().max(200).optional(),
+      }),
+    )
+    .mutation(({ input, ctx }) => {
+      return withSessionError(() =>
+        recordPlayerActivity({
+          token: input.token,
+          eventType: input.eventType,
+          payload: input.payload,
+          route: input.route,
+          userAgent: ctx.headers.get("user-agent"),
+        }),
+      );
+    }),
 
   recordBattle: publicProcedure
     .input(
