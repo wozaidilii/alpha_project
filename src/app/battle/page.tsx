@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type PlayerSession } from "~/types/player";
@@ -13,6 +13,11 @@ import {
   type GameModeConfig,
   type GameModeSlug,
 } from "~/lib/game-mode";
+import {
+  capturePostHogEvent,
+  identifyPostHogUser,
+  POSTHOG_EVENTS,
+} from "~/lib/posthog";
 
 function generateRoomId(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -34,11 +39,20 @@ export default function BattleLobby() {
   const [questionType, setQuestionType] =
     useState<GameModeSlug>(firstBattleMode);
   const [message, setMessage] = useState("");
+  const recordedLobbyViewRef = useRef(false);
 
   useEffect(() => {
     if (!ready || !authSession) return;
     setSession(authSession);
-  }, [authSession, ready]);
+    identifyPostHogUser(authSession.user);
+    if (recordedLobbyViewRef.current) return;
+    recordedLobbyViewRef.current = true;
+    capturePostHogEvent(
+      POSTHOG_EVENTS.battleLobbyViewed,
+      { mode: questionType },
+      authSession.user.id,
+    );
+  }, [authSession, questionType, ready]);
 
   function ensureSession(): PlayerSession {
     if (session) return session;
@@ -72,6 +86,16 @@ export default function BattleLobby() {
         hp: String(startingHp),
       });
       appendProfileParams(params, activeSession);
+      capturePostHogEvent(
+        POSTHOG_EVENTS.battleRoomCreated,
+        {
+          mode: questionType,
+          rounds,
+          time_per_round: timePerRound,
+          starting_hp: startingHp,
+        },
+        activeSession.user.id,
+      );
       void router.push(`/battle/${roomId}?${params.toString()}`);
     } catch {
       setMessage("进入房间失败，请稍后再试");
@@ -86,6 +110,11 @@ export default function BattleLobby() {
       const code = joinCode.trim().toUpperCase();
       const params = new URLSearchParams();
       appendProfileParams(params, activeSession);
+      capturePostHogEvent(
+        POSTHOG_EVENTS.battleRoomJoined,
+        { code_length: code.length },
+        activeSession.user.id,
+      );
       void router.push(`/battle/${code}?${params.toString()}`);
     } catch {
       setMessage("加入房间失败，请稍后再试");

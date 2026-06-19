@@ -16,7 +16,12 @@ import {
   getStoredPlayerSession,
   savePlayerSession,
 } from "~/lib/player-session";
-import { capturePostHogEvent } from "~/lib/posthog";
+import {
+  capturePostHogEvent,
+  identifyPostHogUser,
+  POSTHOG_EVENTS,
+  resetPostHogUser,
+} from "~/lib/posthog";
 import { type PlayerSession } from "~/types/player";
 import { api } from "~/trpc/react";
 
@@ -190,10 +195,16 @@ export default function Home() {
       if (!session) return;
       const nextSession = { token: session.token, user };
       savePlayerSession(nextSession);
+      identifyPostHogUser(user);
       setSession(nextSession);
       setProfileName(user.name);
       setProfileCountryCode(user.countryCode ?? "");
       setProfileMessage(copy.saved);
+      capturePostHogEvent(
+        POSTHOG_EVENTS.profileUpdated,
+        { has_country: Boolean(user.countryCode) },
+        user.id,
+      );
       void leaderboardQuery.refetch();
     },
   });
@@ -202,6 +213,7 @@ export default function Home() {
     setLocale(getStoredAnimeLocale());
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
+    if (storedSession) identifyPostHogUser(storedSession.user);
     setProfileName(storedSession?.user.name ?? "");
     setProfileCountryCode(storedSession?.user.countryCode ?? "");
   }, []);
@@ -212,6 +224,7 @@ export default function Home() {
       if (!current) return current;
       const nextSession = { token: current.token, user: meQuery.data };
       savePlayerSession(nextSession);
+      identifyPostHogUser(meQuery.data);
       return nextSession;
     });
     setProfileName(meQuery.data.name);
@@ -236,6 +249,7 @@ export default function Home() {
 
   function handleLogout() {
     clearPlayerSession();
+    resetPostHogUser();
     setSession(null);
     setProfileName("");
     setProfileCountryCode("");
@@ -294,7 +308,19 @@ export default function Home() {
                   aria-label={copy.profileTitle}
                   aria-expanded={profileMenuOpen}
                   aria-controls="home-profile-menu"
-                  onClick={() => setProfileMenuOpen((value) => !value)}
+                  onClick={() =>
+                    setProfileMenuOpen((value) => {
+                      const nextValue = !value;
+                      if (nextValue) {
+                        capturePostHogEvent(
+                          POSTHOG_EVENTS.profileOpened,
+                          { source: "home" },
+                          session.user.id,
+                        );
+                      }
+                      return nextValue;
+                    })
+                  }
                   className="grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-pink-200/40 bg-white/10 text-lg shadow-lg shadow-pink-950/20 transition hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                 >
                   {session.user.avatarUrl ? (
@@ -349,24 +375,54 @@ export default function Home() {
                           className="min-h-11 rounded-xl border border-white/10 bg-black/35 px-3 text-sm font-bold text-white transition outline-none focus:border-pink-300"
                         />
                       </label>
-                      <label className="grid gap-1 text-xs font-bold text-pink-100/70">
-                        {copy.country}
-                        <select
-                          value={profileCountryCode}
-                          onChange={(event) =>
-                            setProfileCountryCode(event.target.value)
-                          }
-                          className="min-h-11 rounded-xl border border-white/10 bg-black/35 px-3 text-sm font-bold text-white transition outline-none focus:border-pink-300"
+                      <div className="grid gap-2 text-xs font-bold text-pink-100/70">
+                        <span>{copy.country}</span>
+                        <div
+                          role="radiogroup"
+                          aria-label={copy.country}
+                          className="grid grid-cols-6 gap-2"
                         >
-                          <option value="">{copy.countryUnset}</option>
-                          {COUNTRY_OPTIONS.map((country) => (
-                            <option key={country.code} value={country.code}>
-                              {countryCodeToFlagEmoji(country.code)}{" "}
-                              {country.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={profileCountryCode === ""}
+                            aria-label={copy.countryUnset}
+                            title={copy.countryUnset}
+                            onClick={() => setProfileCountryCode("")}
+                            className={`grid h-11 w-full min-w-0 place-items-center rounded-xl border text-lg transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
+                              profileCountryCode === ""
+                                ? "border-pink-300 bg-pink-300 text-slate-950 shadow-[0_0_22px_rgba(249,168,212,0.24)]"
+                                : "border-white/10 bg-black/35 hover:border-pink-200/50 hover:bg-white/10"
+                            }`}
+                          >
+                            {countryCodeToFlagEmoji(null)}
+                          </button>
+                          {COUNTRY_OPTIONS.map((country) => {
+                            const selected =
+                              profileCountryCode === country.code;
+                            return (
+                              <button
+                                key={country.code}
+                                type="button"
+                                role="radio"
+                                aria-checked={selected}
+                                aria-label={country.label}
+                                title={country.label}
+                                onClick={() =>
+                                  setProfileCountryCode(country.code)
+                                }
+                                className={`grid h-11 w-full min-w-0 place-items-center rounded-xl border text-lg transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
+                                  selected
+                                    ? "border-pink-300 bg-pink-300 text-slate-950 shadow-[0_0_22px_rgba(249,168,212,0.24)]"
+                                    : "border-white/10 bg-black/35 hover:border-pink-200/50 hover:bg-white/10"
+                                }`}
+                              >
+                                {countryCodeToFlagEmoji(country.code)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -423,7 +479,9 @@ export default function Home() {
               <Link
                 href={playUrl}
                 onClick={() =>
-                  capturePostHogEvent("home_start_clicked", { locale })
+                  capturePostHogEvent(POSTHOG_EVENTS.homeStartClicked, {
+                    locale,
+                  })
                 }
                 className="anime-button"
               >
@@ -432,7 +490,7 @@ export default function Home() {
               <Link
                 href={battleUrl}
                 onClick={() =>
-                  capturePostHogEvent("home_battle_clicked", {
+                  capturePostHogEvent(POSTHOG_EVENTS.homeBattleClicked, {
                     locale,
                     loggedIn: Boolean(session),
                   })

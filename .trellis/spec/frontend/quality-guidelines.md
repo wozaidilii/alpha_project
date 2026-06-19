@@ -32,6 +32,86 @@ Questions to answer:
 
 <!-- Patterns that must always be used -->
 
+### Scenario: Passive Root Telemetry Integrations
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing passive browser telemetry providers rendered at the app root, such as Vercel Web Analytics, Vercel Speed Insights, or PostHog capture bootstrapping.
+- Applies to `src/app/layout.tsx`, telemetry provider components under `src/components/`, `package.json`, and package lockfiles.
+
+#### 2. Signatures
+
+- Vercel Web Analytics:
+
+```tsx
+import { Analytics } from "@vercel/analytics/next";
+
+<Analytics />;
+```
+
+- Vercel Speed Insights:
+
+```tsx
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
+<SpeedInsights />;
+```
+
+- PostHog remains project-owned and uses `PostHogScript` plus `PostHogRouteTracker`.
+
+#### 3. Contracts
+
+- Passive telemetry components belong in the root layout body so they are mounted once for the whole app.
+- Adding one telemetry provider must not remove or replace existing providers unless the task explicitly asks for a provider migration.
+- Public analytics tokens must remain public-only. Secret analytics API keys do not belong in client components or `NEXT_PUBLIC_*` variables.
+- Dependency additions must use the existing package manager and update the lockfile.
+
+#### 4. Validation & Error Matrix
+
+- Missing provider package -> TypeScript import failure during `npm run check`.
+- Provider component rendered outside the root layout -> duplicate page/app events are likely.
+- Replacing existing telemetry unintentionally -> loss of funnel data for that provider.
+- Secret server-side API key exposed in browser bundle -> security bug; move it to server-only env handling.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: add the provider package, import its root component in `src/app/layout.tsx`, preserve existing PostHog components, then run check/test/build.
+- Base: install one passive provider and verify the app layout still compiles.
+- Bad: merge an old provider PR branch directly when it reverts unrelated recent app changes, or remove existing tracking while adding a second provider.
+
+#### 6. Tests Required
+
+- `npm run check` after any telemetry import or dependency change.
+- `npm test` to catch unrelated package-lock or dependency resolution regressions.
+- `npm run build` to verify the root layout compiles in production mode.
+- Browser smoke is optional for passive providers, but useful when changing custom telemetry components such as PostHog.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```tsx
+<body>
+  <TRPCReactProvider>{children}</TRPCReactProvider>
+  {/* Removed existing PostHog while adding Vercel Analytics. */}
+  <Analytics />
+</body>
+```
+
+Correct:
+
+```tsx
+<body>
+  <PostHogScript />
+  <TRPCReactProvider>
+    <PostHogRouteTracker />
+    {children}
+  </TRPCReactProvider>
+  <Analytics />
+  <SpeedInsights />
+</body>
+```
+
 ### Scenario: Third-Party Browser Map / Street View Integrations
 
 #### 1. Scope / Trigger
@@ -54,6 +134,7 @@ Questions to answer:
 - Global street-view modes are an explicit exception to country clamping: pass a prop such as `restrictToCountry={false}`, initialize the map at a world zoom, and validate only global latitude/longitude ranges.
 - Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
 - If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
+- Result-page continuation links for Google Street View should use Google Maps URLs with `api=1`, `map_action=pano`, and answer coordinates as the `viewpoint`. Keep crawl/source URLs internal for traceability; do not expose third-party source links such as Anitabi as user-facing CTAs.
 
 #### 4. Validation & Error Matrix
 
@@ -62,6 +143,7 @@ Questions to answer:
 - Street-view service unavailable -> fail generation with retry, not a non-street-view fallback.
 - Insufficient confirmed panoramas -> do not start the round; show how many were found when useful.
 - Component unmount during SDK loading -> ignore late results and clean listeners/overlays.
+- Google Maps continuation URL -> opens a Street View panorama via `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=<lat>,<lng>`.
 
 #### 5. Good/Base/Bad Cases
 
@@ -72,6 +154,7 @@ Questions to answer:
 #### 6. Tests Required
 
 - Unit tests for country bounds, clamping, and country lookup.
+- Unit tests for Google Maps continuation URL helpers when adding or changing external Street View links.
 - Type-check/lint after adding SDK wrapper types.
 - Browser smoke for mode entry and provider error/loading/ready states when credentials are available.
 

@@ -26,6 +26,8 @@ export const env = createEnv({
     NEXT_PUBLIC_TENCENT_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL: z.string().url().optional(),
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().optional(),
+    NEXT_PUBLIC_POSTHOG_TOKEN: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
   },
   runtimeEnv: {
@@ -51,6 +53,9 @@ export const env = createEnv({
     NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL:
       process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN:
+      process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
+    NEXT_PUBLIC_POSTHOG_TOKEN: process.env.NEXT_PUBLIC_POSTHOG_TOKEN,
     NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

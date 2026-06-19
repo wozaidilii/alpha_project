@@ -6,6 +6,8 @@ import { type TuxunLocation } from "~/lib/tuxun-locations";
 import { type HistoryTuxunPlayState } from "~/lib/history-tuxun-puzzle";
 import { type AnimeTuxunPlayState } from "~/lib/anime-tuxun-puzzle";
 
+export const BATTLE_MAX_PLAYERS = 8;
+
 export interface BattleTuxunQuestion {
   id: string;
   type: "tuxun";
@@ -42,6 +44,7 @@ export type BattleQuestion =
   | BattleAnimeTuxunQuestion;
 
 export type BattleRoomPhase = "lobby" | "starting" | "playing" | "closed";
+export type BattleRoundStatus = "playing" | "round-result" | "game-over";
 
 export type BattlePhase =
   | "lobby" // waiting for 2nd player
@@ -70,12 +73,17 @@ export interface BattleSettings {
 export interface BattleRoomSnapshot {
   roomId: string;
   phase: BattleRoomPhase;
+  roundStatus?: BattleRoundStatus;
   settings: BattleSettings;
   players: Record<string, BattlePlayer>;
   /** 普通题库模式仅同步 ID，加入方本地拉取完整题目，避免消息过大 */
   questionIds?: string[];
-  /** 随机街景题需要同步完整题目，保证双方看到同一处街景 */
+  /** 随机街景题需要同步完整题目，保证所有玩家看到同一处街景 */
   questions?: BattleQuestion[];
+  guesses?: Record<string, PusherGuessSubmitted>;
+  results?: BattleRoundResult[];
+  roundReady?: Record<string, boolean>;
+  finalHp?: Record<string, number>;
   roundIndex?: number;
   startTime?: number;
   updatedAt: number;
@@ -137,7 +145,7 @@ export interface PusherGameStarted {
   players: Record<string, BattlePlayer>;
   /** 普通题库模式仅同步 ID，加入方本地拉取完整题目，避免 Pusher 消息过大 */
   questionIds?: string[];
-  /** 随机街景题需要同步完整题目，保证双方看到同一处全景 */
+  /** 随机街景题需要同步完整题目，保证所有玩家看到同一处全景 */
   questions?: BattleQuestion[];
   roundIndex: number;
   startTime: number;
@@ -150,6 +158,7 @@ export interface PusherRoundStarted {
 
 export interface PusherGuessSubmitted {
   playerId: string;
+  roundIndex: number;
   lat: number;
   lng: number;
   year: number;

@@ -40,21 +40,46 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
   });
 
   const winner = sortedPlayers[0]!;
-  const iWon = winner.id === myId;
   const me = players[myId];
-  const opponent = Object.values(players).find((p) => p.id !== myId);
+  const opponents = sortedPlayers.filter((p) => p.id !== myId);
+  const topHp = winner.hp;
+  const topScore = totalScores[winner.id] ?? 0;
+  const leaderIds = sortedPlayers
+    .filter((p) => p.hp === topHp && (totalScores[p.id] ?? 0) === topScore)
+    .map((p) => p.id);
+  const representativeOpponent =
+    opponents.find((p) => leaderIds.includes(p.id)) ?? opponents[0];
+  const opponentSummaryName =
+    opponents.length > 1
+      ? opponents.map((p) => p.name).join(" / ")
+      : (representativeOpponent?.name ?? "");
   const myScore = totalScores[myId] ?? 0;
-  const opponentScore = opponent ? (totalScores[opponent.id] ?? 0) : 0;
+  const opponentScore = opponents.length
+    ? Math.max(...opponents.map((p) => totalScores[p.id] ?? 0))
+    : 0;
+  const opponentHp = opponents.length
+    ? Math.max(...opponents.map((p) => p.hp))
+    : 0;
   const myOutcome: BattleOutcome = (() => {
-    if (!me || !opponent) return "draw";
-    if (me.hp !== opponent.hp) return me.hp > opponent.hp ? "win" : "loss";
-    if (myScore !== opponentScore)
-      return myScore > opponentScore ? "win" : "loss";
-    return "draw";
+    if (!me || opponents.length === 0) return "draw";
+    if (!leaderIds.includes(myId)) return "loss";
+    return leaderIds.length === 1 ? "win" : "draw";
   })();
+  const winnerTitle = leaderIds.includes(myId)
+    ? leaderIds.length === 1
+      ? "你赢了！"
+      : "并列第一！"
+    : `${winner.name} 获胜！`;
 
   useEffect(() => {
-    if (recordedRef.current || !me || !opponent || results.length === 0) return;
+    if (
+      recordedRef.current ||
+      !me ||
+      !representativeOpponent ||
+      results.length === 0
+    ) {
+      return;
+    }
 
     const session = getStoredPlayerSession();
     if (!session) return;
@@ -65,35 +90,37 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
       token: session.token,
       roomId,
       outcome: myOutcome,
-      opponentName: opponent.name,
-      opponentAvatar: opponent.avatar,
+      opponentName: opponentSummaryName,
+      opponentAvatar: representativeOpponent.avatar,
       totalScore: myScore,
       opponentScore,
       remainingHp: me.hp,
-      opponentHp: opponent.hp,
+      opponentHp,
       roundsPlayed: results.length,
     });
   }, [
     me,
     myOutcome,
     myScore,
-    opponent,
+    opponentHp,
+    opponentSummaryName,
     opponentScore,
     recordBattle,
+    representativeOpponent,
     results.length,
     roomId,
   ]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-stone-900 text-white">
-      <div className="border-b border-stone-700 px-6 py-3">
-        <h1 className="font-bold text-red-400">⚔️ 对战</h1>
+    <div className="anime-shell flex min-h-screen flex-col text-white">
+      <div className="border-b border-white/10 bg-[#0d081a]/90 px-6 py-3 backdrop-blur">
+        <h1 className="font-bold text-pink-100">对战结束</h1>
       </div>
 
-      <div className="mx-auto w-full max-w-lg px-6 py-8">
+      <div className="mx-auto w-full max-w-3xl px-6 py-8">
         {/* Winner banner */}
-        <div className="mb-8 rounded-2xl bg-gradient-to-br from-red-900/40 to-stone-800 p-8 text-center">
-          <div className="mx-auto mb-3 flex h-24 w-24 items-end justify-center overflow-hidden rounded-full bg-stone-700">
+        <div className="anime-panel mb-8 p-8 text-center">
+          <div className="mx-auto mb-3 flex h-24 w-24 items-end justify-center overflow-hidden rounded-full bg-white/10">
             {winner.character ? (
               <div className="relative h-full w-full">
                 <CharacterPortrait config={winner.character} variant="avatar" />
@@ -107,27 +134,27 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
               </div>
             )}
           </div>
-          <div className="text-2xl font-extrabold text-amber-400">
-            {iWon ? "你赢了！" : `${winner.name} 获胜！`}
+          <div className="text-2xl font-extrabold text-pink-100">
+            {winnerTitle}
           </div>
-          <div className="mt-1 text-stone-400">剩余血量 {winner.hp} HP</div>
+          <div className="mt-1 text-pink-100/60">剩余血量 {winner.hp} HP</div>
         </div>
 
         {/* Player final scores */}
-        <h3 className="mb-3 font-semibold text-stone-300">最终结果</h3>
+        <h3 className="mb-3 font-semibold text-pink-100">最终结果</h3>
         <div className="mb-6 space-y-3">
           {sortedPlayers.map((p, i) => (
             <div
               key={p.id}
-              className={`flex items-center justify-between rounded-xl px-5 py-4 ${
-                p.id === myId
-                  ? "bg-amber-900/30 ring-1 ring-amber-500"
-                  : "bg-stone-800"
+              className={`anime-panel flex items-center justify-between px-5 py-4 ${
+                p.id === myId ? "ring-1 ring-pink-300/60" : ""
               }`}
             >
               <div className="flex items-center gap-3">
-                <span className="text-2xl">{i === 0 ? "🥇" : "🥈"}</span>
-                <div className="flex h-10 w-10 items-end justify-center overflow-hidden rounded-full bg-stone-700">
+                <span className="min-w-9 rounded-full bg-white/8 px-2 py-1 text-center text-xs font-bold text-cyan-100">
+                  #{i + 1}
+                </span>
+                <div className="flex h-10 w-10 items-end justify-center overflow-hidden rounded-full bg-white/10">
                   {p.character ? (
                     <div className="relative h-full w-full">
                       <CharacterPortrait
@@ -151,24 +178,24 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
                       <span className="ml-1 text-xs text-amber-400">(你)</span>
                     )}
                   </div>
-                  <div className="text-sm text-stone-400">剩余 {p.hp} HP</div>
+                  <div className="text-sm text-pink-100/55">剩余 {p.hp} HP</div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xl font-bold text-white">
                   {(totalScores[p.id] ?? 0).toLocaleString()}
                 </div>
-                <div className="text-xs text-stone-500">总得分</div>
+                <div className="text-xs text-pink-100/45">总得分</div>
               </div>
             </div>
           ))}
         </div>
 
         {recordBattle.isSuccess && (
-          <p className="mb-6 text-center text-sm text-green-400">战绩已记录</p>
+          <p className="mb-6 text-center text-sm text-green-300">战绩已记录</p>
         )}
         {recordBattle.isError && (
-          <p className="mb-6 text-center text-sm text-red-400">
+          <p className="mb-6 text-center text-sm text-red-200">
             战绩记录失败，请返回大厅重新登录后再试
           </p>
         )}
@@ -176,7 +203,7 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
         {/* Round-by-round */}
         {results.length > 0 && (
           <>
-            <h3 className="mb-3 font-semibold text-stone-300">各轮回顾</h3>
+            <h3 className="mb-3 font-semibold text-pink-100">各轮回顾</h3>
             <div className="mb-6 space-y-2">
               {results.map((r, i) => {
                 const winner = playerIds.reduce(
@@ -189,23 +216,23 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
                 return (
                   <div
                     key={i}
-                    className="rounded-lg bg-stone-800 px-4 py-3 text-sm"
+                    className="anime-panel rounded-lg px-4 py-3 text-sm"
                   >
                     <div className="flex justify-between">
-                      <span className="font-medium text-amber-300">
+                      <span className="font-medium text-cyan-100">
                         {getBattleQuestionTitle(r.question)}
                       </span>
                       {getBattleQuestionYear(r.question) !== null &&
                         getBattleQuestionYear(r.question) !== 0 && (
-                          <span className="text-stone-400">
+                          <span className="text-pink-100/55">
                             {formatYear(getBattleQuestionYear(r.question)!)}
                           </span>
                         )}
                     </div>
-                    <div className="mt-0.5 text-xs text-stone-500">
+                    <div className="mt-0.5 text-xs text-pink-100/45">
                       {getBattleQuestionSubtitle(r.question)}
                     </div>
-                    <div className="mt-1 flex gap-4 text-stone-400">
+                    <div className="mt-2 flex flex-wrap gap-3 text-pink-100/60">
                       {playerIds.map((pid) => (
                         <span
                           key={pid}
@@ -226,16 +253,10 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
         )}
 
         <div className="flex gap-3">
-          <Link
-            href="/battle"
-            className="flex-1 rounded-xl bg-red-500 py-3 text-center font-bold text-white transition hover:bg-red-400"
-          >
-            再来一局 ⚔️
+          <Link href="/battle" className="anime-button flex-1">
+            再来一局
           </Link>
-          <Link
-            href="/"
-            className="flex-1 rounded-xl bg-stone-700 py-3 text-center font-bold text-stone-300 transition hover:bg-stone-600"
-          >
+          <Link href="/" className="anime-button-secondary flex-1">
             返回首页
           </Link>
         </div>

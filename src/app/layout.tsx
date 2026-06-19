@@ -1,8 +1,12 @@
 import "~/styles/globals.css";
 
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 
+import { PostHogRouteTracker } from "~/components/PostHogRouteTracker";
+import { PostHogScript } from "~/components/PostHogScript";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
@@ -22,7 +26,13 @@ export default function RootLayout({
   return (
     <html lang="zh" className={`${geist.variable}`}>
       <body>
-        <TRPCReactProvider>{children}</TRPCReactProvider>
+        <PostHogScript />
+        <TRPCReactProvider>
+          <PostHogRouteTracker />
+          {children}
+        </TRPCReactProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

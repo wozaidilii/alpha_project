@@ -19,31 +19,45 @@
   - `{ action: "starting", settings: BattleSettings, players: Record<string, BattlePlayer> }`
   - `{ action: "cancel-start" }`
   - `{ action: "started", settings: BattleSettings, players: Record<string, BattlePlayer>, questionIds?: string[], questions?: BattleQuestion[], roundIndex: number, startTime: number }`
+  - `{ action: "submit-guess", guess: PusherGuessSubmitted }`
+  - `{ action: "round-result", result: BattleRoundResult }`
+  - `{ action: "round-ready", playerId: string, roundIndex: number }`
+  - `{ action: "round-started", roundIndex: number, startTime: number }`
+  - `{ action: "game-over", results: BattleRoundResult[], finalHp: Record<string, number> }`
   - `{ action: "leave", playerId: string }`
 - Store helpers:
   - `joinBattleRoom(input): BattleRoomSnapshot`
   - `markBattleRoomStarting(input): BattleRoomSnapshot`
   - `cancelBattleRoomStart(input): BattleRoomSnapshot | null`
   - `startBattleRoom(input): BattleRoomSnapshot`
+  - `submitBattleRoomGuess(input): BattleRoomSnapshot | null`
+  - `recordBattleRoomRoundResult(input): BattleRoomSnapshot | null`
+  - `markBattleRoomRoundReady(input): BattleRoomSnapshot | null`
+  - `startBattleRoomRound(input): BattleRoomSnapshot | null`
+  - `finishBattleRoom(input): BattleRoomSnapshot | null`
   - `leaveBattleRoom(input): { closed: boolean; snapshot: BattleRoomSnapshot | null }`
 
 ### 3. Contracts
 
 - `BattleRoomSnapshot.phase` is `"lobby" | "starting" | "playing" | "closed"`.
+- `BattleRoomSnapshot.roundStatus` is optional in the lobby and is `"playing" | "round-result" | "game-over"` after the battle starts.
 - `/battle` is a logged-in-only lobby. It must use the persisted `PlayerSession` to append `userId`, `name`, and avatar params before entering `/battle/[roomId]`.
 - `/battle/[roomId]` must reject direct entry without player profile params and redirect through login/lobby instead of creating anonymous battle players.
-- Lobby state stores authoritative `settings` and at most 2 `players`.
+- Lobby state stores authoritative `settings` and up to `BATTLE_MAX_PLAYERS` players. A battle may start with 2 or more players.
 - `starting` means the host has clicked start and may be generating third-party street-view questions; non-host clients should show a waiting state and keep polling.
 - `playing` must include either `questionIds` for DB-backed standard questions or full `questions` for generated street-view modes.
+- The room snapshot is authoritative for in-game recovery. It must persist current `roundIndex`, `startTime`, `guesses`, `results`, `roundReady`, and `finalHp` as those states appear.
 - Generated street-view battle modes, including `anime-tuxun`, must share full generated `BattleQuestion[]` through room state so both players see the same panorama and timed clue state.
 - `anime-tuxun` battle questions use Google Street View, reveal anime clues over time, and score by distance to the real-world anime location center.
-- Pusher `game-started` is a fast notification, not the only source of truth; clients must be able to recover from `GET /api/battle/rooms/[roomId]`.
+- Pusher events are fast notifications, not the only source of truth. Clients must be able to recover start, guess submission, round result, ready state, next round, and game-over state from `GET /api/battle/rooms/[roomId]`.
+- In multiplayer rounds, every player whose score is below the top score takes damage based on the gap to the top score. Tied top scorers take no damage.
 - When all players leave, `leaveBattleRoom` deletes the room and returns `closed: true`.
+- The current room store is in-process. `globalThis` may stabilize same-process reloads, but multi-instance production deployments need a durable store such as Redis or a database-backed room table if desync remains visible.
 
 ### 4. Validation & Error Matrix
 
 - Unsupported `settings.questionType` -> `400 Invalid battle room payload`.
-- Third player joins a full room -> `409 房间已满`.
+- Player joins when room already has `BATTLE_MAX_PLAYERS` players -> `409 房间已满`.
 - Unknown room on `GET` -> `404 Battle room not found`.
 - Unknown room on `cancel-start` -> `404 Battle room not found`.
 - Invalid action payload -> `400 Invalid battle room payload`.
@@ -57,10 +71,10 @@
 
 ### 6. Tests Required
 
-- Unit tests for room join, full-room rejection, starting/cancel-start, started snapshot persistence, and all-player leave cleanup.
+- Unit tests for room join, full-room rejection, starting/cancel-start, started snapshot persistence, in-game snapshot persistence, and all-player leave cleanup.
 - Type-check and lint for route payload types.
 - Build verification after adding a new App Router API route.
-- Browser/manual smoke for two-player start when Pusher credentials and third-party map credentials are available.
+- Browser/manual smoke for two-or-more-player start when Pusher credentials and third-party map credentials are available.
 
 ### 7. Wrong vs Correct
 
