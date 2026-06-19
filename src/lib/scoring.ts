@@ -22,7 +22,19 @@ export const LOCATION_SCORE_MAX = 5000;
 export const CHINA_LOCATION_SCORE_DECAY_KM = 600;
 export const CHINA_LOCATION_SCORE_ZERO_KM = 2500;
 export const LOCATION_ROUND_SCORE_MAX = 100;
-export const LOCATION_SPEED_COMPENSATION_RATIO = 0.15;
+/** 直线距离 ≤ 此值（km）时距离分满分 */
+export const LOCATION_FULL_SCORE_DISTANCE_KM = 1;
+/** 精确区上限（km）：1–此值线性递减至城市段上限 80 分 */
+export const LOCATION_PRECISION_ZONE_KM = 3;
+/** 猜中大致城市（数十 km）时距离分上限 */
+export const LOCATION_CITY_GUESS_MAX_DISTANCE_PTS = 80;
+/** 超过此距离（km）后距离分降至 40 分以下 */
+export const LOCATION_FAR_DISTANCE_KM = 400;
+export const LOCATION_FAR_DISTANCE_MAX_PTS = 40;
+/** 距离分衰减至 0 的公里数（>400 km 段线性归零） */
+export const LOCATION_ROUND_ZERO_DISTANCE_KM = 2500;
+export const LOCATION_SPEED_COMPENSATION_MAX = 10;
+export const LOCATION_SPEED_DEDUCTION_INTERVAL_SECONDS = 10;
 export const LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS = 60;
 export const HISTORY_YEAR_SCORE_MAX = 10000;
 export const HISTORY_YEAR_MIN_CLUE_MULTIPLIER = 0.4;
@@ -48,31 +60,70 @@ export interface LocationRoundScoreResult {
   total: number;
 }
 
+/**
+ * 动漫寻图 / 日本猜点：分段距离分，拉开排行榜差距。
+ * - ≤1 km：100 分
+ * - 1–3 km：100 → 80 线性递减
+ * - 3–400 km：80 → 40 线性递减（猜中城市约数十 km 时通常 ≤80）
+ * - >400 km：<40，至 2500 km 归零
+ */
 export function locationDistanceScore(distanceKm: number): number {
-  if (distanceKm <= 0) return LOCATION_ROUND_SCORE_MAX;
-  if (distanceKm >= CHINA_LOCATION_SCORE_ZERO_KM) return 0;
-  return Math.round(
-    LOCATION_ROUND_SCORE_MAX *
-      Math.exp(-distanceKm / CHINA_LOCATION_SCORE_DECAY_KM),
+  const d = Math.max(0, distanceKm);
+
+  if (d <= LOCATION_FULL_SCORE_DISTANCE_KM) {
+    return LOCATION_ROUND_SCORE_MAX;
+  }
+
+  if (d <= LOCATION_PRECISION_ZONE_KM) {
+    const spanKm = LOCATION_PRECISION_ZONE_KM - LOCATION_FULL_SCORE_DISTANCE_KM;
+    const ptsSpan =
+      LOCATION_ROUND_SCORE_MAX - LOCATION_CITY_GUESS_MAX_DISTANCE_PTS;
+    return Math.round(
+      LOCATION_ROUND_SCORE_MAX - ((d - LOCATION_FULL_SCORE_DISTANCE_KM) * ptsSpan) / spanKm,
+    );
+  }
+
+  if (d <= LOCATION_FAR_DISTANCE_KM) {
+    const spanKm = LOCATION_FAR_DISTANCE_KM - LOCATION_PRECISION_ZONE_KM;
+    const ptsSpan =
+      LOCATION_CITY_GUESS_MAX_DISTANCE_PTS - LOCATION_FAR_DISTANCE_MAX_PTS;
+    return Math.round(
+      LOCATION_CITY_GUESS_MAX_DISTANCE_PTS -
+        ((d - LOCATION_PRECISION_ZONE_KM) * ptsSpan) / spanKm,
+    );
+  }
+
+  if (d >= LOCATION_ROUND_ZERO_DISTANCE_KM) {
+    return 0;
+  }
+
+  const tailSpanKm = LOCATION_ROUND_ZERO_DISTANCE_KM - LOCATION_FAR_DISTANCE_KM;
+  const belowFarCap = LOCATION_FAR_DISTANCE_MAX_PTS - 1;
+  return Math.max(
+    0,
+    Math.round(
+      belowFarCap -
+        ((d - LOCATION_FAR_DISTANCE_KM) * belowFarCap) / tailSpanKm,
+    ),
   );
+}
+
+export function locationSpeedCompensationScore(
+  elapsedSeconds?: number,
+): number {
+  const elapsed = Math.max(0, elapsedSeconds ?? Infinity);
+  const deducted = Math.floor(
+    elapsed / LOCATION_SPEED_DEDUCTION_INTERVAL_SECONDS,
+  );
+  return Math.max(0, LOCATION_SPEED_COMPENSATION_MAX - deducted);
 }
 
 export function locationRoundScore({
   distanceKm,
   elapsedSeconds,
-  speedCompensationWindowSeconds = LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS,
 }: LocationRoundScoreInput): LocationRoundScoreResult {
   const distancePts = locationDistanceScore(distanceKm);
-  const windowSeconds = Math.max(1, speedCompensationWindowSeconds);
-  const elapsed = Math.max(0, elapsedSeconds ?? windowSeconds);
-  const speedRatio = Math.max(
-    0,
-    1 - Math.min(elapsed, windowSeconds) / windowSeconds,
-  );
-  const availableCompensation = LOCATION_ROUND_SCORE_MAX - distancePts;
-  const speedCompensationPts = Math.round(
-    availableCompensation * LOCATION_SPEED_COMPENSATION_RATIO * speedRatio,
-  );
+  const speedCompensationPts = locationSpeedCompensationScore(elapsedSeconds);
 
   return {
     distancePts,
