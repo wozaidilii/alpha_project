@@ -29,15 +29,25 @@ const sampleQuestion: AnimeGuessrQuestion = {
 };
 
 describe("anime-guessr", () => {
-  it("accepts valid Japan anime pilgrimage questions", () => {
+  it("accepts valid anime pilgrimage questions", () => {
     expect(isAnimeGuessrQuestion(sampleQuestion)).toBe(true);
   });
 
-  it("rejects questions outside Japan bounds", () => {
+  it("accepts valid coordinates outside Japan", () => {
     expect(
       isAnimeGuessrQuestion({
         ...sampleQuestion,
         lat: 48.8566,
+        lng: 2.3522,
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects invalid global coordinates", () => {
+    expect(
+      isAnimeGuessrQuestion({
+        ...sampleQuestion,
+        lat: 120,
         lng: 2.3522,
       }),
     ).toBe(false);
@@ -74,7 +84,7 @@ describe("anime-guessr", () => {
     expect(location).toMatchObject({
       id: "anime:anitabi_51_5c4dgq9pm",
       title: "东京都东大和市多摩湖附近坡道",
-      province: "日本",
+      province: "东京都",
       city: "东京都",
       lat: 35.7728,
       lng: 139.3545,

@@ -69,7 +69,7 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
   }, [question.id]);
 
   return (
-    <div className="relative aspect-video overflow-hidden rounded-lg border border-stone-700 bg-stone-800">
+    <div className="relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-black/40">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={displayImageUrl}
@@ -80,7 +80,7 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
         }}
       />
       {(!imageUrl || showPlaceholder) && (
-        <div className="absolute right-2 bottom-2 left-2 rounded-md border border-stone-700 bg-stone-950/85 px-2 py-1.5 text-[11px] leading-4 text-stone-300 shadow-lg shadow-black/30">
+        <div className="absolute right-2 bottom-2 left-2 rounded-lg border border-white/10 bg-slate-950/90 px-2 py-1.5 text-[11px] leading-4 text-pink-50/80">
           {ANIME_GUESSR_IMAGE_BASE_URL
             ? "题目图片暂不可用，已显示占位图"
             : "图片前缀未配置，已显示占位图"}
@@ -251,35 +251,32 @@ export default function AnimeGuessrPage() {
 
   if (loadState === "loading") {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4 bg-stone-900 text-white">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-pink-300/60 text-xl font-black text-pink-100">
+      <main className="anime-shell flex h-screen flex-col items-center justify-center gap-4 text-white">
+        <div className="grid h-16 w-16 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-xl font-black text-cyan-100">
           Ani
         </div>
-        <div className="text-xl font-bold text-pink-300">猜动漫模式</div>
-        <p className="text-sm text-stone-400">{loadMessage}</p>
+        <div className="text-xl font-black text-pink-200">猜动漫模式</div>
+        <p className="text-sm text-pink-50/70">{loadMessage}</p>
       </main>
     );
   }
 
   if (loadState === "error" || (!current && phase !== "final")) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4 bg-stone-900 px-6 text-center text-white">
-        <p className="max-w-md text-sm leading-6 text-stone-400">
+      <main className="anime-shell flex h-screen flex-col items-center justify-center gap-4 px-6 text-center text-white">
+        <p className="max-w-md text-sm leading-6 text-pink-50/70">
           {loadMessage || "动漫题库为空，请重新生成题库。"}
         </p>
         <div className="flex gap-3">
           <button
             type="button"
             onClick={handleRestart}
-            className="min-h-11 rounded-lg bg-pink-400 px-4 py-2 font-bold text-stone-950 transition hover:bg-pink-300 focus:ring-2 focus:ring-pink-200 focus:outline-none"
+            className="anime-button"
           >
             重新加载
           </button>
-          <Link
-            href="/game/solo"
-            className="min-h-11 rounded-lg bg-stone-800 px-4 py-2 leading-7 text-stone-200 transition hover:bg-stone-700 focus:ring-2 focus:ring-pink-300 focus:outline-none"
-          >
-            返回个人模式
+          <Link href="/" className="anime-button-secondary">
+            返回主页
           </Link>
         </div>
       </main>
@@ -291,29 +288,29 @@ export default function AnimeGuessrPage() {
     const rank = getRank(totalScore);
 
     return (
-      <main className="flex min-h-screen flex-col bg-stone-900 text-white">
-        <header className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
-          <h1 className="text-xl font-bold text-pink-300">猜动漫模式</h1>
+      <main className="anime-shell flex min-h-screen flex-col text-white">
+        <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-3 backdrop-blur">
+          <h1 className="text-xl font-black text-pink-200">AniGuessr</h1>
           <Link
-            href="/game/solo"
-            className="rounded-lg bg-stone-800 px-3 py-1.5 text-sm font-semibold text-stone-300 transition hover:bg-stone-700 focus:ring-2 focus:ring-pink-300 focus:outline-none"
+            href="/"
+            className="rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-sm font-bold text-pink-50 transition hover:bg-white/15 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
           >
-            返回个人模式
+            返回主页
           </Link>
         </header>
 
         <div className="mx-auto w-full max-w-3xl px-6 py-8">
-          <div className="mb-6 rounded-xl bg-gradient-to-br from-pink-600/25 to-stone-800 p-8 text-center">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-pink-300/60 text-xl font-black text-pink-100">
+          <div className="anime-panel mb-6 p-8 text-center">
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-xl font-black text-cyan-100">
               {rank.symbol}
             </div>
-            <div className="mb-1 text-2xl font-bold text-pink-300">
+            <div className="mb-1 text-2xl font-black text-pink-200">
               {rank.label}
             </div>
             <div className="text-7xl font-extrabold text-white">
               {totalScore.toLocaleString()}
             </div>
-            <div className="mt-1 text-stone-400">
+            <div className="mt-1 text-pink-50/60">
               / {maxScore.toLocaleString()} 分
             </div>
           </div>
@@ -322,16 +319,16 @@ export default function AnimeGuessrPage() {
             {results.map((result, index) => (
               <div
                 key={result.question.id}
-                className="flex items-center justify-between gap-4 rounded-xl bg-stone-800 px-4 py-3"
+                className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/10 px-4 py-3"
               >
                 <div>
-                  <div className="text-sm text-stone-500">
+                  <div className="text-sm text-cyan-100/70">
                     第 {index + 1} 轮
                   </div>
-                  <div className="font-bold text-pink-200">
+                  <div className="font-black text-pink-100">
                     {result.question.animeTitle} · {result.question.title}
                   </div>
-                  <div className="text-xs text-stone-400">
+                  <div className="text-xs text-pink-50/60">
                     {result.question.location} · 偏差{" "}
                     {formatDistance(result.distanceKm)} · 用时{" "}
                     {formatElapsed(result.elapsedSeconds)}
@@ -348,15 +345,12 @@ export default function AnimeGuessrPage() {
             <button
               type="button"
               onClick={handleRestart}
-              className="flex-1 rounded-xl bg-pink-400 py-3 font-bold text-stone-950 transition hover:bg-pink-300 focus:ring-2 focus:ring-pink-200 focus:outline-none"
+              className="anime-button flex-1"
             >
               再来一局
             </button>
-            <Link
-              href="/game/solo"
-              className="flex-1 rounded-xl bg-stone-700 py-3 text-center font-bold text-stone-300 transition hover:bg-stone-600 focus:ring-2 focus:ring-pink-300 focus:outline-none"
-            >
-              换模式
+            <Link href="/" className="anime-button-secondary flex-1">
+              返回主页
             </Link>
           </div>
         </div>
@@ -365,18 +359,18 @@ export default function AnimeGuessrPage() {
   }
 
   return (
-    <main className="flex h-screen flex-col bg-stone-900 text-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-700 px-4 py-3 sm:px-6">
+    <main className="anime-shell flex h-screen flex-col text-white">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur sm:px-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-pink-300">猜动漫模式</h1>
+          <h1 className="text-xl font-black text-pink-200">AniGuessr</h1>
           <Link
-            href="/game/solo"
-            className="text-xs text-stone-500 transition hover:text-stone-300 focus:ring-2 focus:ring-pink-300 focus:outline-none"
+            href="/"
+            className="text-xs font-bold text-cyan-100/60 transition hover:text-cyan-100 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
           >
-            返回个人模式
+            返回主页
           </Link>
         </div>
-        <span className="text-stone-400">
+        <span className="anime-chip">
           第 {round + 1} / {questions.length} 轮{roundResult ? "结果" : ""}
         </span>
       </header>
@@ -398,31 +392,31 @@ export default function AnimeGuessrPage() {
         </section>
 
         {!roundResult && current && (
-          <aside className="absolute top-4 left-4 z-20 flex max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] flex-col gap-3 overflow-y-auto rounded-xl border border-stone-700 bg-stone-950/90 p-4 shadow-lg shadow-black/30">
+          <aside className="anime-panel absolute top-4 left-4 z-20 flex max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] flex-col gap-3 overflow-y-auto p-4">
             <AnimeClueImage question={current} />
 
             <div>
-              <div className="text-sm text-stone-500">动漫线索</div>
-              <h2 className="mt-1 text-2xl font-extrabold text-pink-300">
+              <div className="text-sm font-bold text-cyan-100/70">动漫线索</div>
+              <h2 className="mt-1 text-2xl font-black text-pink-100">
                 {current.animeTitle}
               </h2>
-              <div className="mt-1 text-sm text-stone-400">
+              <div className="mt-1 text-sm text-pink-50/60">
                 {current.year} · {current.location}
               </div>
             </div>
 
-            <div className="rounded-lg border border-pink-500/20 bg-pink-500/10 px-3 py-2 text-sm leading-6 text-pink-50">
+            <div className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50">
               {current.description}
             </div>
 
             {current.aspect && (
-              <div className="text-sm leading-6 text-stone-400">
+              <div className="text-sm leading-6 text-pink-50/70">
                 场景：{current.aspect}
               </div>
             )}
 
             {loadMessage && (
-              <div className="rounded-lg border border-pink-500/20 bg-pink-500/10 px-3 py-2 text-xs leading-5 text-pink-50">
+              <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-xs leading-5 text-cyan-50">
                 {loadMessage}
               </div>
             )}
@@ -430,62 +424,62 @@ export default function AnimeGuessrPage() {
         )}
 
         {roundResult && (
-          <aside className="absolute top-[42%] right-0 bottom-0 left-0 z-30 flex flex-col gap-4 overflow-y-auto border-t border-stone-700 bg-stone-950/92 p-5 lg:top-0 lg:left-auto lg:w-[400px] lg:border-t-0 lg:border-l">
+          <aside className="absolute top-[42%] right-0 bottom-0 left-0 z-30 flex flex-col gap-4 overflow-y-auto border-t border-white/10 bg-slate-950/95 p-5 backdrop-blur lg:top-0 lg:left-auto lg:w-[400px] lg:border-t-0 lg:border-l">
             <div>
-              <div className="text-sm text-stone-500">答案</div>
-              <h2 className="mt-1 text-2xl font-extrabold text-pink-300">
+              <div className="text-sm font-bold text-cyan-100/70">答案</div>
+              <h2 className="mt-1 text-2xl font-black text-pink-100">
                 {roundResult.question.answerName}
               </h2>
-              <p className="mt-1 text-sm text-stone-400">
+              <p className="mt-1 text-sm text-pink-50/60">
                 {roundResult.question.animeTitle} ·{" "}
                 {roundResult.question.location}
               </p>
               {roundResult.question.episodeContext && (
-                <p className="mt-2 text-sm text-stone-500">
+                <p className="mt-2 text-sm text-pink-50/50">
                   {roundResult.question.episodeContext}
                 </p>
               )}
             </div>
 
-            <div className="rounded-xl bg-gradient-to-br from-pink-500/20 to-stone-800 p-5 text-center">
-              <div className="text-sm text-stone-400">本轮得分</div>
+            <div className="rounded-xl border border-white/10 bg-white/10 p-5 text-center">
+              <div className="text-sm text-cyan-100/70">本轮得分</div>
               <div className="text-6xl font-extrabold text-white">
                 {roundResult.score.toLocaleString()}
               </div>
-              <div className="text-sm text-stone-500">
+              <div className="text-sm text-pink-50/50">
                 / {LOCATION_ROUND_SCORE_MAX}
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="text-xs text-stone-500">距离分</div>
-                <div className="mt-1 font-bold text-stone-100">
+              <div className="rounded-xl border border-white/10 bg-white/10 p-4">
+                <div className="text-xs text-pink-50/50">距离分</div>
+                <div className="mt-1 font-bold text-white">
                   {roundResult.distancePts}
                 </div>
               </div>
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="text-xs text-stone-500">速度补偿</div>
-                <div className="mt-1 font-bold text-stone-100">
+              <div className="rounded-xl border border-white/10 bg-white/10 p-4">
+                <div className="text-xs text-pink-50/50">速度补偿</div>
+                <div className="mt-1 font-bold text-white">
                   +{roundResult.speedCompensationPts}
                 </div>
               </div>
-              <div className="rounded-xl bg-stone-800 p-4">
-                <div className="text-xs text-stone-500">用时</div>
-                <div className="mt-1 font-bold text-stone-100">
+              <div className="rounded-xl border border-white/10 bg-white/10 p-4">
+                <div className="text-xs text-pink-50/50">用时</div>
+                <div className="mt-1 font-bold text-white">
                   {formatElapsed(roundResult.elapsedSeconds)}
                 </div>
               </div>
             </div>
 
-            <div className="rounded-xl bg-stone-800 p-4 text-sm leading-6 text-stone-300">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-4 text-sm leading-6 text-pink-50/70">
               你的猜测距离实际地点{" "}
               <span className="font-bold text-white">
                 {formatDistance(roundResult.distanceKm)}
               </span>
               。
               {roundResult.question.funfact.length > 0 && (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-stone-400">
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-pink-50/60">
                   {roundResult.question.funfact.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
@@ -498,7 +492,7 @@ export default function AnimeGuessrPage() {
                 href={roundResult.question.sourceUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm text-pink-300 underline-offset-4 hover:underline"
+                className="text-sm font-bold text-cyan-100 underline-offset-4 hover:underline"
               >
                 查看 Anitabi 来源
               </a>
@@ -507,7 +501,7 @@ export default function AnimeGuessrPage() {
             <button
               type="button"
               onClick={handleNext}
-              className="mt-auto rounded-xl bg-pink-400 py-3 font-bold text-stone-950 transition hover:bg-pink-300 focus:ring-2 focus:ring-pink-200 focus:outline-none"
+              className="anime-button mt-auto"
             >
               {round + 1 >= questions.length ? "查看最终得分" : "下一轮"}
             </button>
@@ -522,10 +516,10 @@ export default function AnimeGuessrPage() {
           }
         >
           <section
-            className={`flex h-full min-h-0 flex-col overflow-hidden bg-stone-950 shadow-lg shadow-black/40 ${
+            className={`flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 shadow-lg shadow-black/40 ${
               roundResult
-                ? "border-b border-stone-700 lg:border-r lg:border-b-0"
-                : "rounded-xl border border-stone-600"
+                ? "border-b border-white/10 lg:border-r lg:border-b-0"
+                : "rounded-xl border border-white/15"
             }`}
           >
             <div className="min-h-0 flex-1 bg-stone-900">
@@ -537,17 +531,18 @@ export default function AnimeGuessrPage() {
                 distanceKm={roundResult?.distanceKm}
                 disabled={Boolean(roundResult)}
                 minHeightClass="min-h-0"
+                restrictToCountry={false}
                 onGuess={setGuess}
               />
             </div>
 
             {!roundResult && (
-              <div className="hidden border-t border-stone-700 bg-stone-900/95 p-2 transition group-focus-within:block group-hover:block">
+              <div className="hidden border-t border-white/10 bg-slate-950/95 p-2 transition group-focus-within:block group-hover:block">
                 <button
                   type="button"
                   onClick={handleSubmit}
                   disabled={!guess}
-                  className="w-full rounded-lg bg-pink-400 px-3 py-2 text-sm font-bold text-stone-950 transition hover:bg-pink-300 focus:ring-2 focus:ring-pink-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                  className="anime-button w-full text-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   提交猜测
                 </button>

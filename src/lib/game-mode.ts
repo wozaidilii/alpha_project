@@ -33,7 +33,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     tagline: "地点 + 年份双重挑战",
     accentClass: "text-amber-400",
     borderHoverClass: "hover:border-amber-500",
-    enabled: true,
+    enabled: false,
   },
   funfact: {
     type: "funfact",
@@ -44,7 +44,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     tagline: "选择题 + 判断题",
     accentClass: "text-emerald-400",
     borderHoverClass: "hover:border-emerald-500",
-    enabled: true,
+    enabled: false,
   },
   nostalgia: {
     type: "nostalgia",
@@ -74,7 +74,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     title: "猜动漫模式",
     emoji: "🎞️",
     description: "观察现实街景，参考左上角动漫线索猜取景地",
-    tagline: "Google 街景 + 动漫线索 + 日本地图猜点",
+    tagline: "Google 街景 + 动漫线索 + 全球地图猜点",
     accentClass: "text-pink-300",
     borderHoverClass: "hover:border-pink-500",
     enabled: true,
@@ -89,7 +89,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     tagline: "全景线索 + 中国地图猜点",
     accentClass: "text-sky-300",
     borderHoverClass: "hover:border-sky-500",
-    enabled: true,
+    enabled: false,
   },
   foreign: {
     type: "foreign",
@@ -100,7 +100,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     tagline: "Google 街景 + 日本地图猜点",
     accentClass: "text-emerald-300",
     borderHoverClass: "hover:border-emerald-500",
-    enabled: true,
+    enabled: false,
   },
   "history-tuxun": {
     type: "history-tuxun",
@@ -111,7 +111,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     tagline: "历史线索 + 百度全景 + 中国地图猜点",
     accentClass: "text-amber-300",
     borderHoverClass: "hover:border-amber-500",
-    enabled: true,
+    enabled: false,
   },
   "history-year": {
     type: "history-year",
@@ -122,7 +122,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     tagline: "线索越少 + 年份越准，分数越高",
     accentClass: "text-fuchsia-300",
     borderHoverClass: "hover:border-fuchsia-500",
-    enabled: true,
+    enabled: false,
     battleEnabled: false,
   },
 };

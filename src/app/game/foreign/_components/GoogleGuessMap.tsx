@@ -20,6 +20,7 @@ interface Props {
   distanceKm?: number;
   disabled?: boolean;
   minHeightClass?: string;
+  restrictToCountry?: boolean;
   onGuess: (point: { lat: number; lng: number }) => void;
 }
 
@@ -38,6 +39,7 @@ export function GoogleGuessMap({
   distanceKm,
   disabled,
   minHeightClass = "min-h-[360px]",
+  restrictToCountry = true,
   onGuess,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -129,12 +131,16 @@ export function GoogleGuessMap({
         if (!api?.Map) throw new Error("Google Maps API 未加载");
 
         const map = new api.Map(containerRef.current, {
-          center: country.center,
-          zoom: country.zoom,
-          restriction: {
-            latLngBounds: googleBoundsForCountry(country),
-            strictBounds: true,
-          },
+          center: restrictToCountry ? country.center : { lat: 20, lng: 0 },
+          zoom: restrictToCountry ? country.zoom : 2,
+          ...(restrictToCountry
+            ? {
+                restriction: {
+                  latLngBounds: googleBoundsForCountry(country),
+                  strictBounds: true,
+                },
+              }
+            : {}),
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: true,
@@ -143,11 +149,9 @@ export function GoogleGuessMap({
 
         clickListenerRef.current = map.addListener("click", (event) => {
           if (disabledRef.current || !event.latLng) return;
+          const point = { lat: event.latLng.lat(), lng: event.latLng.lng() };
           onGuessRef.current(
-            clampToBounds(
-              { lat: event.latLng.lat(), lng: event.latLng.lng() },
-              country.bounds,
-            ),
+            restrictToCountry ? clampToBounds(point, country.bounds) : point,
           );
         });
 
@@ -168,7 +172,7 @@ export function GoogleGuessMap({
       }
       mapRef.current = null;
     };
-  }, [clearOverlays, country]);
+  }, [clearOverlays, country, restrictToCountry]);
 
   useEffect(() => {
     if (state === "ready") syncMarkers();

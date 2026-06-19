@@ -51,6 +51,7 @@ Questions to answer:
 - Script load success does not imply service availability; construct service clients and issue SDK calls inside `try/catch` or null-returning boundaries.
 - Street-view gameplay must only start after point generation confirms enough usable panoramas for the configured round count.
 - Guess-map click handlers must clamp or reject points outside the active country/region bounds.
+- Global street-view modes are an explicit exception to country clamping: pass a prop such as `restrictToCountry={false}`, initialize the map at a world zoom, and validate only global latitude/longitude ranges.
 - Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
 - If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
 
@@ -144,7 +145,7 @@ buildQuestionImageUrl(imagePath?: string, baseUrl?: string): string | undefined;
 - Image object 404/401/5xx -> handle `<img onError>` and fall back to the placeholder for that question.
 - Absolute `https://` image URL in data -> use as-is.
 - Relative image path + public base URL -> trim duplicate slashes and join exactly once.
-- Generated data outside active map bounds -> exclude during conversion so the answer remains clickable.
+- Generated data outside active map bounds -> exclude during conversion for bounded modes; global Anime Guessr data should instead pass a generic latitude/longitude range guard.
 
 #### 5. Good/Base/Bad Cases
 

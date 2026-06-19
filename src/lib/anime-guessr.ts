@@ -1,7 +1,3 @@
-import {
-  DEFAULT_FOREIGN_COUNTRY,
-  isPointInsideBounds,
-} from "~/lib/foreign-map";
 import { type TuxunLocation } from "~/lib/tuxun-locations";
 
 export const ANIME_GUESSR_ROUNDS = 5;
@@ -43,6 +39,19 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
+function isValidLatLng(lat: unknown, lng: unknown): lat is number {
+  return (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lng >= -180 &&
+    lng <= 180
+  );
+}
+
 export function isAnimeGuessrQuestion(
   value: unknown,
 ): value is AnimeGuessrQuestion {
@@ -61,10 +70,7 @@ export function isAnimeGuessrQuestion(
     typeof item.confidence === "string" &&
     isStringArray(item.funfact) &&
     isStringArray(item.tags) &&
-    isPointInsideBounds(
-      { lat: item.lat, lng: item.lng },
-      DEFAULT_FOREIGN_COUNTRY.bounds,
-    )
+    isValidLatLng(item.lat, item.lng)
   );
 }
 
@@ -132,7 +138,7 @@ export function toAnimeStreetViewLocation(
   return {
     id: `anime:${question.id}`,
     title: question.answerName,
-    province: DEFAULT_FOREIGN_COUNTRY.label,
+    province: question.location,
     city: question.location,
     lat: question.lat,
     lng: question.lng,

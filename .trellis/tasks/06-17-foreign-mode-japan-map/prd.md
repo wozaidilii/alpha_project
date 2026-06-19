@@ -51,6 +51,14 @@
 - 本地已将用户提供的截图复制为 `public/images/anime-placeholder.jpg`，动漫模式在图片公网前缀缺失或题图加载失败时使用该占位图。
 - 已将占位图上传到 R2：`npx wrangler r2 object put anime-gussr/anime-placeholder.jpg --file public/images/anime-placeholder.jpg --remote`。后续题图上传命令沉淀为 `npm run images:upload-anime -- <local-file> <object-key>`。
 
+## Scope Update: 单一动漫模式与全球猜点
+
+- 用户要求项目入口只保留“猜动漫模式”；`/` 作为三语首页，`/game`、`/game/solo`、`/battle` 都应导向 `/game/anime`。
+- 首页需要提供中文、日文、英文三语切换，并把产品视觉统一为二次元猜谜游戏，而不是历史地图/多模式大厅。
+- 猜动漫模式仍然以现实 Google Street View 为主画面，左上角只展示动漫图案和文字线索。
+- 猜点地图不再限制日本：动漫题库 guard 只校验全球经纬度合法范围，Google 猜点地图在该模式下不设置日本 `restriction`，初始视野使用世界地图。
+- 旧模式代码可暂时保留以便回滚，但普通用户入口不再展示或引导进入旧模式。
+
 ## Acceptance Criteria
 
 - [ ] `/game/solo` 展示新的国外模式入口。
@@ -65,11 +73,12 @@
 - [ ] 对战模式可以选择并开始国外模式，日本题目对所有房间玩家一致。
 - [ ] 两名玩家加入房间后，房主点击开始，双方都进入同一局游戏。
 - [ ] 所有玩家离开房间后，房间 session 被清理或关闭。
-- [ ] `/game/solo` 展示新的“猜动漫模式”入口。
+- [ ] `/` 展示新的 AniGuessr 首页，并提供中文、日文、英文切换。
+- [ ] `/game`、`/game/solo`、`/battle` 都导向 `/game/anime`，普通入口只保留猜动漫模式。
 - [ ] `/game/anime` 能加载转换后的动漫巡礼题库并随机抽取整局题目。
 - [ ] `/game/anime` 主画面展示题目对应现实 Google Street View，而不是把动漫图片作为主画面。
 - [ ] 动漫线索图片展示在左上角线索卡中，用于辅助判断现实街景对应的作品/场景。
-- [ ] 动漫题目答案均位于日本地图 bounds 内，玩家可以在 Google Maps 上猜点并查看偏差和得分。
+- [ ] 动漫题目答案只要求经纬度在全球合法范围内，玩家可以在不限制日本的 Google Maps 上猜点并查看偏差和得分。
 - [ ] 未配置或无法访问图片公网前缀时，动漫题卡显示占位状态且游戏仍可进行。
 - [ ] 动漫题库转换脚本从原始大 JSON 生成精简 public JSON，不把 100MB 级原始抓取数据打进客户端 bundle。
 - [ ] TypeScript、lint、相关测试通过。

@@ -13,8 +13,101 @@ body {
 
 body {
   background:
-    linear-gradient(rgba(10, 8, 6, 0.5), rgba(10, 8, 6, 0.72)),
-    url("/backgrounds/historical-china-map-bg.png") center / cover fixed
+    radial-gradient(circle at 18% 10%, rgba(244, 114, 182, 0.24), transparent 32rem),
+    radial-gradient(circle at 86% 18%, rgba(103, 232, 249, 0.18), transparent 28rem),
+    linear-gradient(135deg, rgba(10, 6, 18, 0.96), rgba(20, 9, 32, 0.92)),
+    url("/images/anime-placeholder.jpg") center / cover fixed
       no-repeat,
-    #0c0a09;
+    #0a0612;
+  color: #fff7fb;
+}
+
+::selection {
+  background: rgba(244, 114, 182, 0.45);
+  color: white;
+}
+
+@layer components {
+  .anime-shell {
+    background:
+      radial-gradient(circle at 15% 12%, rgba(244, 114, 182, 0.18), transparent 32rem),
+      radial-gradient(circle at 90% 20%, rgba(103, 232, 249, 0.16), transparent 28rem),
+      linear-gradient(135deg, rgba(10, 6, 18, 0.94), rgba(20, 9, 32, 0.92));
+  }
+
+  .anime-panel {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: rgba(13, 8, 26, 0.86);
+    box-shadow: 0 8px 8px rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(16px);
+  }
+
+  .anime-chip {
+    border: 1px solid rgba(103, 232, 249, 0.34);
+    border-radius: 999px;
+    background: rgba(8, 145, 178, 0.14);
+    padding: 0.375rem 0.75rem;
+    color: #cffafe;
+    font-size: 0.75rem;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .anime-button,
+  .anime-button-secondary {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    font-weight: 900;
+    transition:
+      transform 160ms ease,
+      background-color 160ms ease,
+      border-color 160ms ease;
+  }
+
+  .anime-button {
+    background: #f9a8d4;
+    color: #0f1020;
+  }
+
+  .anime-button-secondary {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8e7ff;
+  }
+
+  .anime-button:hover,
+  .anime-button-secondary:hover {
+    transform: translateY(-1px);
+  }
+
+  .anime-button:focus-visible,
+  .anime-button-secondary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #67e8f9;
+  }
+
+  .anime-stat {
+    min-height: 5.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.07);
+    padding: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anime-button,
+  .anime-button-secondary {
+    transition: none;
+  }
+
+  .anime-button:hover,
+  .anime-button-secondary:hover {
+    transform: none;
+  }
 }
