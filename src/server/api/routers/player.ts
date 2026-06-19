@@ -9,6 +9,8 @@ import {
   recordPlayerActivity,
   registerPlayerWithPassword,
   requestEmailLoginCode,
+  requestPasswordResetCode,
+  resetPlayerPasswordWithCode,
   updatePlayerProfile,
   updateSoloHighScore,
   verifyEmailLoginCode,
@@ -29,7 +31,9 @@ const tokenSchema = z.object({
 });
 
 const emailSchema = z.string().trim().email().max(254);
+const identifierSchema = z.string().trim().min(1).max(254);
 const passwordSchema = z.string().min(8).max(128);
+const usernameSchema = z.string().trim().min(1).max(12);
 
 async function withSessionError<T>(fn: () => Promise<T>) {
   try {
@@ -74,7 +78,7 @@ async function withEmailLoginError<T>(fn: () => Promise<T>) {
       ) {
         throw new TRPCError({
           code: "SERVICE_UNAVAILABLE",
-          message: "邮箱登录服务未配置，请稍后再试",
+          message: "邮件验证码服务未配置，请稍后再试",
         });
       }
       if (error.message === "Email verification delivery failed") {
@@ -99,10 +103,22 @@ async function withPasswordLoginError<T>(fn: () => Promise<T>) {
           message: "该邮箱已注册，请直接登录",
         });
       }
-      if (error.message === "Invalid email or password") {
+      if (error.message === "Username already registered") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "该用户名已被使用，请换一个",
+        });
+      }
+      if (error.message === "Invalid account or password") {
         throw new TRPCError({
           code: "UNAUTHORIZED",
-          message: "邮箱或密码不正确",
+          message: "账号或密码不正确",
+        });
+      }
+      if (error.message === "Invalid password reset account") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "无法重置该账号的密码",
         });
       }
     }
@@ -147,7 +163,7 @@ export const playerRouter = createTRPCRouter({
     .input(
       z.object({
         email: emailSchema,
-        name: z.string().trim().min(1).max(12),
+        username: usernameSchema,
         password: passwordSchema,
       }),
     )
@@ -162,7 +178,7 @@ export const playerRouter = createTRPCRouter({
   loginWithPassword: publicProcedure
     .input(
       z.object({
-        email: emailSchema,
+        identifier: identifierSchema,
         password: passwordSchema,
       }),
     )
@@ -171,6 +187,41 @@ export const playerRouter = createTRPCRouter({
         loginPlayerWithPassword(input, {
           userAgent: ctx.headers.get("user-agent"),
         }),
+      );
+    }),
+
+  requestPasswordResetCode: publicProcedure
+    .input(
+      z.object({
+        email: emailSchema,
+      }),
+    )
+    .mutation(({ input, ctx }) => {
+      return withEmailLoginError(() =>
+        requestPasswordResetCode(input.email, {
+          userAgent: ctx.headers.get("user-agent"),
+        }),
+      );
+    }),
+
+  resetPasswordWithCode: publicProcedure
+    .input(
+      z.object({
+        email: emailSchema,
+        code: z
+          .string()
+          .trim()
+          .regex(/^\d{6}$/),
+        password: passwordSchema,
+      }),
+    )
+    .mutation(({ input, ctx }) => {
+      return withEmailLoginError(() =>
+        withPasswordLoginError(() =>
+          resetPlayerPasswordWithCode(input, {
+            userAgent: ctx.headers.get("user-agent"),
+          }),
+        ),
       );
     }),
 
@@ -193,12 +244,14 @@ export const playerRouter = createTRPCRouter({
   updateProfile: publicProcedure
     .input(
       tokenSchema.extend({
-        name: z.string().trim().min(1).max(12),
+        name: usernameSchema,
         avatar: avatarSchema,
       }),
     )
     .mutation(({ input }) => {
-      return withSessionError(() => updatePlayerProfile(input));
+      return withPasswordLoginError(() =>
+        withSessionError(() => updatePlayerProfile(input)),
+      );
     }),
 
   updateSoloHighScore: publicProcedure

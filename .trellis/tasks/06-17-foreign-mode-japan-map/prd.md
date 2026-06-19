@@ -68,7 +68,10 @@
 - `/game/anime` 未登录时应跳转 `/login?next=/game/anime`，登录成功后回到游戏。
 - 用户补充要求登录界面增加用户名密码注册，用户名用于对战模式显示。
 - 密码注册使用邮箱作为账号唯一标识，用户名写入现有 `players.name`，密码只保存 salted `scrypt` hash。
-- 密码登录作为验证码登录之外的第二种会话入口；已有验证码/微信账号若没有密码 hash，不允许通过密码登录。
+- 密码登录作为默认 Web 登录入口，支持“邮箱 + 密码”或“用户名 + 密码”；验证码登录不再作为默认登录路径。
+- 注册用户名写入 `players.username` / `players.username_key` / `players.name`，`username_key` 大小写不敏感唯一，不能重复注册。
+- 登录页增加“忘记密码 / 重置密码”流程：邮箱收 6 位验证码，验证后更新 password hash 并自动登录。
+- 已有验证码/微信账号若没有密码 hash，不允许通过密码登录。
 - 当前线上错误 `relation "player_email_verification_codes" does not exist` 表明数据库尚未应用验证码表迁移，本次需要执行 `npm run db:migrate` 补齐验证码表、活动事件表和 `players.password_hash`。
 
 ## Acceptance Criteria
@@ -95,7 +98,11 @@
 - [ ] 动漫题库转换脚本从原始大 JSON 生成精简 public JSON，不把 100MB 级原始抓取数据打进客户端 bundle。
 - [ ] `/login` 支持邮箱获取验证码和验证码登录。
 - [ ] `/login` 支持邮箱 + 密码登录。
+- [ ] `/login` 支持用户名 + 密码登录。
 - [ ] `/login` 支持用户名、邮箱、密码注册，注册成功后自动登录。
+- [ ] `/login` 不再把邮箱验证码登录作为默认入口；未配置邮件服务时普通登录不触发验证码发送错误。
+- [ ] `/login` 支持忘记密码，用邮箱验证码重置密码后自动登录。
+- [ ] 注册用户名大小写不敏感去重，不能有重复用户名。
 - [ ] 注册用户名写入 `players.name`，对战模式继续使用该字段作为展示名。
 - [ ] 密码只保存 hash，数据库中不出现明文密码。
 - [ ] 数据库迁移后不再出现 `player_email_verification_codes` 缺表错误。

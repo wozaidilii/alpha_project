@@ -7,13 +7,13 @@ import { normalizeEmailLoginCode } from "~/lib/email-login-code";
 import { savePlayerSession } from "~/lib/player-session";
 import { api } from "~/trpc/react";
 
-type AuthMode = "code" | "password" | "register";
-type CodeStep = "email" | "code";
+type AuthMode = "password" | "register" | "reset";
+type ResetStep = "email" | "code";
 
 const MODE_LABELS: Record<AuthMode, string> = {
-  code: "验证码登录",
-  password: "密码登录",
+  password: "登录",
   register: "注册",
+  reset: "重置密码",
 };
 
 function getNextUrl() {
@@ -25,20 +25,26 @@ function getNextUrl() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<AuthMode>("code");
-  const [codeStep, setCodeStep] = useState<CodeStep>("email");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [mode, setMode] = useState<AuthMode>("password");
+  const [resetStep, setResetStep] = useState<ResetStep>("email");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [registerName, setRegisterName] = useState("");
+  const [registerUsername, setRegisterUsername] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [debugCode, setDebugCode] = useState<string | null>(null);
 
-  const normalizedCode = useMemo(() => normalizeEmailLoginCode(code), [code]);
+  const normalizedResetCode = useMemo(
+    () => normalizeEmailLoginCode(resetCode),
+    [resetCode],
+  );
 
   const handleAuthSuccess = (
     session: Parameters<typeof savePlayerSession>[0],
@@ -46,28 +52,6 @@ export default function LoginPage() {
     savePlayerSession(session);
     router.replace(getNextUrl());
   };
-
-  const requestCode = api.player.requestEmailLoginCode.useMutation({
-    onSuccess(result) {
-      setCodeStep("code");
-      setMessage(
-        result.delivery === "debug"
-          ? "开发环境未配置邮件服务，请使用下方调试验证码登录。"
-          : "验证码已发送，请查看邮箱。",
-      );
-      setDebugCode(result.debugCode ?? null);
-    },
-    onError(error) {
-      setMessage(error.message);
-    },
-  });
-
-  const verifyCode = api.player.verifyEmailLoginCode.useMutation({
-    onSuccess: handleAuthSuccess,
-    onError(error) {
-      setMessage(error.message);
-    },
-  });
 
   const loginWithPassword = api.player.loginWithPassword.useMutation({
     onSuccess: handleAuthSuccess,
@@ -83,29 +67,39 @@ export default function LoginPage() {
     },
   });
 
+  const requestPasswordResetCode =
+    api.player.requestPasswordResetCode.useMutation({
+      onSuccess(result) {
+        setResetStep("code");
+        setMessage(
+          result.delivery === "debug"
+            ? "开发环境未配置邮件服务，请使用下方调试验证码重置密码。"
+            : "如果该邮箱已注册，重置验证码会发送到邮箱。",
+        );
+        setDebugCode(result.debugCode ?? null);
+      },
+      onError(error) {
+        setMessage(error.message);
+      },
+    });
+
+  const resetPasswordWithCode = api.player.resetPasswordWithCode.useMutation({
+    onSuccess: handleAuthSuccess,
+    onError(error) {
+      setMessage(error.message);
+    },
+  });
+
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
     setMessage("");
     setDebugCode(null);
   }
 
-  function handleRequestCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage("");
-    setDebugCode(null);
-    requestCode.mutate({ email });
-  }
-
-  function handleVerifyCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage("");
-    verifyCode.mutate({ email, code: normalizedCode });
-  }
-
   function handlePasswordLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
-    loginWithPassword.mutate({ email, password });
+    loginWithPassword.mutate({ identifier, password });
   }
 
   function handlePasswordRegister(event: FormEvent<HTMLFormElement>) {
@@ -113,8 +107,25 @@ export default function LoginPage() {
     setMessage("");
     registerWithPassword.mutate({
       email: registerEmail,
-      name: registerName,
+      username: registerUsername,
       password: registerPassword,
+    });
+  }
+
+  function handleRequestPasswordResetCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setDebugCode(null);
+    requestPasswordResetCode.mutate({ email: resetEmail });
+  }
+
+  function handleResetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    resetPasswordWithCode.mutate({
+      email: resetEmail,
+      code: normalizedResetCode,
+      password: resetPassword,
     });
   }
 
@@ -140,10 +151,10 @@ export default function LoginPage() {
           <div>
             <div className="anime-chip mb-5 w-fit">{MODE_LABELS[mode]}</div>
             <h1 className="text-5xl leading-none font-black text-white sm:text-6xl">
-              创建你的巡礼档案
+              进入巡礼档案
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-pink-50/70">
-              可用邮箱验证码快速登录，也可以注册用户名和密码。用户名会作为对战模式、排行榜和历史记录中的展示名称。
+              使用邮箱或用户名配合密码登录。注册时用户名会被去重，并作为对战模式、排行榜和历史记录中的展示名称。
             </p>
           </div>
 
@@ -151,7 +162,7 @@ export default function LoginPage() {
             <div
               className="mb-5 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/25 p-1"
               role="tablist"
-              aria-label="登录方式"
+              aria-label="账号操作"
             >
               {(Object.keys(MODE_LABELS) as AuthMode[]).map((item) => (
                 <button
@@ -171,137 +182,23 @@ export default function LoginPage() {
               ))}
             </div>
 
-            {mode === "code" && codeStep === "email" && (
-              <form onSubmit={handleRequestCode} className="space-y-5">
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="text-sm font-bold text-cyan-100/80"
-                  >
-                    邮箱
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    autoComplete="email"
-                    required
-                    className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="name@example.com"
-                  />
-                </div>
-
-                {message && (
-                  <p
-                    className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50"
-                    aria-live="polite"
-                  >
-                    {message}
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={requestCode.isPending}
-                  className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {requestCode.isPending ? "发送中..." : "发送验证码"}
-                </button>
-              </form>
-            )}
-
-            {mode === "code" && codeStep === "code" && (
-              <form onSubmit={handleVerifyCode} className="space-y-5">
-                <div>
-                  <div className="text-sm font-bold text-cyan-100/80">
-                    验证码已发送至
-                  </div>
-                  <div className="mt-1 text-lg font-black break-all text-pink-100">
-                    {email}
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="code"
-                    className="text-sm font-bold text-cyan-100/80"
-                  >
-                    6 位验证码
-                  </label>
-                  <input
-                    id="code"
-                    inputMode="numeric"
-                    value={code}
-                    onChange={(event) =>
-                      setCode(normalizeEmailLoginCode(event.target.value))
-                    }
-                    autoComplete="one-time-code"
-                    required
-                    minLength={6}
-                    maxLength={6}
-                    className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-center text-2xl font-black tracking-[0.35em] text-white transition outline-none focus:border-cyan-200"
-                    placeholder="000000"
-                  />
-                </div>
-
-                {debugCode && (
-                  <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm leading-6 text-cyan-50">
-                    调试验证码：<span className="font-black">{debugCode}</span>
-                  </div>
-                )}
-
-                {message && (
-                  <p
-                    className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50"
-                    aria-live="polite"
-                  >
-                    {message}
-                  </p>
-                )}
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCodeStep("email");
-                      setCode("");
-                      setMessage("");
-                      setDebugCode(null);
-                    }}
-                    className="anime-button-secondary flex-1"
-                  >
-                    更换邮箱
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={verifyCode.isPending || normalizedCode.length < 6}
-                    className="anime-button flex-1 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {verifyCode.isPending ? "验证中..." : "登录"}
-                  </button>
-                </div>
-              </form>
-            )}
-
             {mode === "password" && (
               <form onSubmit={handlePasswordLogin} className="space-y-5">
                 <div>
                   <label
-                    htmlFor="password-email"
+                    htmlFor="identifier"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    邮箱
+                    邮箱或用户名
                   </label>
                   <input
-                    id="password-email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    autoComplete="email"
+                    id="identifier"
+                    value={identifier}
+                    onChange={(event) => setIdentifier(event.target.value)}
+                    autoComplete="username"
                     required
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="name@example.com"
+                    placeholder="name@example.com / sakura"
                   />
                 </div>
 
@@ -345,13 +242,22 @@ export default function LoginPage() {
                   </p>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={loginWithPassword.isPending}
-                  className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loginWithPassword.isPending ? "登录中..." : "密码登录"}
-                </button>
+                <div className="space-y-3">
+                  <button
+                    type="submit"
+                    disabled={loginWithPassword.isPending}
+                    className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loginWithPassword.isPending ? "登录中..." : "登录"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchMode("reset")}
+                    className="min-h-11 w-full rounded-xl text-sm font-bold text-cyan-100/70 transition hover:bg-white/10 hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+                  >
+                    忘记密码？
+                  </button>
+                </div>
               </form>
             )}
 
@@ -359,23 +265,25 @@ export default function LoginPage() {
               <form onSubmit={handlePasswordRegister} className="space-y-5">
                 <div>
                   <label
-                    htmlFor="register-name"
+                    htmlFor="register-username"
                     className="text-sm font-bold text-cyan-100/80"
                   >
                     用户名
                   </label>
                   <input
-                    id="register-name"
-                    value={registerName}
-                    onChange={(event) => setRegisterName(event.target.value)}
-                    autoComplete="nickname"
+                    id="register-username"
+                    value={registerUsername}
+                    onChange={(event) =>
+                      setRegisterUsername(event.target.value)
+                    }
+                    autoComplete="username"
                     required
                     maxLength={12}
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
                     placeholder="对战中显示的名字"
                   />
                   <p className="mt-2 text-xs leading-5 text-cyan-100/55">
-                    最多 12 个字符，会显示在对战房间和历史战绩中。
+                    最多 12 个字符；大小写不敏感去重。
                   </p>
                 </div>
 
@@ -454,6 +362,162 @@ export default function LoginPage() {
                     ? "创建中..."
                     : "注册并进入游戏"}
                 </button>
+              </form>
+            )}
+
+            {mode === "reset" && resetStep === "email" && (
+              <form
+                onSubmit={handleRequestPasswordResetCode}
+                className="space-y-5"
+              >
+                <div>
+                  <label
+                    htmlFor="reset-email"
+                    className="text-sm font-bold text-cyan-100/80"
+                  >
+                    注册邮箱
+                  </label>
+                  <input
+                    id="reset-email"
+                    type="email"
+                    value={resetEmail}
+                    onChange={(event) => setResetEmail(event.target.value)}
+                    autoComplete="email"
+                    required
+                    className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
+                    placeholder="name@example.com"
+                  />
+                </div>
+
+                {message && (
+                  <p
+                    className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50"
+                    aria-live="polite"
+                  >
+                    {message}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={requestPasswordResetCode.isPending}
+                  className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {requestPasswordResetCode.isPending
+                    ? "发送中..."
+                    : "发送重置验证码"}
+                </button>
+              </form>
+            )}
+
+            {mode === "reset" && resetStep === "code" && (
+              <form onSubmit={handleResetPassword} className="space-y-5">
+                <div>
+                  <div className="text-sm font-bold text-cyan-100/80">
+                    重置验证码已发送至
+                  </div>
+                  <div className="mt-1 text-lg font-black break-all text-pink-100">
+                    {resetEmail}
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="reset-code"
+                    className="text-sm font-bold text-cyan-100/80"
+                  >
+                    6 位验证码
+                  </label>
+                  <input
+                    id="reset-code"
+                    inputMode="numeric"
+                    value={resetCode}
+                    onChange={(event) =>
+                      setResetCode(normalizeEmailLoginCode(event.target.value))
+                    }
+                    autoComplete="one-time-code"
+                    required
+                    minLength={6}
+                    maxLength={6}
+                    className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-center text-2xl font-black tracking-[0.35em] text-white transition outline-none focus:border-cyan-200"
+                    placeholder="000000"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="reset-password"
+                    className="text-sm font-bold text-cyan-100/80"
+                  >
+                    新密码
+                  </label>
+                  <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
+                    <input
+                      id="reset-password"
+                      type={showResetPassword ? "text" : "password"}
+                      value={resetPassword}
+                      onChange={(event) => setResetPassword(event.target.value)}
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      maxLength={128}
+                      className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
+                      placeholder="至少 8 位"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword((value) => !value)}
+                      className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+                      aria-label={showResetPassword ? "隐藏密码" : "显示密码"}
+                    >
+                      {showResetPassword ? "隐藏" : "显示"}
+                    </button>
+                  </div>
+                </div>
+
+                {debugCode && (
+                  <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm leading-6 text-cyan-50">
+                    调试验证码：<span className="font-black">{debugCode}</span>
+                  </div>
+                )}
+
+                {message && (
+                  <p
+                    className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50"
+                    aria-live="polite"
+                  >
+                    {message}
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetStep("email");
+                      setResetCode("");
+                      setResetPassword("");
+                      setDebugCode(null);
+                      setMessage("");
+                    }}
+                    className="anime-button-secondary flex-1"
+                  >
+                    更换邮箱
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={
+                      resetPasswordWithCode.isPending ||
+                      normalizedResetCode.length < 6 ||
+                      resetPassword.length < 8
+                    }
+                    className="anime-button flex-1 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {resetPasswordWithCode.isPending
+                      ? "重置中..."
+                      : "重置并登录"}
+                  </button>
+                </div>
               </form>
             )}
           </div>

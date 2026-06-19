@@ -16,15 +16,23 @@
   - Input: `{ email: string, code: string }` where `code` is exactly six digits.
   - Output: `PlayerSession`
 - `player.registerWithPassword`
-  - Input: `{ email: string, name: string, password: string }` where `name` is 1-12 chars and `password` is 8-128 chars.
+  - Input: `{ email: string, username: string, password: string }` where `username` is 1-12 chars and `password` is 8-128 chars.
   - Output: `PlayerSession`
 - `player.loginWithPassword`
-  - Input: `{ email: string, password: string }`
+  - Input: `{ identifier: string, password: string }` where `identifier` is either email or username.
+  - Output: `PlayerSession`
+- `player.requestPasswordResetCode`
+  - Input: `{ email: string }`
+  - Output: `{ expiresInSeconds: number, delivery: "email" | "debug", debugCode?: string }`
+- `player.resetPasswordWithCode`
+  - Input: `{ email: string, code: string, password: string }`
   - Output: `PlayerSession`
 - `player.recordActivity`
   - Input: `{ token: string, eventType: string, payload?: Record<string, string | number | boolean | null>, route?: string }`
   - Output: `{ ok: true }`
 - DB:
+  - `players.username text` stores the display username for password accounts.
+  - `players.username_key text` stores the normalized username lookup key and must have a unique index where non-null.
   - `players.password_hash text` stores password hashes for password accounts and remains nullable for code/WeChat-only accounts.
   - `player_email_verification_codes(id, email, code_hash, attempts, expires_at, consumed_at, created_at)`
   - `player_activity_events(id, player_id, email, event_type, event_payload, route, user_agent, created_at)`
@@ -35,13 +43,16 @@
 ### 3. Contracts
 
 - Public web email-code login must use the two-step code flow. Do not expose direct email-to-session login.
-- Password registration uses email as the account identity and stores the display username in `players.name`; battle/history display must continue reading that canonical player name.
+- Password login is the default web login path and accepts either email or username plus password; do not require email-code delivery for normal login.
+- Password registration uses email as the account identity and stores the unique display username in `players.username`, normalized lookup key in `players.username_key`, and canonical battle display name in `players.name`.
+- `players.username_key` is case-insensitive unique for non-null values. Existing non-password or legacy players may have null username fields.
 - Passwords are never stored in plaintext; store only salted `scrypt` hashes in `players.password_hash`.
 - Existing email-code or WeChat users may have `password_hash = null`; password login must reject those rows without changing their account.
 - Verification codes are never stored in plaintext; store only an HMAC hash keyed by `EMAIL_VERIFICATION_SECRET`.
 - Codes expire after 10 minutes, are consumed on success, and are consumed after too many failed attempts.
 - Development may return `debugCode` when no email provider is configured. Production must not return debug codes and must fail if delivery or signing is not configured.
 - Successful email verification creates or reuses a `players.email` record, creates a `player_sessions.token`, and records `email_login_completed`.
+- Password reset may use email verification codes, but the UI must present it as a separate "forgot password" flow and not as the default login path.
 - Game clients may record player behavior only with a valid session token. Invalid tokens must return unauthorized errors and must not write activity rows.
 - Event payloads must remain shallow JSON primitives to keep analytics queries predictable.
 
@@ -49,7 +60,8 @@
 
 - Invalid email or non-six-digit code -> tRPC validation error.
 - Duplicate password registration email -> `BAD_REQUEST` with "该邮箱已注册，请直接登录".
-- Wrong password or no password hash for that email -> `UNAUTHORIZED` with "邮箱或密码不正确".
+- Duplicate username -> `BAD_REQUEST` with "该用户名已被使用，请换一个".
+- Wrong password, unknown identifier, or no password hash for that account -> `UNAUTHORIZED` with "账号或密码不正确".
 - No active code for email -> `BAD_REQUEST` with "验证码不正确".
 - Expired code -> `BAD_REQUEST` with "验证码已过期，请重新获取".
 - Too many failed attempts -> `TOO_MANY_REQUESTS`.
@@ -59,11 +71,13 @@
 
 ### 5. Good/Base/Bad Cases
 
-- Good: production has Resend credentials and a strong verification secret; a user requests a code, enters it once, receives a session, and later gameplay records are linked by `player_id`.
-- Good: a new user registers with email, display username, and password; `players.name` is used later in battle mode display and `players.password_hash` contains only a salted hash.
+- Good: a user logs in with either `name@example.com` or `sakura` plus the same password; both resolve to the same account.
+- Good: a new user registers with email, unique username, and password; `players.name` is used later in battle mode display and `players.password_hash` contains only a salted hash.
+- Good: production has Resend credentials and a strong verification secret; a user requests a password reset code, enters it once, receives a session, and later gameplay records are linked by `player_id`.
 - Base: development lacks email credentials; the request returns `delivery: "debug"` and `debugCode`, allowing local testing without bypassing the verification-code path.
 - Bad: a tRPC procedure that accepts only an email and returns a `PlayerSession`; this bypasses code verification.
 - Bad: storing a plaintext or reversibly encrypted password in `players`.
+- Bad: showing email-code login as the primary login path in production without a configured mail provider.
 
 ### 6. Tests Required
 
@@ -104,8 +118,8 @@ Correct:
 ```typescript
 const passwordHash = await hashPassword(password);
 await sql`
-  insert into players (email, name, password_hash)
-  values (${email}, ${name}, ${passwordHash})
+  insert into players (email, username, username_key, name, password_hash)
+  values (${email}, ${username}, ${usernameKey}, ${username}, ${passwordHash})
 `;
 ```
 

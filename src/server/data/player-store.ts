@@ -4,6 +4,11 @@ import { createHmac, randomInt, randomUUID, timingSafeEqual } from "crypto";
 import { type TransactionSql } from "postgres";
 import { displayNameFromEmail } from "~/lib/email-login-code";
 import { env } from "~/env";
+import {
+  isEmailIdentifier,
+  normalizeUsername,
+  normalizeUsernameKey,
+} from "~/server/auth/player-credentials";
 import { hashPassword, verifyPassword } from "~/server/auth/password";
 import { sendEmailVerificationCode } from "~/server/email/verification-code";
 import { sql } from "~/server/db/client";
@@ -29,6 +34,8 @@ interface PlayerRow {
 }
 
 interface PasswordPlayerRow extends PlayerRow {
+  username: string | null;
+  username_key: string | null;
   password_hash: string | null;
 }
 
@@ -142,7 +149,7 @@ function toHistoryRecord(row: BattleHistoryRow): BattleHistoryRecord {
 }
 
 function normalizeName(name: string) {
-  return name.trim().slice(0, 12) || "玩家";
+  return normalizeUsername(name) || "玩家";
 }
 
 function normalizeEmail(email: string) {
@@ -183,6 +190,129 @@ function normalizeWechatOpenId(openId: string) {
     throw new Error("Invalid WeChat openid");
   }
   return normalized;
+}
+
+function getUniqueViolationConstraint(error: unknown) {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("code" in error) ||
+    error.code !== "23505"
+  ) {
+    return null;
+  }
+
+  if ("constraint_name" in error && typeof error.constraint_name === "string") {
+    return error.constraint_name;
+  }
+
+  if ("constraint" in error && typeof error.constraint === "string") {
+    return error.constraint;
+  }
+
+  return "";
+}
+
+async function createEmailVerificationCode(email: string, now: Date) {
+  const code = generateEmailVerificationCode();
+  const expiresAt = new Date(
+    now.getTime() + EMAIL_CODE_EXPIRES_IN_SECONDS * 1000,
+  );
+
+  await sql`
+    update player_email_verification_codes
+    set consumed_at = ${now}
+    where email = ${email}
+      and consumed_at is null
+      and expires_at <= ${now}
+  `;
+
+  const id = randomUUID();
+  await sql`
+    insert into player_email_verification_codes (
+      id,
+      email,
+      code_hash,
+      attempts,
+      expires_at,
+      created_at
+    )
+    values (
+      ${id},
+      ${email},
+      ${hashEmailVerificationCode(email, code)},
+      0,
+      ${expiresAt},
+      ${now}
+    )
+  `;
+
+  return { id, code };
+}
+
+async function consumeEmailVerificationCode(
+  email: string,
+  code: string,
+  now: Date,
+) {
+  const [verification] = await sql<EmailVerificationCodeRow[]>`
+    select
+      id,
+      email,
+      code_hash,
+      attempts,
+      expires_at,
+      consumed_at,
+      created_at
+    from player_email_verification_codes
+    where email = ${email}
+      and consumed_at is null
+    order by created_at desc
+    limit 1
+  `;
+
+  if (!verification) {
+    throw new Error("Invalid email verification code");
+  }
+
+  if (isVerificationCodeExpired(verification)) {
+    await sql`
+      update player_email_verification_codes
+      set consumed_at = ${now}
+      where id = ${verification.id}
+    `;
+    throw new Error("Email verification code expired");
+  }
+
+  if (verification.attempts >= EMAIL_CODE_MAX_ATTEMPTS) {
+    await sql`
+      update player_email_verification_codes
+      set consumed_at = ${now}
+      where id = ${verification.id}
+    `;
+    throw new Error("Too many email verification attempts");
+  }
+
+  if (!isVerificationCodeMatch(verification, code)) {
+    const attempts = verification.attempts + 1;
+    await sql`
+      update player_email_verification_codes
+      set
+        attempts = ${attempts},
+        consumed_at = case
+          when ${attempts} >= ${EMAIL_CODE_MAX_ATTEMPTS} then ${now}
+          else consumed_at
+        end
+      where id = ${verification.id}
+    `;
+    throw new Error("Invalid email verification code");
+  }
+
+  await sql`
+    update player_email_verification_codes
+    set consumed_at = ${now}
+    where id = ${verification.id}
+  `;
 }
 
 async function getPlayerByToken(token: string): Promise<PlayerRow | null> {
@@ -285,41 +415,14 @@ export async function requestEmailLoginCode(
 ): Promise<EmailLoginCodeRequestResult> {
   const now = new Date();
   const email = normalizeEmail(emailInput);
-  const code = generateEmailVerificationCode();
-  const expiresAt = new Date(
-    now.getTime() + EMAIL_CODE_EXPIRES_IN_SECONDS * 1000,
-  );
-
-  await sql`
-    update player_email_verification_codes
-    set consumed_at = ${now}
-    where email = ${email}
-      and consumed_at is null
-      and expires_at <= ${now}
-  `;
-
-  const id = randomUUID();
-  await sql`
-    insert into player_email_verification_codes (
-      id,
-      email,
-      code_hash,
-      attempts,
-      expires_at,
-      created_at
-    )
-    values (
-      ${id},
-      ${email},
-      ${hashEmailVerificationCode(email, code)},
-      0,
-      ${expiresAt},
-      ${now}
-    )
-  `;
+  const verification = await createEmailVerificationCode(email, now);
 
   try {
-    const delivery = await sendEmailVerificationCode({ email, code });
+    const delivery = await sendEmailVerificationCode({
+      email,
+      code: verification.code,
+      purpose: "login",
+    });
     await recordPlayerActivity({
       email,
       eventType: "email_code_requested",
@@ -336,7 +439,67 @@ export async function requestEmailLoginCode(
     await sql`
       update player_email_verification_codes
       set consumed_at = ${new Date()}
-      where id = ${id}
+      where id = ${verification.id}
+    `;
+    throw error;
+  }
+}
+
+export async function requestPasswordResetCode(
+  emailInput: string,
+  meta: { userAgent?: string | null } = {},
+): Promise<EmailLoginCodeRequestResult> {
+  const now = new Date();
+  const email = normalizeEmail(emailInput);
+
+  const [player] = await sql<{ id: string }[]>`
+    select id
+    from players
+    where email = ${email}
+      and password_hash is not null
+    limit 1
+  `;
+
+  if (!player) {
+    await recordPlayerActivity({
+      email,
+      eventType: "password_reset_requested",
+      payload: { existingAccount: false },
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      expiresInSeconds: EMAIL_CODE_EXPIRES_IN_SECONDS,
+      delivery: "email",
+    };
+  }
+
+  const verification = await createEmailVerificationCode(email, now);
+
+  try {
+    const delivery = await sendEmailVerificationCode({
+      email,
+      code: verification.code,
+      purpose: "password_reset",
+    });
+    await recordPlayerActivity({
+      playerId: player.id,
+      email,
+      eventType: "password_reset_requested",
+      payload: { delivery: delivery.mode, existingAccount: true },
+      userAgent: meta.userAgent,
+    });
+
+    return {
+      expiresInSeconds: EMAIL_CODE_EXPIRES_IN_SECONDS,
+      delivery: delivery.mode,
+      debugCode: delivery.debugCode,
+    };
+  } catch (error) {
+    await sql`
+      update player_email_verification_codes
+      set consumed_at = ${new Date()}
+      where id = ${verification.id}
     `;
     throw error;
   }
@@ -350,70 +513,13 @@ export async function verifyEmailLoginCode(
   const now = new Date();
   const email = normalizeEmail(emailInput);
 
-  const [verification] = await sql<EmailVerificationCodeRow[]>`
-    select
-      id,
-      email,
-      code_hash,
-      attempts,
-      expires_at,
-      consumed_at,
-      created_at
-    from player_email_verification_codes
-    where email = ${email}
-      and consumed_at is null
-    order by created_at desc
-    limit 1
-  `;
-
-  if (!verification) {
-    throw new Error("Invalid email verification code");
-  }
-
-  if (isVerificationCodeExpired(verification)) {
-    await sql`
-      update player_email_verification_codes
-      set consumed_at = ${now}
-      where id = ${verification.id}
-    `;
-    throw new Error("Email verification code expired");
-  }
-
-  if (verification.attempts >= EMAIL_CODE_MAX_ATTEMPTS) {
-    await sql`
-      update player_email_verification_codes
-      set consumed_at = ${now}
-      where id = ${verification.id}
-    `;
-    throw new Error("Too many email verification attempts");
-  }
-
-  if (!isVerificationCodeMatch(verification, code)) {
-    const attempts = verification.attempts + 1;
-    await sql`
-      update player_email_verification_codes
-      set
-        attempts = ${attempts},
-        consumed_at = case
-          when ${attempts} >= ${EMAIL_CODE_MAX_ATTEMPTS} then ${now}
-          else consumed_at
-        end
-      where id = ${verification.id}
-    `;
-    throw new Error("Invalid email verification code");
-  }
+  await consumeEmailVerificationCode(email, code, now);
 
   const id = randomUUID();
   const avatar = normalizeAvatar();
   const name = normalizeName(displayNameFromEmail(email));
 
   const { token, user } = await sql.begin(async (tx) => {
-    await tx`
-      update player_email_verification_codes
-      set consumed_at = ${now}
-      where id = ${verification.id}
-    `;
-
     const [player] = await tx<PlayerRow[]>`
       insert into players (
         id,
@@ -479,7 +585,7 @@ export async function verifyEmailLoginCode(
 export async function registerPlayerWithPassword(
   input: {
     email: string;
-    name: string;
+    username: string;
     password: string;
   },
   meta: { userAgent?: string | null } = {},
@@ -487,37 +593,184 @@ export async function registerPlayerWithPassword(
   const now = new Date();
   const id = randomUUID();
   const email = normalizeEmail(input.email);
-  const name = normalizeName(input.name);
+  const username = normalizeUsername(input.username);
+  const usernameKey = normalizeUsernameKey(username);
+  const name = normalizeName(username);
   const avatar = normalizeAvatar();
   const passwordHash = await hashPassword(input.password);
 
+  try {
+    const { token, user } = await sql.begin(async (tx) => {
+      const [existing] = await tx<
+        { email: string | null; username_key: string | null }[]
+      >`
+        select email, username_key
+        from players
+        where email = ${email}
+          or username_key = ${usernameKey}
+        limit 1
+      `;
+
+      if (existing?.email === email) {
+        throw new Error("Email already registered");
+      }
+
+      if (existing?.username_key === usernameKey) {
+        throw new Error("Username already registered");
+      }
+
+      const [player] = await tx<PlayerRow[]>`
+        insert into players (
+          id,
+          email,
+          username,
+          username_key,
+          name,
+          avatar_icon,
+          avatar_color,
+          profile_completed,
+          solo_high_score,
+          password_hash,
+          created_at,
+          updated_at
+        )
+        values (
+          ${id},
+          ${email},
+          ${username},
+          ${usernameKey},
+          ${name},
+          ${avatar.icon},
+          ${avatar.color},
+          true,
+          0,
+          ${passwordHash},
+          ${now},
+          ${now}
+        )
+        returning
+          id,
+          email,
+          name,
+          avatar_icon,
+          avatar_color,
+          profile_completed,
+          solo_high_score,
+          created_at,
+          updated_at
+      `;
+
+      const token = await createSessionForPlayer(tx, player!.id, now);
+
+      return {
+        token,
+        user: toPublicPlayer(player!),
+      };
+    });
+
+    await recordPlayerActivity({
+      playerId: user.id,
+      email,
+      eventType: "password_registration_completed",
+      payload: { method: "password" },
+      userAgent: meta.userAgent,
+    });
+
+    return { token, user };
+  } catch (error) {
+    const constraint = getUniqueViolationConstraint(error);
+    if (constraint?.includes("email")) {
+      throw new Error("Email already registered");
+    }
+    if (constraint !== null) {
+      throw new Error("Username already registered");
+    }
+    throw error;
+  }
+}
+
+export async function loginPlayerWithPassword(
+  input: {
+    identifier: string;
+    password: string;
+  },
+  meta: { userAgent?: string | null } = {},
+): Promise<PlayerSession> {
+  const now = new Date();
+  const identifier = input.identifier.trim();
+  const email = isEmailIdentifier(identifier)
+    ? normalizeEmail(identifier)
+    : null;
+  const usernameKey = normalizeUsernameKey(identifier);
+
+  const [player] = await sql<PasswordPlayerRow[]>`
+    select
+      id,
+      email,
+      username,
+      username_key,
+      name,
+      avatar_icon,
+      avatar_color,
+      profile_completed,
+      solo_high_score,
+      password_hash,
+      created_at,
+      updated_at
+    from players
+    where password_hash is not null
+      and (
+        (${email}::text is not null and email = ${email})
+        or username_key = ${usernameKey}
+      )
+    limit 1
+  `;
+
+  if (
+    !player ||
+    !(await verifyPassword(input.password, player.password_hash))
+  ) {
+    throw new Error("Invalid account or password");
+  }
+
+  const token = await sql.begin((tx) =>
+    createSessionForPlayer(tx, player.id, now),
+  );
+  const user = toPublicPlayer(player);
+
+  await recordPlayerActivity({
+    playerId: user.id,
+    email: user.email ?? email ?? undefined,
+    eventType: "password_login_completed",
+    payload: { method: "password" },
+    userAgent: meta.userAgent,
+  });
+
+  return { token, user };
+}
+
+export async function resetPlayerPasswordWithCode(
+  input: {
+    email: string;
+    code: string;
+    password: string;
+  },
+  meta: { userAgent?: string | null } = {},
+): Promise<PlayerSession> {
+  const now = new Date();
+  const email = normalizeEmail(input.email);
+  const passwordHash = await hashPassword(input.password);
+
+  await consumeEmailVerificationCode(email, input.code, now);
+
   const { token, user } = await sql.begin(async (tx) => {
     const [player] = await tx<PlayerRow[]>`
-      insert into players (
-        id,
-        email,
-        name,
-        avatar_icon,
-        avatar_color,
-        profile_completed,
-        solo_high_score,
-        password_hash,
-        created_at,
-        updated_at
-      )
-      values (
-        ${id},
-        ${email},
-        ${name},
-        ${avatar.icon},
-        ${avatar.color},
-        true,
-        0,
-        ${passwordHash},
-        ${now},
-        ${now}
-      )
-      on conflict (email) do nothing
+      update players
+      set
+        password_hash = ${passwordHash},
+        updated_at = ${now}
+      where email = ${email}
+        and password_hash is not null
       returning
         id,
         email,
@@ -531,7 +784,7 @@ export async function registerPlayerWithPassword(
     `;
 
     if (!player) {
-      throw new Error("Email already registered");
+      throw new Error("Invalid password reset account");
     }
 
     const token = await createSessionForPlayer(tx, player.id, now);
@@ -545,58 +798,8 @@ export async function registerPlayerWithPassword(
   await recordPlayerActivity({
     playerId: user.id,
     email,
-    eventType: "password_registration_completed",
-    payload: { method: "password" },
-    userAgent: meta.userAgent,
-  });
-
-  return { token, user };
-}
-
-export async function loginPlayerWithPassword(
-  input: {
-    email: string;
-    password: string;
-  },
-  meta: { userAgent?: string | null } = {},
-): Promise<PlayerSession> {
-  const now = new Date();
-  const email = normalizeEmail(input.email);
-
-  const [player] = await sql<PasswordPlayerRow[]>`
-    select
-      id,
-      email,
-      name,
-      avatar_icon,
-      avatar_color,
-      profile_completed,
-      solo_high_score,
-      password_hash,
-      created_at,
-      updated_at
-    from players
-    where email = ${email}
-    limit 1
-  `;
-
-  if (
-    !player ||
-    !(await verifyPassword(input.password, player.password_hash))
-  ) {
-    throw new Error("Invalid email or password");
-  }
-
-  const token = await sql.begin((tx) =>
-    createSessionForPlayer(tx, player.id, now),
-  );
-  const user = toPublicPlayer(player);
-
-  await recordPlayerActivity({
-    playerId: user.id,
-    email,
-    eventType: "password_login_completed",
-    payload: { method: "password" },
+    eventType: "password_reset_completed",
+    payload: { method: "email_code" },
     userAgent: meta.userAgent,
   });
 
@@ -737,36 +940,74 @@ export async function updatePlayerProfile(input: {
   avatar: PlayerAvatar;
 }): Promise<PlayerProfile> {
   const name = normalizeName(input.name);
+  const usernameKey = normalizeUsernameKey(name);
   const avatar = normalizeAvatar(input.avatar);
 
-  const [player] = await sql<PlayerRow[]>`
-    update players
-    set
-      name = ${name},
-      avatar_icon = ${avatar.icon},
-      avatar_color = ${avatar.color},
-      profile_completed = true,
-      updated_at = now()
-    where id = (
-      select player_id from player_sessions where token = ${input.token}
-    )
-    returning
-      id,
-      email,
-      name,
-      avatar_icon,
-      avatar_color,
-      profile_completed,
-      solo_high_score,
-      created_at,
-      updated_at
+  const [currentPlayer] = await sql<
+    { id: string; username_key: string | null }[]
+  >`
+    select p.id, p.username_key
+    from players p
+    inner join player_sessions s on s.player_id = p.id
+    where s.token = ${input.token}
+    limit 1
   `;
 
-  if (!player) {
+  if (!currentPlayer) {
     throw new Error("Invalid player session");
   }
 
-  return toPublicPlayer(player);
+  if (currentPlayer.username_key) {
+    const [existing] = await sql<{ id: string }[]>`
+      select id
+      from players
+      where username_key = ${usernameKey}
+        and id <> ${currentPlayer.id}
+      limit 1
+    `;
+
+    if (existing) {
+      throw new Error("Username already registered");
+    }
+  }
+
+  try {
+    const [player] = await sql<PlayerRow[]>`
+      update players
+      set
+        name = ${name},
+        username = case
+          when username_key is not null then ${name}
+          else username
+        end,
+        username_key = case
+          when username_key is not null then ${usernameKey}
+          else username_key
+        end,
+        avatar_icon = ${avatar.icon},
+        avatar_color = ${avatar.color},
+        profile_completed = true,
+        updated_at = now()
+      where id = ${currentPlayer.id}
+      returning
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        created_at,
+        updated_at
+    `;
+
+    return toPublicPlayer(player!);
+  } catch (error) {
+    if (getUniqueViolationConstraint(error) !== null) {
+      throw new Error("Username already registered");
+    }
+    throw error;
+  }
 }
 
 export async function updateSoloHighScore(input: {

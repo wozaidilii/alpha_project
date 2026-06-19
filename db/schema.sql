@@ -1,6 +1,8 @@
 create table if not exists players (
   id text primary key,
   email text,
+  username text,
+  username_key text,
   name varchar(12) not null,
   avatar_icon text not null,
   avatar_color char(7) not null,
@@ -16,6 +18,12 @@ alter table players
   add column if not exists email text;
 
 alter table players
+  add column if not exists username text;
+
+alter table players
+  add column if not exists username_key text;
+
+alter table players
   add column if not exists profile_completed boolean not null default false;
 
 alter table players
@@ -29,6 +37,10 @@ alter table players
 
 create unique index if not exists players_email_idx
   on players(email);
+
+create unique index if not exists players_username_key_idx
+  on players(username_key)
+  where username_key is not null;
 
 create unique index if not exists players_wechat_openid_idx
   on players(wechat_openid);

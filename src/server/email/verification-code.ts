@@ -7,21 +7,28 @@ export interface EmailDeliveryResult {
   debugCode?: string;
 }
 
-function buildVerificationEmail(code: string) {
+type VerificationPurpose = "login" | "password_reset";
+
+function buildVerificationEmail(code: string, purpose: VerificationPurpose) {
+  const isPasswordReset = purpose === "password_reset";
+  const actionLabel = isPasswordReset ? "重置密码" : "登录";
+
   return {
-    subject: "AniGuessr 登录验证码",
-    text: `你的 AniGuessr 登录验证码是 ${code}，10 分钟内有效。若不是你本人操作，可以忽略这封邮件。`,
-    html: `<p>你的 AniGuessr 登录验证码是 <strong>${code}</strong>，10 分钟内有效。</p><p>若不是你本人操作，可以忽略这封邮件。</p>`,
+    subject: `AniGuessr ${actionLabel}验证码`,
+    text: `你的 AniGuessr ${actionLabel}验证码是 ${code}，10 分钟内有效。若不是你本人操作，可以忽略这封邮件。`,
+    html: `<p>你的 AniGuessr ${actionLabel}验证码是 <strong>${code}</strong>，10 分钟内有效。</p><p>若不是你本人操作，可以忽略这封邮件。</p>`,
   };
 }
 
 export async function sendEmailVerificationCode(input: {
   email: string;
   code: string;
+  purpose?: VerificationPurpose;
 }): Promise<EmailDeliveryResult> {
   const apiKey = env.RESEND_API_KEY;
   const from = env.EMAIL_FROM;
-  const message = buildVerificationEmail(input.code);
+  const purpose = input.purpose ?? "login";
+  const message = buildVerificationEmail(input.code, purpose);
 
   if (apiKey && from) {
     const response = await fetch("https://api.resend.com/emails", {
@@ -51,7 +58,7 @@ export async function sendEmailVerificationCode(input: {
   }
 
   console.info(
-    `[email-login] verification code for ${input.email}: ${input.code}`,
+    `[${purpose}] verification code for ${input.email}: ${input.code}`,
   );
   return { mode: "debug", debugCode: input.code };
 }
