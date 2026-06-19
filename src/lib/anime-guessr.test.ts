@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   buildAnimeGuessrImageUrl,
+  getAnimeGuessrQuestionText,
   isAnimeGuessrQuestion,
   pickAnimeGuessrQuestions,
   toAnimeStreetViewLocation,
@@ -26,6 +27,28 @@ const sampleQuestion: AnimeGuessrQuestion = {
   difficulty: 1,
   confidence: "high",
   tags: ["CLANNAD", "东京都"],
+  locales: {
+    en: {
+      title: "Sunset Meeting Slope",
+      description: "The slope from the CLANNAD opening.",
+      animeTitle: "CLANNAD",
+      location: "Tokyo",
+      answerName: "Slope near Lake Tama",
+      episodeContext: "Season 1 OP",
+      funfact: ["A famous pilgrimage spot in Higashiyamato."],
+      tags: ["CLANNAD", "Tokyo"],
+    },
+    ja: {
+      title: "夕焼けの出会い坂",
+      description: "『CLANNAD』のオープニングに登場する坂道。",
+      animeTitle: "CLANNAD -クラナド-",
+      location: "東京都",
+      answerName: "東京都東大和市多摩湖付近の坂道",
+      episodeContext: "第一期OP",
+      funfact: ["東京都東大和市にある聖地巡礼スポット。"],
+      tags: ["CLANNAD", "東京都"],
+    },
+  },
 };
 
 describe("anime-guessr", () => {
@@ -74,22 +97,34 @@ describe("anime-guessr", () => {
     );
   });
 
+  it("returns localized question text with base-field fallback", () => {
+    expect(getAnimeGuessrQuestionText(sampleQuestion, "en")).toMatchObject({
+      title: "Sunset Meeting Slope",
+      description: "The slope from the CLANNAD opening.",
+      answerName: "Slope near Lake Tama",
+    });
+    expect(getAnimeGuessrQuestionText(sampleQuestion, "zh")).toMatchObject({
+      title: "夕阳下的相遇坡道",
+      answerName: "东京都东大和市多摩湖附近坡道",
+    });
+  });
+
   it("picks at most the requested number of questions", () => {
     expect(pickAnimeGuessrQuestions([sampleQuestion], 5)).toHaveLength(1);
   });
 
   it("maps anime questions to Google Street View locations", () => {
-    const location = toAnimeStreetViewLocation(sampleQuestion);
+    const location = toAnimeStreetViewLocation(sampleQuestion, "ja");
 
     expect(location).toMatchObject({
       id: "anime:anitabi_51_5c4dgq9pm",
-      title: "东京都东大和市多摩湖附近坡道",
-      province: "东京都",
-      city: "东京都",
+      title: "東京都東大和市多摩湖付近の坂道",
+      province: "東京都",
+      city: "東京都",
       lat: 35.7728,
       lng: 139.3545,
       pitch: 0,
-      hint: "在《CLANNAD》的片头动画中出现的坡道。",
+      hint: "『CLANNAD』のオープニングに登場する坂道。",
     });
     expect(location.heading).toBeGreaterThanOrEqual(0);
     expect(location.heading).toBeLessThan(360);

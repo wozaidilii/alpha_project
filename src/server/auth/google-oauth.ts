@@ -1,6 +1,30 @@
 export const GOOGLE_OAUTH_STATE_COOKIE = "aniguessr_google_oauth_state";
 export const GOOGLE_OAUTH_NEXT_COOKIE = "aniguessr_google_oauth_next";
 
+export type GoogleOAuthCallbackErrorCode =
+  | "state"
+  | "config"
+  | "token"
+  | "profile"
+  | "database"
+  | "unknown";
+
+export class GoogleOAuthCallbackError extends Error {
+  readonly code: GoogleOAuthCallbackErrorCode;
+  readonly detail?: unknown;
+
+  constructor(
+    code: GoogleOAuthCallbackErrorCode,
+    message: string,
+    detail?: unknown,
+  ) {
+    super(message);
+    this.name = "GoogleOAuthCallbackError";
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
 export interface GoogleProfile {
   sub: string;
   email: string;
@@ -11,6 +35,16 @@ export interface GoogleProfile {
 export function sanitizeNextPath(value: string | null | undefined) {
   if (!value?.startsWith("/") || value.startsWith("//")) return "/game/anime";
   return value;
+}
+
+export function googleOAuthErrorParam(code: GoogleOAuthCallbackErrorCode) {
+  return `google_${code}`;
+}
+
+export function getGoogleOAuthCallbackErrorCode(
+  error: unknown,
+): GoogleOAuthCallbackErrorCode {
+  return error instanceof GoogleOAuthCallbackError ? error.code : "unknown";
 }
 
 export function getGoogleRedirectUri(requestUrl: URL, configured?: string) {

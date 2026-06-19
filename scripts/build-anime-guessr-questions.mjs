@@ -7,6 +7,17 @@ const JAPAN_BOUNDS = {
 };
 
 const ALLOWED_CONFIDENCE = new Set(["high", "medium"]);
+const LOCALIZED_OUTPUT_LOCALES = ["ja", "en"];
+const LOCALIZED_TEXT_KEYS = [
+  "title",
+  "description",
+  "animeTitle",
+  "aspect",
+  "location",
+  "answerName",
+  "episodeContext",
+  "funfact",
+];
 
 const inputPath = process.argv[2];
 const outputPath =
@@ -37,37 +48,123 @@ function hasLeakingQualityFlag(record) {
   );
 }
 
-function compactRecord(record) {
+function cleanString(value) {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function localizedDetails(record, locale) {
+  const details = record.details ?? {};
+  const i18n = details.i18n?.[locale];
+  return i18n && typeof i18n === "object" ? i18n : {};
+}
+
+function compactLocalizedText(record, locale, fallback) {
   const details = record.details ?? {};
   const raw = record.raw ?? {};
+  const i18n = localizedDetails(record, locale);
   const animeTitle =
-    details.anime_title ?? raw.subject_cn ?? raw.subject_dir ?? "未知作品";
-  const location = record.location ?? details.subject_city ?? "日本";
+    cleanString(i18n.anime_title) ??
+    cleanString(details.anime_title) ??
+    cleanString(raw.subject_cn) ??
+    cleanString(raw.subject_dir) ??
+    fallback?.animeTitle ??
+    "未知作品";
+  const location =
+    cleanString(i18n.location) ??
+    cleanString(record.location) ??
+    cleanString(details.subject_city) ??
+    fallback?.location ??
+    "日本";
+  const answerName =
+    cleanString(i18n.real_place_name) ??
+    cleanString(details.real_place_name) ??
+    cleanString(raw.point_cn) ??
+    cleanString(raw.point_name) ??
+    cleanString(record.location) ??
+    fallback?.answerName ??
+    location;
+  const funfact = Array.isArray(i18n.funfact)
+    ? i18n.funfact.map(cleanString).filter(Boolean).slice(0, 3)
+    : Array.isArray(details.funfact)
+      ? details.funfact.map(cleanString).filter(Boolean).slice(0, 3)
+      : (fallback?.funfact ?? []);
+
+  return {
+    title:
+      cleanString(i18n.title) ??
+      cleanString(details.title) ??
+      cleanString(record.title) ??
+      fallback?.title ??
+      animeTitle,
+    description:
+      cleanString(i18n.hint) ??
+      cleanString(i18n.description) ??
+      cleanString(details.hint) ??
+      cleanString(record.description) ??
+      fallback?.description ??
+      "",
+    animeTitle,
+    aspect:
+      cleanString(i18n.aspect) ??
+      cleanString(details.aspect) ??
+      cleanString(raw.point_name) ??
+      fallback?.aspect,
+    location,
+    answerName,
+    episodeContext:
+      cleanString(i18n.episode_context) ??
+      cleanString(details.episode_context) ??
+      fallback?.episodeContext,
+    funfact,
+    tags: [
+      animeTitle,
+      location,
+      ...(Array.isArray(record.tags) ? record.tags : []),
+    ].filter(Boolean),
+  };
+}
+
+function compactLocaleOverride(text, fallback) {
+  return Object.fromEntries(
+    LOCALIZED_TEXT_KEYS.flatMap((key) => {
+      const value = text[key];
+      if (value === undefined) return [];
+      if (JSON.stringify(value) === JSON.stringify(fallback[key])) return [];
+      return [[key, value]];
+    }),
+  );
+}
+
+function compactRecord(record) {
+  const details = record.details ?? {};
   const imagePath =
     record.image_url ??
     record.images?.find((image) => image.role === "point")?.local_path;
+  const zh = compactLocalizedText(record, "zh");
+  const locales = Object.fromEntries(
+    LOCALIZED_OUTPUT_LOCALES.map((locale) => [
+      locale,
+      compactLocaleOverride(compactLocalizedText(record, locale, zh), zh),
+    ]),
+  );
 
   return {
     id: record.id,
-    title: details.title ?? record.title,
-    description: details.hint ?? record.description,
-    animeTitle,
-    aspect: details.aspect ?? raw.point_name ?? undefined,
+    title: zh.title,
+    description: zh.description,
+    animeTitle: zh.animeTitle,
+    aspect: zh.aspect,
     year: record.year,
     lat: record.lat,
     lng: record.lng,
-    location,
-    answerName:
-      details.real_place_name ??
-      raw.point_cn ??
-      raw.point_name ??
-      record.location,
-    episodeContext: details.episode_context ?? undefined,
+    location: zh.location,
+    answerName: zh.answerName,
+    episodeContext: zh.episodeContext,
     imagePath,
     sourceUrl: record.source_url,
-    funfact: Array.isArray(details.funfact)
-      ? details.funfact.filter(Boolean).slice(0, 3)
-      : [],
+    funfact: zh.funfact,
     difficulty:
       Number.isInteger(details.difficulty) &&
       details.difficulty >= 1 &&
@@ -75,11 +172,8 @@ function compactRecord(record) {
         ? details.difficulty
         : undefined,
     confidence: details.confidence ?? "unknown",
-    tags: [
-      animeTitle,
-      record.location,
-      ...(Array.isArray(record.tags) ? record.tags : []),
-    ].filter(Boolean),
+    tags: zh.tags,
+    locales,
   };
 }
 

@@ -1,4 +1,9 @@
 import { type TuxunLocation } from "~/lib/tuxun-locations";
+import {
+  DEFAULT_ANIME_LOCALE,
+  isAnimeLocale,
+  type AnimeLocale,
+} from "~/lib/anime-locale";
 
 export const ANIME_GUESSR_ROUNDS = 5;
 export const ANIME_GUESSR_DATA_URL = "/data/anime-guessr-questions.json";
@@ -7,6 +12,22 @@ export const ANIME_GUESSR_PLACEHOLDER_IMAGE_URL =
 
 export const ANIME_GUESSR_IMAGE_BASE_URL =
   process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL;
+
+export interface AnimeGuessrQuestionText {
+  title: string;
+  description: string;
+  animeTitle: string;
+  aspect?: string;
+  location: string;
+  answerName: string;
+  episodeContext?: string;
+  funfact: string[];
+  tags: string[];
+}
+
+export type AnimeGuessrQuestionLocales = Partial<
+  Record<AnimeLocale, Partial<AnimeGuessrQuestionText>>
+>;
 
 export interface AnimeGuessrQuestion {
   id: string;
@@ -26,6 +47,7 @@ export interface AnimeGuessrQuestion {
   difficulty?: number;
   confidence: string;
   tags: string[];
+  locales?: AnimeGuessrQuestionLocales;
 }
 
 interface AnimeGuessrPayload {
@@ -52,6 +74,31 @@ function isValidLatLng(lat: unknown, lng: unknown): lat is number {
   );
 }
 
+function isPartialQuestionText(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<AnimeGuessrQuestionText>;
+  return (
+    (item.title === undefined || typeof item.title === "string") &&
+    (item.description === undefined || typeof item.description === "string") &&
+    (item.animeTitle === undefined || typeof item.animeTitle === "string") &&
+    (item.aspect === undefined || typeof item.aspect === "string") &&
+    (item.location === undefined || typeof item.location === "string") &&
+    (item.answerName === undefined || typeof item.answerName === "string") &&
+    (item.episodeContext === undefined ||
+      typeof item.episodeContext === "string") &&
+    (item.funfact === undefined || isStringArray(item.funfact)) &&
+    (item.tags === undefined || isStringArray(item.tags))
+  );
+}
+
+function isQuestionLocales(value: unknown) {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).every(
+    ([locale, text]) => isAnimeLocale(locale) && isPartialQuestionText(text),
+  );
+}
+
 export function isAnimeGuessrQuestion(
   value: unknown,
 ): value is AnimeGuessrQuestion {
@@ -70,7 +117,8 @@ export function isAnimeGuessrQuestion(
     typeof item.confidence === "string" &&
     isStringArray(item.funfact) &&
     isStringArray(item.tags) &&
-    isValidLatLng(item.lat, item.lng)
+    isValidLatLng(item.lat, item.lng) &&
+    isQuestionLocales(item.locales)
   );
 }
 
@@ -124,6 +172,34 @@ export function buildAnimeGuessrImageUrl(
   return `${base}/${path}`;
 }
 
+export function getAnimeGuessrQuestionText(
+  question: AnimeGuessrQuestion,
+  locale: AnimeLocale = DEFAULT_ANIME_LOCALE,
+): AnimeGuessrQuestionText {
+  const base: AnimeGuessrQuestionText = {
+    title: question.title,
+    description: question.description,
+    animeTitle: question.animeTitle,
+    aspect: question.aspect,
+    location: question.location,
+    answerName: question.answerName,
+    episodeContext: question.episodeContext,
+    funfact: question.funfact,
+    tags: question.tags,
+  };
+  const localized =
+    question.locales?.[locale] ??
+    question.locales?.[DEFAULT_ANIME_LOCALE] ??
+    {};
+
+  return {
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(localized).filter(([, value]) => value !== undefined),
+    ),
+  };
+}
+
 function stableHeadingFromId(id: string): number {
   let hash = 0;
   for (const char of id) {
@@ -134,16 +210,18 @@ function stableHeadingFromId(id: string): number {
 
 export function toAnimeStreetViewLocation(
   question: AnimeGuessrQuestion,
+  locale: AnimeLocale = DEFAULT_ANIME_LOCALE,
 ): TuxunLocation {
+  const text = getAnimeGuessrQuestionText(question, locale);
   return {
     id: `anime:${question.id}`,
-    title: question.answerName,
-    province: question.location,
-    city: question.location,
+    title: text.answerName,
+    province: text.location,
+    city: text.location,
     lat: question.lat,
     lng: question.lng,
     heading: stableHeadingFromId(question.id),
     pitch: 0,
-    hint: question.description,
+    hint: text.description,
   };
 }

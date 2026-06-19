@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  GoogleOAuthCallbackError,
   buildGoogleAuthorizationUrl,
+  getGoogleOAuthCallbackErrorCode,
   getGoogleRedirectUri,
+  googleOAuthErrorParam,
   sanitizeNextPath,
 } from "./google-oauth";
 
@@ -28,5 +31,17 @@ describe("google oauth helpers", () => {
     expect(url.hostname).toBe("accounts.google.com");
     expect(url.searchParams.get("scope")).toBe("openid email profile");
     expect(url.searchParams.get("state")).toBe("state-1");
+  });
+
+  it("classifies callback errors for user-facing login messages", () => {
+    expect(googleOAuthErrorParam("token")).toBe("google_token");
+    expect(
+      getGoogleOAuthCallbackErrorCode(
+        new GoogleOAuthCallbackError("database", "db failed"),
+      ),
+    ).toBe("database");
+    expect(getGoogleOAuthCallbackErrorCode(new Error("unknown"))).toBe(
+      "unknown",
+    );
   });
 });

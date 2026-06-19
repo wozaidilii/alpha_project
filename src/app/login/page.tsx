@@ -16,6 +16,24 @@ const MODE_LABELS: Record<AuthMode, string> = {
   reset: "重置密码",
 };
 
+const DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE =
+  "Google 登录失败，请稍后再试或使用邮箱登录。";
+
+const GOOGLE_LOGIN_ERROR_MESSAGES: Record<string, string> = {
+  google: DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
+  google_unknown: DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
+  google_state:
+    "Google 登录状态已过期，请从登录页重新点击 Google 登录。无痕窗口中不要阻止本站 Cookie。",
+  google_config:
+    "Google 登录服务端配置缺失，请检查 Vercel 的 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 GOOGLE_REDIRECT_URI。",
+  google_token:
+    "Google 授权码交换失败，请确认 Vercel 的 GOOGLE_CLIENT_SECRET 与 Google Cloud 当前 OAuth Client Secret 匹配。",
+  google_profile:
+    "Google 授权成功，但账号资料读取失败，请稍后再试或使用邮箱登录。",
+  google_database:
+    "Google 授权成功，但写入用户数据失败。请确认线上数据库已执行迁移并包含 Google 登录字段。",
+};
+
 function getNextUrl() {
   if (typeof window === "undefined") return "/game/anime";
   const next = new URLSearchParams(window.location.search).get("next");
@@ -96,8 +114,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (new URLSearchParams(window.location.search).get("error") === "google") {
-      setMessage("Google 登录失败，请稍后再试或使用邮箱登录。");
+    const error = new URLSearchParams(window.location.search).get("error");
+    if (error?.startsWith("google")) {
+      setMessage(
+        GOOGLE_LOGIN_ERROR_MESSAGES[error] ??
+          DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
+      );
     }
   }, []);
 

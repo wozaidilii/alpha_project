@@ -3,7 +3,10 @@ import { env } from "~/env";
 import {
   GOOGLE_OAUTH_NEXT_COOKIE,
   GOOGLE_OAUTH_STATE_COOKIE,
+  GoogleOAuthCallbackError,
+  getGoogleOAuthCallbackErrorCode,
   getGoogleRedirectUri,
+  googleOAuthErrorParam,
   isGoogleProfile,
   sanitizeNextPath,
 } from "~/server/auth/google-oauth";
@@ -14,7 +17,10 @@ async function exchangeCodeForAccessToken(input: {
   redirectUri: string;
 }) {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-    throw new Error("Google OAuth is not configured");
+    throw new GoogleOAuthCallbackError(
+      "config",
+      "Google OAuth is not configured",
+    );
   }
 
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -30,12 +36,25 @@ async function exchangeCodeForAccessToken(input: {
   });
 
   if (!response.ok) {
-    throw new Error("Google OAuth token exchange failed");
+    let detail: unknown;
+    try {
+      detail = await response.json();
+    } catch {
+      detail = { status: response.status };
+    }
+    throw new GoogleOAuthCallbackError(
+      "token",
+      "Google OAuth token exchange failed",
+      detail,
+    );
   }
 
   const payload = (await response.json()) as { access_token?: string };
   if (!payload.access_token) {
-    throw new Error("Google OAuth access token missing");
+    throw new GoogleOAuthCallbackError(
+      "token",
+      "Google OAuth access token missing",
+    );
   }
 
   return payload.access_token;
@@ -50,12 +69,19 @@ async function fetchGoogleProfile(accessToken: string) {
   );
 
   if (!response.ok) {
-    throw new Error("Google profile fetch failed");
+    throw new GoogleOAuthCallbackError(
+      "profile",
+      "Google profile fetch failed",
+      { status: response.status },
+    );
   }
 
   const profile: unknown = await response.json();
   if (!isGoogleProfile(profile)) {
-    throw new Error("Google profile payload invalid");
+    throw new GoogleOAuthCallbackError(
+      "profile",
+      "Google profile payload invalid",
+    );
   }
 
   return profile;
@@ -90,7 +116,7 @@ export async function GET(request: NextRequest) {
   if (!code || !state || !storedState || state !== storedState) {
     return NextResponse.redirect(
       new URL(
-        `/login?next=${encodeURIComponent(next)}&error=google`,
+        `/login?next=${encodeURIComponent(next)}&error=${googleOAuthErrorParam("state")}`,
         request.url,
       ),
     );
@@ -105,6 +131,12 @@ export async function GET(request: NextRequest) {
     const profile = await fetchGoogleProfile(accessToken);
     const session = await loginPlayerWithGoogle(profile, {
       userAgent: request.headers.get("user-agent"),
+    }).catch((error: unknown) => {
+      throw new GoogleOAuthCallbackError(
+        "database",
+        "Google profile could not be persisted",
+        error,
+      );
     });
     const response = new NextResponse(
       createSessionBridgeHtml(JSON.stringify(session), next),
@@ -118,10 +150,21 @@ export async function GET(request: NextRequest) {
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE);
     response.cookies.delete(GOOGLE_OAUTH_NEXT_COOKIE);
     return response;
-  } catch {
+  } catch (error) {
+    const code = getGoogleOAuthCallbackErrorCode(error);
+    const detail =
+      error instanceof GoogleOAuthCallbackError ? error.detail : undefined;
+    console.error("[google-oauth] callback failed", {
+      code,
+      message: error instanceof Error ? error.message : String(error),
+      detail:
+        detail instanceof Error
+          ? { name: detail.name, message: detail.message }
+          : detail,
+    });
     return NextResponse.redirect(
       new URL(
-        `/login?next=${encodeURIComponent(next)}&error=google`,
+        `/login?next=${encodeURIComponent(next)}&error=${googleOAuthErrorParam(code)}`,
         request.url,
       ),
     );

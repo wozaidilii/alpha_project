@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  ANIME_LOCALES,
+  DEFAULT_ANIME_LOCALE,
+  getStoredAnimeLocale,
+  saveAnimeLocale,
+  withAnimeLocale,
+  type AnimeLocale,
+} from "~/lib/anime-locale";
 import { capturePostHogEvent } from "~/lib/posthog";
 
-type Locale = "zh" | "ja" | "en";
-
 const COPY: Record<
-  Locale,
+  AnimeLocale,
   {
     lang: string;
     kicker: string;
@@ -15,6 +21,7 @@ const COPY: Record<
     subtitle: string;
     start: string;
     continue: string;
+    login: string;
     clue: string;
     street: string;
     map: string;
@@ -30,6 +37,7 @@ const COPY: Record<
     subtitle: "看现实街景，凭左上角动漫线索猜出取景地。",
     start: "开始猜动漫",
     continue: "进入当前玩法",
+    login: "登录",
     clue: "动漫截图线索",
     street: "现实街景观察",
     map: "日本地图猜点",
@@ -45,6 +53,7 @@ const COPY: Record<
     subtitle: "現実の街並みを見て、左上のアニメ手がかりから場所を当てよう。",
     start: "プレイ開始",
     continue: "ゲームへ",
+    login: "ログイン",
     clue: "アニメ画像ヒント",
     street: "現実のストリートビュー",
     map: "日本地図で推理",
@@ -61,6 +70,7 @@ const COPY: Record<
       "Read the anime clue, scan the real street view, and pin the filming spot.",
     start: "Start Anime Guessr",
     continue: "Open game",
+    login: "Log in",
     clue: "Anime clue image",
     street: "Real street view",
     map: "Japan map guess",
@@ -71,12 +81,20 @@ const COPY: Record<
   },
 };
 
-const LOCALES: Locale[] = ["zh", "ja", "en"];
-const PLAY_URL = "/game/anime";
-
 export default function Home() {
-  const [locale, setLocale] = useState<Locale>("zh");
+  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const copy = COPY[locale];
+  const playUrl = withAnimeLocale("/game/anime", locale);
+  const loginUrl = `/login?next=${encodeURIComponent(playUrl)}`;
+
+  useEffect(() => {
+    setLocale(getStoredAnimeLocale());
+  }, []);
+
+  function selectLocale(nextLocale: AnimeLocale) {
+    setLocale(nextLocale);
+    saveAnimeLocale(nextLocale);
+  }
 
   return (
     <main className="anime-shell min-h-screen overflow-hidden text-white">
@@ -88,30 +106,38 @@ export default function Home() {
 
         <nav className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
           <Link
-            href={PLAY_URL}
+            href={playUrl}
             className="text-lg font-black tracking-[0.18em] text-pink-100 uppercase focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
           >
             AniGuessr
           </Link>
 
-          <div
-            className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/40 p-1 text-xs font-bold text-white/70"
-            aria-label="Language"
-          >
-            {LOCALES.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setLocale(item)}
-                className={`min-h-10 rounded-lg px-3 transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
-                  locale === item
-                    ? "bg-pink-300 text-slate-950"
-                    : "hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                {COPY[item].lang}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Link
+              href={loginUrl}
+              className="rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-xs font-black text-pink-50 transition hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+            >
+              {copy.login}
+            </Link>
+            <div
+              className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/40 p-1 text-xs font-bold text-white/70"
+              aria-label="Language"
+            >
+              {ANIME_LOCALES.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => selectLocale(item)}
+                  className={`min-h-10 rounded-lg px-3 transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
+                    locale === item
+                      ? "bg-pink-300 text-slate-950"
+                      : "hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  {COPY[item].lang}
+                </button>
+              ))}
+            </div>
           </div>
         </nav>
 
@@ -127,7 +153,7 @@ export default function Home() {
 
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href={PLAY_URL}
+                href={playUrl}
                 onClick={() =>
                   capturePostHogEvent("home_start_clicked", { locale })
                 }
@@ -136,7 +162,7 @@ export default function Home() {
                 {copy.start}
               </Link>
               <Link
-                href={PLAY_URL}
+                href={playUrl}
                 onClick={() =>
                   capturePostHogEvent("home_start_clicked", { locale })
                 }

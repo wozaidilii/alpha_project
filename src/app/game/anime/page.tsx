@@ -10,10 +10,20 @@ import {
   ANIME_GUESSR_ROUNDS,
   buildAnimeGuessrImageUrl,
   fetchAnimeGuessrQuestions,
+  getAnimeGuessrQuestionText,
   pickAnimeGuessrQuestions,
   toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
+  type AnimeGuessrQuestionText,
 } from "~/lib/anime-guessr";
+import {
+  DEFAULT_ANIME_LOCALE,
+  getAnimeLocaleFromSearch,
+  getStoredAnimeLocale,
+  saveAnimeLocale,
+  withAnimeLocale,
+  type AnimeLocale,
+} from "~/lib/anime-locale";
 import {
   ANIME_GUESSR_TIME_LIMIT_SECONDS,
   clearPendingAnimeFinalResult,
@@ -46,63 +56,386 @@ type Phase = "playing" | "result" | "final";
 type LoadState = "loading" | "ready" | "error";
 type AuthPromptReason = "record" | "leaderboard" | "history" | "quota";
 
-const AUTH_PROMPT_COPY: Record<
-  AuthPromptReason,
-  { title: string; body: string }
-> = {
-  record: {
-    title: "保存这次新纪录",
-    body: "登录后可以把本地新纪录保存到账号，后续换设备也能继续追踪成绩。",
+type GameCopy = {
+  authSync: string;
+  authPrompts: Record<AuthPromptReason, { title: string; body: string }>;
+  googleContinue: string;
+  emailContinue: string;
+  guestContinue: string;
+  guestMode: string;
+  quotaTitle: string;
+  quotaBody: string;
+  home: string;
+  loadingTitle: string;
+  loadingBank: string;
+  emptyBank: string;
+  reload: string;
+  restored: string;
+  notEnoughQuestions: (found: number) => string;
+  bankLoadFailed: string;
+  noGoogleKey: string;
+  noStreetViewQuestions: string;
+  skippedStreetView: string;
+  imageUnavailable: string;
+  imageMissingBase: string;
+  timedOutEvent: string;
+  timedOutFinal: string;
+  guestRemaining: (remaining: number, bestScore: number) => string;
+  guestRemainingShort: (remaining: number) => string;
+  roundStatus: (round: number, total: number, isResult: boolean) => string;
+  remaining: (time: string) => string;
+  animeClue: string;
+  scene: string;
+  answer: string;
+  roundScore: string;
+  distancePts: string;
+  speedBonus: string;
+  elapsed: string;
+  guessDistance: (distance: string) => string;
+  source: string;
+  finalScore: string;
+  nextRound: string;
+  submitGuess: string;
+  shareScore: string;
+  leaderboard: string;
+  saveHistory: string;
+  playAgain: string;
+  leaderboardSaved: string;
+  historySaved: string;
+  shareOpened: string;
+  shareCopied: string;
+  shareFailed: string;
+  shareTitle: string;
+  shareText: (score: string, url: string) => string;
+  roundLabel: (round: number) => string;
+  resultLine: (location: string, distance: string, elapsed: string) => string;
+  scoreUnit: string;
+  ranks: {
+    s: string;
+    a: string;
+    b: string;
+    c: string;
+    d: string;
+  };
+};
+
+const GAME_COPY: Record<AnimeLocale, GameCopy> = {
+  zh: {
+    authSync: "账号同步",
+    authPrompts: {
+      record: {
+        title: "保存这次新纪录",
+        body: "登录后可以把本地新纪录保存到账号，后续换设备也能继续追踪成绩。",
+      },
+      leaderboard: {
+        title: "登录查看排行榜",
+        body: "排行榜需要账号成绩，登录后会把本局分数写入你的成绩记录。",
+      },
+      history: {
+        title: "保存历史成绩",
+        body: "游客成绩只保存在当前浏览器。登录后可以长期保存每局记录。",
+      },
+      quota: {
+        title: "今日游客局数已用完",
+        body: "游客每天可以免费玩 3 局。登录后可以继续保存成绩并跨设备查看记录。",
+      },
+    },
+    googleContinue: "使用 Google 继续",
+    emailContinue: "使用邮箱登录 / 注册",
+    guestContinue: "继续游客模式",
+    guestMode: "游客模式",
+    quotaTitle: "今日免费局数已用完",
+    quotaBody:
+      "未登录每天可以免费玩 3 局，并保存在当前浏览器。登录后可以继续保存成绩和历史记录。",
+    home: "返回主页",
+    loadingTitle: "猜动漫模式",
+    loadingBank: "正在加载动漫巡礼题库...",
+    emptyBank: "动漫题库为空，请重新生成题库。",
+    reload: "重新加载",
+    restored: "登录成功，已回到刚才的成绩页。",
+    notEnoughQuestions: (found) =>
+      `只找到 ${found} / ${ANIME_GUESSR_ROUNDS} 道可用动漫题，请重新生成题库。`,
+    bankLoadFailed: "动漫题库加载失败",
+    noGoogleKey:
+      "未配置 Google Maps AK，无法加载猜动漫模式的现实街景；请配置 NEXT_PUBLIC_GOOGLE_MAP_AK 后重试。",
+    noStreetViewQuestions: "当前没有可用的 Google 街景题目，请重新加载题库。",
+    skippedStreetView:
+      "上一道动漫巡礼题的现实街景加载失败，已跳过并切换到下一题。",
+    imageUnavailable: "题目图片暂不可用，已显示占位图",
+    imageMissingBase: "图片前缀未配置，已显示占位图",
+    timedOutEvent: "anime_game_timed_out",
+    timedOutFinal: "时间到，已自动结算当前成绩。",
+    guestRemaining: (remaining, bestScore) =>
+      `游客今日剩余 ${remaining} 局 · 本地最高 ${bestScore.toLocaleString()} 分`,
+    guestRemainingShort: (remaining) => `游客 · 今日剩余 ${remaining} 局`,
+    roundStatus: (round, total, isResult) =>
+      `第 ${round} / ${total} 轮${isResult ? "结果" : ""}`,
+    remaining: (time) => `剩余 ${time}`,
+    animeClue: "动漫线索",
+    scene: "场景",
+    answer: "答案",
+    roundScore: "本轮得分",
+    distancePts: "距离分",
+    speedBonus: "速度补偿",
+    elapsed: "用时",
+    guessDistance: (distance) => `你的猜测距离实际地点 ${distance}。`,
+    source: "查看 Anitabi 来源",
+    finalScore: "查看最终得分",
+    nextRound: "下一轮",
+    submitGuess: "提交猜测",
+    shareScore: "分享成绩",
+    leaderboard: "查看排行榜",
+    saveHistory: "保存历史成绩",
+    playAgain: "再来一局",
+    leaderboardSaved: "排行榜即将开放，当前成绩已保存。",
+    historySaved: "历史成绩已保存到账号。",
+    shareOpened: "分享面板已打开。",
+    shareCopied: "成绩文案已复制。",
+    shareFailed: "分享未完成，可以稍后再试。",
+    shareTitle: "AniGuessr 成绩",
+    shareText: (score, url) =>
+      `我在 AniGuessr 猜动漫模式拿到 ${score} 分，你也来试试：${url}`,
+    roundLabel: (round) => `第 ${round} 轮`,
+    resultLine: (location, distance, elapsed) =>
+      `${location} · 偏差 ${distance} · 用时 ${elapsed}`,
+    scoreUnit: "分",
+    ranks: {
+      s: "圣地巡礼大师",
+      a: "取景地猎手",
+      b: "动漫地理通",
+      c: "巡礼新手",
+      d: "迷路中",
+    },
   },
-  leaderboard: {
-    title: "登录查看排行榜",
-    body: "排行榜需要账号成绩，登录后会把本局分数写入你的成绩记录。",
+  ja: {
+    authSync: "アカウント同期",
+    authPrompts: {
+      record: {
+        title: "新記録を保存",
+        body: "ログインすると、この記録をアカウントに保存して別の端末でも確認できます。",
+      },
+      leaderboard: {
+        title: "ランキングを見る",
+        body: "ランキングにはアカウントの成績が必要です。ログイン後、このスコアを保存します。",
+      },
+      history: {
+        title: "プレイ履歴を保存",
+        body: "ゲスト成績はこのブラウザだけに保存されます。ログインすると長期保存できます。",
+      },
+      quota: {
+        title: "本日のゲスト回数が終了",
+        body: "ゲストは1日3回まで無料で遊べます。ログインすると成績を保存して続けられます。",
+      },
+    },
+    googleContinue: "Google で続ける",
+    emailContinue: "メールでログイン / 登録",
+    guestContinue: "ゲストのまま続ける",
+    guestMode: "ゲストモード",
+    quotaTitle: "本日の無料プレイは終了しました",
+    quotaBody:
+      "未ログインでは1日3回まで無料で遊べます。記録はこのブラウザに保存されます。ログインすると成績と履歴を保存できます。",
+    home: "ホームへ戻る",
+    loadingTitle: "アニメモード",
+    loadingBank: "アニメ聖地の問題を読み込み中...",
+    emptyBank: "問題データが空です。問題データを再生成してください。",
+    reload: "再読み込み",
+    restored: "ログインしました。直前の結果画面に戻りました。",
+    notEnoughQuestions: (found) =>
+      `利用可能な問題は ${found} / ${ANIME_GUESSR_ROUNDS} 問だけです。問題データを再生成してください。`,
+    bankLoadFailed: "問題データの読み込みに失敗しました",
+    noGoogleKey:
+      "Google Maps AK が未設定のため、現実のストリートビューを読み込めません。NEXT_PUBLIC_GOOGLE_MAP_AK を設定してください。",
+    noStreetViewQuestions:
+      "利用可能な Google ストリートビュー問題がありません。問題データを再読み込みしてください。",
+    skippedStreetView:
+      "前の問題のストリートビューを読み込めなかったため、次の問題に切り替えました。",
+    imageUnavailable: "問題画像を表示できないため、仮画像を表示しています",
+    imageMissingBase: "画像公開 URL が未設定のため、仮画像を表示しています",
+    timedOutEvent: "anime_game_timed_out",
+    timedOutFinal: "時間切れです。現在の成績で集計しました。",
+    guestRemaining: (remaining, bestScore) =>
+      `ゲスト残り ${remaining} 回 · ローカル最高 ${bestScore.toLocaleString()} 点`,
+    guestRemainingShort: (remaining) => `ゲスト · 本日残り ${remaining} 回`,
+    roundStatus: (round, total, isResult) =>
+      `${round} / ${total} ラウンド${isResult ? "結果" : ""}`,
+    remaining: (time) => `残り ${time}`,
+    animeClue: "アニメヒント",
+    scene: "シーン",
+    answer: "答え",
+    roundScore: "ラウンド得点",
+    distancePts: "距離点",
+    speedBonus: "速度ボーナス",
+    elapsed: "所要時間",
+    guessDistance: (distance) =>
+      `予想地点は正解から ${distance} 離れています。`,
+    source: "Anitabi の出典を見る",
+    finalScore: "最終スコアを見る",
+    nextRound: "次のラウンド",
+    submitGuess: "予想を送信",
+    shareScore: "成績を共有",
+    leaderboard: "ランキングを見る",
+    saveHistory: "履歴を保存",
+    playAgain: "もう一度",
+    leaderboardSaved: "ランキングは準備中です。現在の成績は保存済みです。",
+    historySaved: "履歴をアカウントに保存しました。",
+    shareOpened: "共有パネルを開きました。",
+    shareCopied: "成績テキストをコピーしました。",
+    shareFailed: "共有できませんでした。後でもう一度お試しください。",
+    shareTitle: "AniGuessr 成績",
+    shareText: (score, url) =>
+      `AniGuessr のアニメモードで ${score} 点を取りました。挑戦はこちら：${url}`,
+    roundLabel: (round) => `ラウンド ${round}`,
+    resultLine: (location, distance, elapsed) =>
+      `${location} · 誤差 ${distance} · ${elapsed}`,
+    scoreUnit: "点",
+    ranks: {
+      s: "聖地巡礼マスター",
+      a: "ロケ地ハンター",
+      b: "アニメ地理通",
+      c: "巡礼ビギナー",
+      d: "迷子",
+    },
   },
-  history: {
-    title: "保存历史成绩",
-    body: "游客成绩只保存在当前浏览器。登录后可以长期保存每局记录。",
-  },
-  quota: {
-    title: "今日游客局数已用完",
-    body: "游客每天可以免费玩 3 局。登录后可以继续保存成绩并跨设备查看记录。",
+  en: {
+    authSync: "Account sync",
+    authPrompts: {
+      record: {
+        title: "Save this new record",
+        body: "Log in to save this local record to your account and keep tracking it across devices.",
+      },
+      leaderboard: {
+        title: "Log in for leaderboards",
+        body: "Leaderboards use account scores. Log in to attach this run to your results.",
+      },
+      history: {
+        title: "Save match history",
+        body: "Guest scores only live in this browser. Log in to keep every run long term.",
+      },
+      quota: {
+        title: "Guest plays used today",
+        body: "Guests can play 3 free runs per day. Log in to continue and save scores.",
+      },
+    },
+    googleContinue: "Continue with Google",
+    emailContinue: "Use email login / sign up",
+    guestContinue: "Keep playing as guest",
+    guestMode: "Guest mode",
+    quotaTitle: "No free guest runs left today",
+    quotaBody:
+      "Guests can play 3 free runs per day, saved in this browser. Log in to keep playing and save your history.",
+    home: "Back home",
+    loadingTitle: "Anime Guessr",
+    loadingBank: "Loading anime pilgrimage questions...",
+    emptyBank:
+      "The anime question bank is empty. Regenerate the question data.",
+    reload: "Reload",
+    restored: "Login complete. You are back on your result page.",
+    notEnoughQuestions: (found) =>
+      `Only ${found} / ${ANIME_GUESSR_ROUNDS} anime questions are available. Regenerate the question data.`,
+    bankLoadFailed: "Failed to load anime question data",
+    noGoogleKey:
+      "Google Maps AK is not configured, so the real Street View cannot load. Set NEXT_PUBLIC_GOOGLE_MAP_AK and retry.",
+    noStreetViewQuestions:
+      "No Google Street View questions are currently available. Reload the question bank.",
+    skippedStreetView:
+      "The previous anime pilgrimage question had no available Street View, so it was skipped.",
+    imageUnavailable: "Question image unavailable. Showing the placeholder.",
+    imageMissingBase:
+      "Image public base URL is not configured. Showing the placeholder.",
+    timedOutEvent: "anime_game_timed_out",
+    timedOutFinal: "Time is up. Your current score has been finalized.",
+    guestRemaining: (remaining, bestScore) =>
+      `Guest runs left today: ${remaining} · Local best ${bestScore.toLocaleString()} pts`,
+    guestRemainingShort: (remaining) => `Guest · ${remaining} left today`,
+    roundStatus: (round, total, isResult) =>
+      `Round ${round} / ${total}${isResult ? " result" : ""}`,
+    remaining: (time) => `${time} left`,
+    animeClue: "Anime clue",
+    scene: "Scene",
+    answer: "Answer",
+    roundScore: "Round score",
+    distancePts: "Distance",
+    speedBonus: "Speed bonus",
+    elapsed: "Time",
+    guessDistance: (distance) =>
+      `Your guess was ${distance} from the real location.`,
+    source: "View Anitabi source",
+    finalScore: "View final score",
+    nextRound: "Next round",
+    submitGuess: "Submit guess",
+    shareScore: "Share score",
+    leaderboard: "View leaderboard",
+    saveHistory: "Save history",
+    playAgain: "Play again",
+    leaderboardSaved: "Leaderboards are coming soon. This score is saved.",
+    historySaved: "History saved to your account.",
+    shareOpened: "Share sheet opened.",
+    shareCopied: "Score text copied.",
+    shareFailed: "Sharing was not completed. Try again later.",
+    shareTitle: "AniGuessr score",
+    shareText: (score, url) =>
+      `I scored ${score} in AniGuessr anime mode. Try it here: ${url}`,
+    roundLabel: (round) => `Round ${round}`,
+    resultLine: (location, distance, elapsed) =>
+      `${location} · ${distance} away · ${elapsed}`,
+    scoreUnit: "pts",
+    ranks: {
+      s: "Pilgrimage master",
+      a: "Location hunter",
+      b: "Anime geographer",
+      c: "Pilgrimage rookie",
+      d: "Lost traveler",
+    },
   },
 };
 
-function formatDistance(distanceKm: number): string {
-  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
-  return `${Math.round(distanceKm).toLocaleString()} 公里`;
+function formatDistance(distanceKm: number, locale: AnimeLocale): string {
+  if (distanceKm < 1) {
+    const meters = Math.round(distanceKm * 1000);
+    return locale === "zh" ? `${meters} 米` : `${meters} m`;
+  }
+  const kilometers = Math.round(distanceKm).toLocaleString(
+    locale === "ja" ? "ja-JP" : locale === "en" ? "en-US" : "zh-CN",
+  );
+  return locale === "zh" ? `${kilometers} 公里` : `${kilometers} km`;
 }
 
-function formatElapsed(seconds: number): string {
-  return `${Math.max(0, Math.round(seconds))} 秒`;
+function formatElapsed(seconds: number, locale: AnimeLocale): string {
+  const elapsed = Math.max(0, Math.round(seconds));
+  if (locale === "en") return `${elapsed}s`;
+  return `${elapsed} 秒`;
 }
 
-function getRank(score: number) {
-  if (score >= 450) return { label: "圣地巡礼大师", symbol: "S" };
-  if (score >= 360) return { label: "取景地猎手", symbol: "A" };
-  if (score >= 240) return { label: "动漫地理通", symbol: "B" };
-  if (score >= 120) return { label: "巡礼新手", symbol: "C" };
-  return { label: "迷路中", symbol: "D" };
+function getRank(score: number, locale: AnimeLocale) {
+  const ranks = GAME_COPY[locale].ranks;
+  if (score >= 450) return { label: ranks.s, symbol: "S" };
+  if (score >= 360) return { label: ranks.a, symbol: "A" };
+  if (score >= 240) return { label: ranks.b, symbol: "B" };
+  if (score >= 120) return { label: ranks.c, symbol: "C" };
+  return { label: ranks.d, symbol: "D" };
 }
 
 function AuthPromptModal({
   reason,
+  locale,
   onClose,
   onBeforeAuth,
 }: {
   reason: AuthPromptReason;
+  locale: AnimeLocale;
   onClose: () => void;
   onBeforeAuth?: () => void;
 }) {
-  const copy = AUTH_PROMPT_COPY[reason];
-  const next = "/game/anime";
+  const copy = GAME_COPY[locale];
+  const prompt = copy.authPrompts[reason];
+  const next = withAnimeLocale("/game/anime", locale);
 
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/75 px-4 backdrop-blur-sm">
       <div className="anime-panel w-full max-w-md p-6">
-        <div className="anime-chip mb-4 w-fit">账号同步</div>
-        <h2 className="text-2xl font-black text-pink-100">{copy.title}</h2>
-        <p className="mt-3 text-sm leading-6 text-pink-50/70">{copy.body}</p>
+        <div className="anime-chip mb-4 w-fit">{copy.authSync}</div>
+        <h2 className="text-2xl font-black text-pink-100">{prompt.title}</h2>
+        <p className="mt-3 text-sm leading-6 text-pink-50/70">{prompt.body}</p>
 
         <div className="mt-6 grid gap-3">
           <Link
@@ -110,21 +443,21 @@ function AuthPromptModal({
             onClick={onBeforeAuth}
             className="anime-button text-center"
           >
-            使用 Google 继续
+            {copy.googleContinue}
           </Link>
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}
             onClick={onBeforeAuth}
             className="anime-button-secondary text-center"
           >
-            使用邮箱登录 / 注册
+            {copy.emailContinue}
           </Link>
           <button
             type="button"
             onClick={onClose}
             className="min-h-11 rounded-xl text-sm font-bold text-cyan-100/70 transition hover:bg-white/10 hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
           >
-            继续游客模式
+            {copy.guestContinue}
           </button>
         </div>
       </div>
@@ -132,7 +465,15 @@ function AuthPromptModal({
   );
 }
 
-function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
+function AnimeClueImage({
+  question,
+  text,
+  copy,
+}: {
+  question: AnimeGuessrQuestion;
+  text: AnimeGuessrQuestionText;
+  copy: GameCopy;
+}) {
   const [showPlaceholder, setShowPlaceholder] = useState(false);
   const imageUrl = buildAnimeGuessrImageUrl(question.imagePath);
   const displayImageUrl =
@@ -149,7 +490,7 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={displayImageUrl}
-        alt={question.title}
+        alt={text.title}
         className="h-full w-full object-cover"
         onError={() => {
           if (!showPlaceholder) setShowPlaceholder(true);
@@ -158,8 +499,8 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
       {(!imageUrl || showPlaceholder) && (
         <div className="absolute right-2 bottom-2 left-2 rounded-lg border border-white/10 bg-slate-950/90 px-2 py-1.5 text-[11px] leading-4 text-pink-50/80">
           {ANIME_GUESSR_IMAGE_BASE_URL
-            ? "题目图片暂不可用，已显示占位图"
-            : "图片前缀未配置，已显示占位图"}
+            ? copy.imageUnavailable
+            : copy.imageMissingBase}
         </div>
       )}
     </div>
@@ -168,9 +509,12 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
 
 export default function AnimeGuessrPage() {
   const { ready, session } = useEmailSession();
+  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [questions, setQuestions] = useState<AnimeGuessrQuestion[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [loadMessage, setLoadMessage] = useState("正在加载动漫巡礼题库...");
+  const [loadMessage, setLoadMessage] = useState(
+    GAME_COPY[DEFAULT_ANIME_LOCALE].loadingBank,
+  );
   const [guestProgress, setGuestProgress] = useState<GuestProgress | null>(
     null,
   );
@@ -194,10 +538,26 @@ export default function AnimeGuessrPage() {
   const recordedCompletionKeyRef = useRef<string | null>(null);
   const recordActivity = api.player.recordActivity.useMutation();
   const recordGameSession = api.player.recordGameSession.useMutation();
+  const copy = GAME_COPY[locale];
+  const gameNextUrl = useMemo(
+    () => withAnimeLocale("/game/anime", locale),
+    [locale],
+  );
 
   const current = questions[round];
+  const currentText = useMemo(
+    () => (current ? getAnimeGuessrQuestionText(current, locale) : null),
+    [current, locale],
+  );
   const latestResult = results[results.length - 1];
   const roundResult = phase === "result" ? latestResult : undefined;
+  const roundResultText = useMemo(
+    () =>
+      roundResult
+        ? getAnimeGuessrQuestionText(roundResult.question, locale)
+        : null,
+    [locale, roundResult],
+  );
   const mapGuess = roundResult?.guess ?? guess;
   const mapAnswer = useMemo(
     () =>
@@ -211,9 +571,18 @@ export default function AnimeGuessrPage() {
     [results],
   );
   const currentStreetViewLocation = useMemo(
-    () => (current ? toAnimeStreetViewLocation(current) : null),
-    [current],
+    () => (current ? toAnimeStreetViewLocation(current, locale) : null),
+    [current, locale],
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const nextLocale =
+      getAnimeLocaleFromSearch(window.location.search) ??
+      getStoredAnimeLocale();
+    setLocale(nextLocale);
+    saveAnimeLocale(nextLocale);
+  }, []);
 
   const persistPendingFinalResult = useCallback(() => {
     if (phase !== "final") return;
@@ -243,17 +612,17 @@ export default function AnimeGuessrPage() {
     setLoadMessage("");
     setGuestBlocked(false);
     setAuthPromptReason(null);
-    setShareMessage("登录成功，已回到刚才的成绩页。");
+    setShareMessage(copy.restored);
     setTimeLeftSeconds(0);
     setGameTimedOut(pending.gameTimedOut);
     timeExpiredRef.current = pending.gameTimedOut;
     return true;
-  }, []);
+  }, [copy.restored]);
 
   const loadQuestions = useCallback(() => {
     let active = true;
     setLoadState("loading");
-    setLoadMessage("正在加载动漫巡礼题库...");
+    setLoadMessage(copy.loadingBank);
     setQuestions([]);
     setRound(0);
     setGuess(null);
@@ -274,9 +643,7 @@ export default function AnimeGuessrPage() {
         const picked = pickAnimeGuessrQuestions(pool, ANIME_GUESSR_ROUNDS);
         if (picked.length < ANIME_GUESSR_ROUNDS) {
           setLoadState("error");
-          setLoadMessage(
-            `只找到 ${picked.length} / ${ANIME_GUESSR_ROUNDS} 道可用动漫题，请重新生成题库。`,
-          );
+          setLoadMessage(copy.notEnoughQuestions(picked.length));
           return;
         }
         setQuestions(picked);
@@ -292,14 +659,14 @@ export default function AnimeGuessrPage() {
         if (!active) return;
         setLoadState("error");
         setLoadMessage(
-          error instanceof Error ? error.message : "动漫题库加载失败",
+          error instanceof Error ? error.message : copy.bankLoadFailed,
         );
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [copy]);
 
   useEffect(() => {
     if (!ready) return;
@@ -471,7 +838,10 @@ export default function AnimeGuessrPage() {
   }
 
   async function handleShareScore() {
-    const text = `我在 AniGuessr 猜动漫模式拿到 ${totalScore.toLocaleString()} 分，你也来试试：${window.location.origin}/game/anime`;
+    const text = copy.shareText(
+      totalScore.toLocaleString(),
+      `${window.location.origin}${gameNextUrl}`,
+    );
     capturePostHogEvent(
       "anime_score_shared",
       { score: totalScore, auth_state: session ? "logged_in" : "guest" },
@@ -480,15 +850,15 @@ export default function AnimeGuessrPage() {
 
     try {
       if (navigator.share) {
-        await navigator.share({ title: "AniGuessr 成绩", text });
-        setShareMessage("分享面板已打开。");
+        await navigator.share({ title: copy.shareTitle, text });
+        setShareMessage(copy.shareOpened);
         return;
       }
 
       await navigator.clipboard.writeText(text);
-      setShareMessage("成绩文案已复制。");
+      setShareMessage(copy.shareCopied);
     } catch {
-      setShareMessage("分享未完成，可以稍后再试。");
+      setShareMessage(copy.shareFailed);
     }
   }
 
@@ -582,9 +952,7 @@ export default function AnimeGuessrPage() {
 
     if (!GOOGLE_MAP_AK) {
       setLoadState("error");
-      setLoadMessage(
-        "未配置 Google Maps AK，无法加载猜动漫模式的现实街景；请配置 NEXT_PUBLIC_GOOGLE_MAP_AK 后重试。",
-      );
+      setLoadMessage(copy.noGoogleKey);
       return;
     }
 
@@ -601,16 +969,14 @@ export default function AnimeGuessrPage() {
       }
 
       setLoadState("error");
-      setLoadMessage("当前没有可用的 Google 街景题目，请重新加载题库。");
+      setLoadMessage(copy.noStreetViewQuestions);
       return;
     }
 
     setRound(Math.min(round, nextQuestions.length - 1));
     setPhase("playing");
-    setLoadMessage(
-      "上一道动漫巡礼题的现实街景加载失败，已跳过并切换到下一题。",
-    );
-  }, [current, questions, results.length, round]);
+    setLoadMessage(copy.skippedStreetView);
+  }, [copy, current, questions, results.length, round]);
 
   if (!ready) return <AuthLoading />;
 
@@ -620,33 +986,33 @@ export default function AnimeGuessrPage() {
         {authPromptReason && (
           <AuthPromptModal
             reason={authPromptReason}
+            locale={locale}
             onClose={() => setAuthPromptReason(null)}
           />
         )}
         <div className="anime-panel w-full max-w-md p-7">
-          <div className="anime-chip mx-auto mb-4 w-fit">游客模式</div>
+          <div className="anime-chip mx-auto mb-4 w-fit">{copy.guestMode}</div>
           <h1 className="text-3xl font-black text-pink-100">
-            今日免费局数已用完
+            {copy.quotaTitle}
           </h1>
           <p className="mt-3 text-sm leading-6 text-pink-50/70">
-            未登录每天可以免费玩 3
-            局，并保存在当前浏览器。登录后可以继续保存成绩和历史记录。
+            {copy.quotaBody}
           </p>
           <div className="mt-6 grid gap-3">
             <Link
-              href="/api/auth/google/start?next=/game/anime"
+              href={`/api/auth/google/start?next=${encodeURIComponent(gameNextUrl)}`}
               className="anime-button"
             >
-              使用 Google 继续
+              {copy.googleContinue}
             </Link>
             <Link
-              href="/login?next=/game/anime"
+              href={`/login?next=${encodeURIComponent(gameNextUrl)}`}
               className="anime-button-secondary"
             >
-              使用邮箱登录 / 注册
+              {copy.emailContinue}
             </Link>
             <Link href="/" className="text-sm font-bold text-cyan-100/70">
-              返回主页
+              {copy.home}
             </Link>
           </div>
         </div>
@@ -660,7 +1026,9 @@ export default function AnimeGuessrPage() {
         <div className="grid h-16 w-16 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-xl font-black text-cyan-100">
           Ani
         </div>
-        <div className="text-xl font-black text-pink-200">猜动漫模式</div>
+        <div className="text-xl font-black text-pink-200">
+          {copy.loadingTitle}
+        </div>
         <p className="text-sm text-pink-50/70">{loadMessage}</p>
       </main>
     );
@@ -670,7 +1038,7 @@ export default function AnimeGuessrPage() {
     return (
       <main className="anime-shell flex h-screen flex-col items-center justify-center gap-4 px-6 text-center text-white">
         <p className="max-w-md text-sm leading-6 text-pink-50/70">
-          {loadMessage || "动漫题库为空，请重新生成题库。"}
+          {loadMessage || copy.emptyBank}
         </p>
         <div className="flex gap-3">
           <button
@@ -678,10 +1046,10 @@ export default function AnimeGuessrPage() {
             onClick={handleRestart}
             className="anime-button"
           >
-            重新加载
+            {copy.reload}
           </button>
           <Link href="/" className="anime-button-secondary">
-            返回主页
+            {copy.home}
           </Link>
         </div>
       </main>
@@ -691,13 +1059,14 @@ export default function AnimeGuessrPage() {
   if (phase === "final") {
     const maxScore =
       Math.max(results.length, questions.length) * LOCATION_ROUND_SCORE_MAX;
-    const rank = getRank(totalScore);
+    const rank = getRank(totalScore, locale);
 
     return (
       <main className="anime-shell flex min-h-screen flex-col text-white">
         {authPromptReason && (
           <AuthPromptModal
             reason={authPromptReason}
+            locale={locale}
             onClose={() => setAuthPromptReason(null)}
             onBeforeAuth={persistPendingFinalResult}
           />
@@ -708,7 +1077,7 @@ export default function AnimeGuessrPage() {
             href="/"
             className="rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-sm font-bold text-pink-50 transition hover:bg-white/15 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
           >
-            返回主页
+            {copy.home}
           </Link>
         </header>
 
@@ -724,45 +1093,52 @@ export default function AnimeGuessrPage() {
               {totalScore.toLocaleString()}
             </div>
             <div className="mt-1 text-pink-50/60">
-              / {maxScore.toLocaleString()} 分
+              / {maxScore.toLocaleString()} {copy.scoreUnit}
             </div>
             {gameTimedOut && (
               <div className="mt-4 rounded-xl border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-sm font-bold text-amber-50">
-                时间到，已自动结算当前成绩。
+                {copy.timedOutFinal}
               </div>
             )}
             {!session && guestProgress && (
               <div className="mt-4 rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">
-                游客今日剩余 {getGuestGamesRemaining(guestProgress)} 局 ·
-                本地最高 {guestProgress.bestScore.toLocaleString()} 分
+                {copy.guestRemaining(
+                  getGuestGamesRemaining(guestProgress),
+                  guestProgress.bestScore,
+                )}
               </div>
             )}
           </div>
 
           <div className="space-y-3">
-            {results.map((result, index) => (
-              <div
-                key={result.question.id}
-                className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/10 px-4 py-3"
-              >
-                <div>
-                  <div className="text-sm text-cyan-100/70">
-                    第 {index + 1} 轮
+            {results.map((result, index) => {
+              const text = getAnimeGuessrQuestionText(result.question, locale);
+              return (
+                <div
+                  key={result.question.id}
+                  className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/10 px-4 py-3"
+                >
+                  <div>
+                    <div className="text-sm text-cyan-100/70">
+                      {copy.roundLabel(index + 1)}
+                    </div>
+                    <div className="font-black text-pink-100">
+                      {text.animeTitle} · {text.title}
+                    </div>
+                    <div className="text-xs text-pink-50/60">
+                      {copy.resultLine(
+                        text.location,
+                        formatDistance(result.distanceKm, locale),
+                        formatElapsed(result.elapsedSeconds, locale),
+                      )}
+                    </div>
                   </div>
-                  <div className="font-black text-pink-100">
-                    {result.question.animeTitle} · {result.question.title}
-                  </div>
-                  <div className="text-xs text-pink-50/60">
-                    {result.question.location} · 偏差{" "}
-                    {formatDistance(result.distanceKm)} · 用时{" "}
-                    {formatElapsed(result.elapsedSeconds)}
+                  <div className="text-right text-xl font-extrabold text-white">
+                    {result.score.toLocaleString()}
                   </div>
                 </div>
-                <div className="text-right text-xl font-extrabold text-white">
-                  {result.score.toLocaleString()}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {shareMessage && (
@@ -777,39 +1153,39 @@ export default function AnimeGuessrPage() {
               onClick={handleShareScore}
               className="anime-button-secondary"
             >
-              分享成绩
+              {copy.shareScore}
             </button>
             <button
               type="button"
               onClick={() =>
                 session
-                  ? setShareMessage("排行榜即将开放，当前成绩已保存。")
+                  ? setShareMessage(copy.leaderboardSaved)
                   : setAuthPromptReason("leaderboard")
               }
               className="anime-button-secondary"
             >
-              查看排行榜
+              {copy.leaderboard}
             </button>
             <button
               type="button"
               onClick={() =>
                 session
-                  ? setShareMessage("历史成绩已保存到账号。")
+                  ? setShareMessage(copy.historySaved)
                   : setAuthPromptReason("history")
               }
               className="anime-button-secondary"
             >
-              保存历史成绩
+              {copy.saveHistory}
             </button>
             <button
               type="button"
               onClick={handleRestart}
               className="anime-button"
             >
-              再来一局
+              {copy.playAgain}
             </button>
             <Link href="/" className="anime-button-secondary sm:col-span-2">
-              返回主页
+              {copy.home}
             </Link>
           </div>
         </div>
@@ -826,17 +1202,21 @@ export default function AnimeGuessrPage() {
             href="/"
             className="text-xs font-bold text-cyan-100/60 transition hover:text-cyan-100 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
           >
-            返回主页
+            {copy.home}
           </Link>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!session && guestProgress && (
             <span className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-3 py-1 text-xs font-bold text-cyan-50">
-              游客 · 今日剩余 {getGuestGamesRemaining(guestProgress)} 局
+              {copy.guestRemainingShort(getGuestGamesRemaining(guestProgress))}
             </span>
           )}
           <span className="anime-chip">
-            第 {round + 1} / {questions.length} 轮{roundResult ? "结果" : ""}
+            {copy.roundStatus(
+              round + 1,
+              questions.length,
+              Boolean(roundResult),
+            )}
           </span>
           <span
             className={`rounded-full border px-3 py-1 text-xs font-black ${
@@ -845,7 +1225,7 @@ export default function AnimeGuessrPage() {
                 : "border-amber-200/30 bg-amber-200/10 text-amber-50"
             }`}
           >
-            剩余 {formatAnimeGameCountdown(timeLeftSeconds)}
+            {copy.remaining(formatAnimeGameCountdown(timeLeftSeconds))}
           </span>
         </div>
       </header>
@@ -866,27 +1246,29 @@ export default function AnimeGuessrPage() {
           )}
         </section>
 
-        {!roundResult && current && (
+        {!roundResult && current && currentText && (
           <aside className="anime-panel absolute top-4 left-4 z-20 flex max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] flex-col gap-3 overflow-y-auto p-4">
-            <AnimeClueImage question={current} />
+            <AnimeClueImage question={current} text={currentText} copy={copy} />
 
             <div>
-              <div className="text-sm font-bold text-cyan-100/70">动漫线索</div>
+              <div className="text-sm font-bold text-cyan-100/70">
+                {copy.animeClue}
+              </div>
               <h2 className="mt-1 text-2xl font-black text-pink-100">
-                {current.animeTitle}
+                {currentText.animeTitle}
               </h2>
               <div className="mt-1 text-sm text-pink-50/60">
-                {current.year} · {current.location}
+                {current.year} · {currentText.location}
               </div>
             </div>
 
             <div className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50">
-              {current.description}
+              {currentText.description}
             </div>
 
-            {current.aspect && (
+            {currentText.aspect && (
               <div className="text-sm leading-6 text-pink-50/70">
-                场景：{current.aspect}
+                {copy.scene}: {currentText.aspect}
               </div>
             )}
 
@@ -898,26 +1280,27 @@ export default function AnimeGuessrPage() {
           </aside>
         )}
 
-        {roundResult && (
+        {roundResult && roundResultText && (
           <aside className="absolute top-[42%] right-0 bottom-0 left-0 z-30 flex flex-col gap-4 overflow-y-auto border-t border-white/10 bg-slate-950/95 p-5 backdrop-blur lg:top-0 lg:left-auto lg:w-[400px] lg:border-t-0 lg:border-l">
             <div>
-              <div className="text-sm font-bold text-cyan-100/70">答案</div>
+              <div className="text-sm font-bold text-cyan-100/70">
+                {copy.answer}
+              </div>
               <h2 className="mt-1 text-2xl font-black text-pink-100">
-                {roundResult.question.answerName}
+                {roundResultText.answerName}
               </h2>
               <p className="mt-1 text-sm text-pink-50/60">
-                {roundResult.question.animeTitle} ·{" "}
-                {roundResult.question.location}
+                {roundResultText.animeTitle} · {roundResultText.location}
               </p>
-              {roundResult.question.episodeContext && (
+              {roundResultText.episodeContext && (
                 <p className="mt-2 text-sm text-pink-50/50">
-                  {roundResult.question.episodeContext}
+                  {roundResultText.episodeContext}
                 </p>
               )}
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/10 p-5 text-center">
-              <div className="text-sm text-cyan-100/70">本轮得分</div>
+              <div className="text-sm text-cyan-100/70">{copy.roundScore}</div>
               <div className="text-6xl font-extrabold text-white">
                 {roundResult.score.toLocaleString()}
               </div>
@@ -928,34 +1311,36 @@ export default function AnimeGuessrPage() {
 
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-xl border border-white/10 bg-white/10 p-4">
-                <div className="text-xs text-pink-50/50">距离分</div>
+                <div className="text-xs text-pink-50/50">
+                  {copy.distancePts}
+                </div>
                 <div className="mt-1 font-bold text-white">
                   {roundResult.distancePts}
                 </div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/10 p-4">
-                <div className="text-xs text-pink-50/50">速度补偿</div>
+                <div className="text-xs text-pink-50/50">{copy.speedBonus}</div>
                 <div className="mt-1 font-bold text-white">
                   +{roundResult.speedCompensationPts}
                 </div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/10 p-4">
-                <div className="text-xs text-pink-50/50">用时</div>
+                <div className="text-xs text-pink-50/50">{copy.elapsed}</div>
                 <div className="mt-1 font-bold text-white">
-                  {formatElapsed(roundResult.elapsedSeconds)}
+                  {formatElapsed(roundResult.elapsedSeconds, locale)}
                 </div>
               </div>
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/10 p-4 text-sm leading-6 text-pink-50/70">
-              你的猜测距离实际地点{" "}
               <span className="font-bold text-white">
-                {formatDistance(roundResult.distanceKm)}
+                {copy.guessDistance(
+                  formatDistance(roundResult.distanceKm, locale),
+                )}
               </span>
-              。
-              {roundResult.question.funfact.length > 0 && (
+              {roundResultText.funfact.length > 0 && (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-pink-50/60">
-                  {roundResult.question.funfact.map((item) => (
+                  {roundResultText.funfact.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
@@ -969,7 +1354,7 @@ export default function AnimeGuessrPage() {
                 rel="noreferrer"
                 className="text-sm font-bold text-cyan-100 underline-offset-4 hover:underline"
               >
-                查看 Anitabi 来源
+                {copy.source}
               </a>
             )}
 
@@ -978,7 +1363,7 @@ export default function AnimeGuessrPage() {
               onClick={handleNext}
               className="anime-button mt-auto"
             >
-              {round + 1 >= questions.length ? "查看最终得分" : "下一轮"}
+              {round + 1 >= questions.length ? copy.finalScore : copy.nextRound}
             </button>
           </aside>
         )}
@@ -1002,7 +1387,7 @@ export default function AnimeGuessrPage() {
                 country={DEFAULT_FOREIGN_COUNTRY}
                 guess={mapGuess}
                 answer={mapAnswer}
-                answerLabel={roundResult?.question.answerName}
+                answerLabel={roundResultText?.answerName}
                 distanceKm={roundResult?.distanceKm}
                 disabled={Boolean(roundResult)}
                 minHeightClass="min-h-0"
@@ -1018,7 +1403,7 @@ export default function AnimeGuessrPage() {
                   disabled={!guess}
                   className="anime-button w-full text-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  提交猜测
+                  {copy.submitGuess}
                 </button>
               </div>
             )}

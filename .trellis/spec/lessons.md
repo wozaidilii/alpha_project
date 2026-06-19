@@ -144,3 +144,10 @@
 - 根因：OAuth 和密码登录的 `next` 只保存路由路径，不保存客户端内存里的局内状态；最终得分、回合结果和超时状态都只存在 React state 中。
 - 修复：在跳转登录前把最终结果快照写入短 TTL 的 localStorage，登录成功回到 `/game/anime` 后优先恢复结果页，再用新 session 保存成绩。
 - 预防：任何“游客完成动作后登录保存”的流程，都要在离开页面前持久化一次性客户端上下文；`next` 只能解决回到哪个路由，不能恢复内存状态。
+
+## OAuth 回调不要吞掉失败分类
+
+- 问题：无痕窗口 Google 登录失败时，登录页只显示“Google 登录失败”，无法判断是 state cookie、OAuth secret、profile 拉取还是数据库写入问题。
+- 根因：Google callback route 把所有异常都 catch 成同一个 `error=google`，既没有可区分的用户提示，也没有服务端日志分类；线上排障只能靠猜环境变量或数据库迁移。
+- 修复：回调流程为 state/config/token/profile/database/unknown 分别返回 `google_*` 错误码，并在 Vercel 日志中记录非敏感分类和错误摘要；登录页按错误码给出下一步检查方向。
+- 预防：第三方 OAuth / 支付 / 邮件这类多阶段外部集成，catch 层必须保留阶段分类；不要把配置、远端 API 和本地持久化错误压成同一个前端提示。
