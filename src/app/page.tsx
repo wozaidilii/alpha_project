@@ -367,24 +367,54 @@ export default function Home() {
                           className="min-h-11 rounded-xl border border-white/10 bg-black/35 px-3 text-sm font-bold text-white transition outline-none focus:border-pink-300"
                         />
                       </label>
-                      <label className="grid gap-1 text-xs font-bold text-pink-100/70">
-                        {copy.country}
-                        <select
-                          value={profileCountryCode}
-                          onChange={(event) =>
-                            setProfileCountryCode(event.target.value)
-                          }
-                          className="min-h-11 rounded-xl border border-white/10 bg-black/35 px-3 text-sm font-bold text-white transition outline-none focus:border-pink-300"
+                      <div className="grid gap-2 text-xs font-bold text-pink-100/70">
+                        <span>{copy.country}</span>
+                        <div
+                          role="radiogroup"
+                          aria-label={copy.country}
+                          className="grid grid-cols-6 gap-2"
                         >
-                          <option value="">{copy.countryUnset}</option>
-                          {COUNTRY_OPTIONS.map((country) => (
-                            <option key={country.code} value={country.code}>
-                              {countryCodeToFlagEmoji(country.code)}{" "}
-                              {country.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={profileCountryCode === ""}
+                            aria-label={copy.countryUnset}
+                            title={copy.countryUnset}
+                            onClick={() => setProfileCountryCode("")}
+                            className={`grid h-11 w-full min-w-0 place-items-center rounded-xl border text-lg transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
+                              profileCountryCode === ""
+                                ? "border-pink-300 bg-pink-300 text-slate-950 shadow-[0_0_22px_rgba(249,168,212,0.24)]"
+                                : "border-white/10 bg-black/35 hover:border-pink-200/50 hover:bg-white/10"
+                            }`}
+                          >
+                            {countryCodeToFlagEmoji(null)}
+                          </button>
+                          {COUNTRY_OPTIONS.map((country) => {
+                            const selected =
+                              profileCountryCode === country.code;
+                            return (
+                              <button
+                                key={country.code}
+                                type="button"
+                                role="radio"
+                                aria-checked={selected}
+                                aria-label={country.label}
+                                title={country.label}
+                                onClick={() =>
+                                  setProfileCountryCode(country.code)
+                                }
+                                className={`grid h-11 w-full min-w-0 place-items-center rounded-xl border text-lg transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
+                                  selected
+                                    ? "border-pink-300 bg-pink-300 text-slate-950 shadow-[0_0_22px_rgba(249,168,212,0.24)]"
+                                    : "border-white/10 bg-black/35 hover:border-pink-200/50 hover:bg-white/10"
+                                }`}
+                              >
+                                {countryCodeToFlagEmoji(country.code)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <div className="flex gap-2">
                         <button
                           type="button"
