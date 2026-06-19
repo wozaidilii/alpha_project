@@ -11,6 +11,17 @@ import {
   withAnimeLocale,
   type AnimeLocale,
 } from "~/lib/anime-locale";
+import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
+import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
+import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  getStoredAnimeGuessrDifficultyTier,
+  getStoredAnimeGuessrRoundCount,
+  saveAnimeGuessrDifficultyTier,
+  saveAnimeGuessrRoundCount,
+  type AnimeGuessrDifficultyTier,
+  type AnimeGuessrRoundCount,
+} from "~/lib/anime-guessr";
 import {
   clearPlayerSession,
   getStoredPlayerSession,
@@ -60,6 +71,11 @@ const COPY: Record<
     myRank: string;
     points: string;
     loading: string;
+    roundsLabel: string;
+    roundsOption: (rounds: number) => string;
+    difficultyLabel: string;
+    difficultyOption: (tier: AnimeGuessrDifficultyTier) => string;
+    difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
   }
 > = {
   zh: {
@@ -110,6 +126,20 @@ const COPY: Record<
     myRank: "我的排名",
     points: "分",
     loading: "加载中...",
+    roundsLabel: "局数",
+    roundsOption: (rounds) => `${rounds} 轮`,
+    difficultyLabel: "难度档位",
+    difficultyOption: (tier) =>
+      ({ beginner: "入门", intermediate: "进阶", master: "大师", miracle: "神迹" })[
+        tier
+      ],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "仅包含难度 1 的题目。",
+        intermediate: "包含难度 1 与 2 的题目。",
+        master: "包含难度 1、2、3 的题目。",
+        miracle: "包含全部难度题目。",
+      })[tier],
   },
   ja: {
     lang: "日本語",
@@ -159,6 +189,23 @@ const COPY: Record<
     myRank: "自分の順位",
     points: "点",
     loading: "読み込み中...",
+    roundsLabel: "ラウンド数",
+    roundsOption: (rounds) => `${rounds} ラウンド`,
+    difficultyLabel: "難易度",
+    difficultyOption: (tier) =>
+      ({
+        beginner: "入門",
+        intermediate: "進階",
+        master: "マスター",
+        miracle: "奇跡",
+      })[tier],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "難易度 1 の問題のみ。",
+        intermediate: "難易度 1 と 2 の問題。",
+        master: "難易度 1、2、3 の問題。",
+        miracle: "すべての難易度の問題。",
+      })[tier],
   },
   en: {
     lang: "English",
@@ -209,6 +256,23 @@ const COPY: Record<
     myRank: "My rank",
     points: "pts",
     loading: "Loading...",
+    roundsLabel: "Rounds",
+    roundsOption: (rounds) => `${rounds} rounds`,
+    difficultyLabel: "Difficulty",
+    difficultyOption: (tier) =>
+      ({
+        beginner: "Beginner",
+        intermediate: "Intermediate",
+        master: "Master",
+        miracle: "Miracle",
+      })[tier],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "Difficulty 1 questions only.",
+        intermediate: "Difficulty 1 and 2 questions.",
+        master: "Difficulty 1, 2, and 3 questions.",
+        miracle: "All difficulty levels.",
+      })[tier],
   },
 };
 
@@ -222,6 +286,11 @@ function avatarImageStyle(
 export default function Home() {
   const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [leaderboardRounds, setLeaderboardRounds] = useState<5 | 10>(5);
+  const [selectedRoundCount, setSelectedRoundCount] =
+    useState<AnimeGuessrRoundCount>(5);
+  const [difficultyTier, setDifficultyTier] = useState<AnimeGuessrDifficultyTier>(
+    ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  );
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [profileName, setProfileName] = useState("");
   const [profileCountryCode, setProfileCountryCode] = useState("");
@@ -229,7 +298,7 @@ export default function Home() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const copy = COPY[locale];
   const playUrl = withAnimeLocale(
-    `/game/anime?rounds=${leaderboardRounds}`,
+    `/game/anime?rounds=${selectedRoundCount}&difficulty=${difficultyTier}`,
     locale,
   );
   const loginUrl = withAnimeLocale("/login", locale);
@@ -265,6 +334,8 @@ export default function Home() {
 
   useEffect(() => {
     setLocale(getStoredAnimeLocale());
+    setSelectedRoundCount(getStoredAnimeGuessrRoundCount());
+    setDifficultyTier(getStoredAnimeGuessrDifficultyTier());
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
     if (storedSession) identifyPostHogUser(storedSession.user);
@@ -284,6 +355,16 @@ export default function Home() {
     setProfileName(meQuery.data.name);
     setProfileCountryCode(meQuery.data.countryCode ?? "");
   }, [meQuery.data]);
+
+  function handleRoundCountChange(nextRoundCount: AnimeGuessrRoundCount) {
+    setSelectedRoundCount(nextRoundCount);
+    saveAnimeGuessrRoundCount(nextRoundCount);
+  }
+
+  function handleDifficultyTierChange(nextDifficultyTier: AnimeGuessrDifficultyTier) {
+    setDifficultyTier(nextDifficultyTier);
+    saveAnimeGuessrDifficultyTier(nextDifficultyTier);
+  }
 
   function selectLocale(nextLocale: AnimeLocale) {
     setLocale(nextLocale);
@@ -529,12 +610,25 @@ export default function Home() {
               {copy.subtitle}
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-col gap-4">
+              <AnimeDifficultySelector
+                value={difficultyTier}
+                copy={copy}
+                onChange={handleDifficultyTierChange}
+              />
+              <AnimeRoundCountSelector
+                value={selectedRoundCount}
+                copy={copy}
+                onChange={handleRoundCountChange}
+              />
+              <div className="flex flex-wrap gap-3">
               <Link
                 href={playUrl}
                 onClick={() =>
                   capturePostHogEvent(POSTHOG_EVENTS.homeStartClicked, {
                     locale,
+                    rounds: selectedRoundCount,
+                    difficulty: difficultyTier,
                   })
                 }
                 className="anime-button"
@@ -553,6 +647,7 @@ export default function Home() {
               >
                 {copy.battle}
               </Link>
+              </div>
             </div>
 
             <div className="mt-10 max-w-2xl border-y border-white/10 py-5">

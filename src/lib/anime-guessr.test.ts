@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   buildAnimeGuessrImageUrl,
   buildGoogleMapsStreetViewUrl,
+  filterAnimeGuessrQuestionsByTier,
+  getAnimeGuessrQuestionDifficulty,
   getAnimeGuessrQuestionText,
   isAnimeGuessrQuestion,
   pickAnimeGuessrQuestions,
@@ -91,6 +94,17 @@ describe("anime-guessr", () => {
     ).toBe("https://example.com/anime-gussr/anime/51_CLANNAD/5c4dgq9pm.jpg");
   });
 
+  it("uses the local image API route when local images are enabled", () => {
+    const previousFlag = process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES;
+    process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES = "true";
+
+    expect(buildAnimeGuessrImageUrl("anime/51_CLANNAD/5c4dgq9pm.jpg", "")).toBe(
+      "/api/anime-guessr-image/anime/51_CLANNAD/5c4dgq9pm.jpg",
+    );
+
+    process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES = previousFlag;
+  });
+
   it("does not invent an image URL when no public base is configured", () => {
     expect(buildAnimeGuessrImageUrl(sampleQuestion.imagePath, "")).toBe(
       undefined,
@@ -134,6 +148,39 @@ describe("anime-guessr", () => {
 
   it("picks at most the requested number of questions", () => {
     expect(pickAnimeGuessrQuestions([sampleQuestion], 5)).toHaveLength(1);
+  });
+
+  it("filters questions by difficulty tier", () => {
+    const easy = { ...sampleQuestion, id: "easy", difficulty: 1 as const };
+    const medium = { ...sampleQuestion, id: "medium", difficulty: 2 as const };
+    const hard = { ...sampleQuestion, id: "hard", difficulty: 3 as const };
+    const unrated = { ...sampleQuestion, id: "unrated", difficulty: undefined };
+
+    expect(
+      filterAnimeGuessrQuestionsByTier([easy, medium, hard, unrated], "beginner"),
+    ).toEqual([easy]);
+    expect(
+      filterAnimeGuessrQuestionsByTier([easy, medium, hard], "intermediate"),
+    ).toEqual([easy, medium]);
+    expect(
+      filterAnimeGuessrQuestionsByTier([easy, medium, hard], "master"),
+    ).toEqual([easy, medium, hard]);
+    expect(getAnimeGuessrQuestionDifficulty(unrated)).toBe(5);
+    expect(
+      filterAnimeGuessrQuestionsByTier([easy, hard, unrated], "miracle"),
+    ).toHaveLength(3);
+    expect(
+      pickAnimeGuessrQuestions(
+        [easy, medium],
+        5,
+        ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+      ),
+    ).toEqual([easy]);
+  });
+
+  it("accepts questions without a year", () => {
+    const { year: _year, ...withoutYear } = sampleQuestion;
+    expect(isAnimeGuessrQuestion(withoutYear)).toBe(true);
   });
 
   it("maps anime questions to Google Street View locations", () => {

@@ -17,6 +17,7 @@ export const env = createEnv({
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     GOOGLE_REDIRECT_URI: z.string().url().optional(),
+    ANIME_GUESSR_LOCAL_IMAGE_ROOT: z.string().min(1).optional(),
   },
   client: {
     NEXT_PUBLIC_PUSHER_KEY: z.string().optional(),
@@ -25,6 +26,9 @@ export const env = createEnv({
     NEXT_PUBLIC_GOOGLE_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_TENCENT_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL: z.string().url().optional(),
+    NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES: z
+      .enum(["true", "false"])
+      .optional(),
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_TOKEN: z.string().optional(),
@@ -45,6 +49,7 @@ export const env = createEnv({
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
+    ANIME_GUESSR_LOCAL_IMAGE_ROOT: process.env.ANIME_GUESSR_LOCAL_IMAGE_ROOT,
     NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
     NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     NEXT_PUBLIC_BAIDU_MAP_AK: process.env.NEXT_PUBLIC_BAIDU_MAP_AK,
@@ -52,6 +57,8 @@ export const env = createEnv({
     NEXT_PUBLIC_TENCENT_MAP_AK: process.env.NEXT_PUBLIC_TENCENT_MAP_AK,
     NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL:
       process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL,
+    NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES:
+      process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN:
       process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
