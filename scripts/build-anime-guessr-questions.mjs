@@ -6,7 +6,6 @@ const JAPAN_BOUNDS = {
   northEast: { lat: 45.8, lng: 153.99 },
 };
 
-const ALLOWED_CONFIDENCE = new Set(["high", "medium"]);
 const LOCALIZED_OUTPUT_LOCALES = ["ja", "en"];
 const LOCALIZED_TEXT_KEYS = [
   "title",
@@ -39,12 +38,6 @@ function isInsideJapan(record) {
     record.lat <= JAPAN_BOUNDS.northEast.lat &&
     record.lng >= JAPAN_BOUNDS.southWest.lng &&
     record.lng <= JAPAN_BOUNDS.northEast.lng
-  );
-}
-
-function hasLeakingQualityFlag(record) {
-  return (record.quality_flags ?? []).some((flag) =>
-    String(flag).includes("leak"),
   );
 }
 
@@ -150,19 +143,17 @@ function compactRecord(record) {
     ]),
   );
 
-  return {
+  const question = {
     id: record.id,
     title: zh.title,
     description: zh.description,
     animeTitle: zh.animeTitle,
     aspect: zh.aspect,
-    year: record.year,
     lat: record.lat,
     lng: record.lng,
     location: zh.location,
     answerName: zh.answerName,
     episodeContext: zh.episodeContext,
-    imagePath,
     sourceUrl: record.source_url,
     funfact: zh.funfact,
     difficulty:
@@ -175,25 +166,24 @@ function compactRecord(record) {
     tags: zh.tags,
     locales,
   };
+
+  if (Number.isFinite(record.year)) {
+    question.year = record.year;
+  }
+  if (imagePath) {
+    question.imagePath = imagePath;
+  }
+
+  return question;
 }
 
 const input = JSON.parse(await readFile(inputPath, "utf8"));
 const records = Array.isArray(input.records) ? input.records : [];
 
 const questions = records
-  .filter((record) => {
-    const confidence = record.details?.confidence;
-    return (
-      isInsideJapan(record) &&
-      typeof record.id === "string" &&
-      typeof (record.details?.title ?? record.title) === "string" &&
-      typeof (record.details?.hint ?? record.description) === "string" &&
-      Number.isFinite(record.year) &&
-      record.image_url &&
-      ALLOWED_CONFIDENCE.has(confidence) &&
-      !hasLeakingQualityFlag(record)
-    );
-  })
+  .filter(
+    (record) => isInsideJapan(record) && typeof record.id === "string",
+  )
   .map(compactRecord);
 
 const payload = {
@@ -204,9 +194,6 @@ const payload = {
   sourceTotal: records.length,
   filters: {
     country: "japan",
-    requiresImagePath: true,
-    confidence: [...ALLOWED_CONFIDENCE],
-    excludesQualityFlagsContaining: "leak",
   },
   questions,
 };

@@ -1,13 +1,13 @@
 import {
-  ANIME_GUESSR_DIFFICULTY_OPTIONS,
-  normalizeAnimeGuessrMaxDifficulty,
-  type AnimeGuessrMaxDifficulty,
+  ANIME_GUESSR_DIFFICULTY_TIERS,
+  normalizeAnimeGuessrDifficultyTier,
+  type AnimeGuessrDifficultyTier,
 } from "~/lib/anime-guessr";
 
 export interface AnimeDifficultySelectorCopy {
   difficultyLabel: string;
-  difficultyOption: (level: number) => string;
-  difficultyHint: string;
+  difficultyOption: (tier: AnimeGuessrDifficultyTier) => string;
+  difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
 }
 
 export function AnimeDifficultySelector({
@@ -16,10 +16,10 @@ export function AnimeDifficultySelector({
   copy,
   onChange,
 }: {
-  value: AnimeGuessrMaxDifficulty;
+  value: AnimeGuessrDifficultyTier;
   disabled?: boolean;
   copy: AnimeDifficultySelectorCopy;
-  onChange: (difficulty: AnimeGuessrMaxDifficulty) => void;
+  onChange: (tier: AnimeGuessrDifficultyTier) => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -28,12 +28,14 @@ export function AnimeDifficultySelector({
           {copy.difficultyLabel}
         </span>
         <div className="flex flex-wrap overflow-hidden rounded-full border border-white/10">
-          {ANIME_GUESSR_DIFFICULTY_OPTIONS.map((option) => (
+          {ANIME_GUESSR_DIFFICULTY_TIERS.map((option) => (
             <button
               key={option}
               type="button"
               disabled={disabled}
-              onClick={() => onChange(normalizeAnimeGuessrMaxDifficulty(option))}
+              onClick={() =>
+                onChange(normalizeAnimeGuessrDifficultyTier(option))
+              }
               className={`min-h-8 px-3 text-xs font-black transition focus:ring-2 focus:ring-cyan-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
                 value === option
                   ? "bg-cyan-200/20 text-cyan-50"
@@ -45,7 +47,9 @@ export function AnimeDifficultySelector({
           ))}
         </div>
       </div>
-      <p className="text-xs leading-5 text-pink-50/55">{copy.difficultyHint}</p>
+      <p className="text-xs leading-5 text-pink-50/55">
+        {copy.difficultyHint(value)}
+      </p>
     </div>
   );
 }

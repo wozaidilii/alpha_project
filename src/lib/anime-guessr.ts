@@ -9,18 +9,42 @@ export const ANIME_GUESSR_ROUNDS = 5;
 export const ANIME_GUESSR_ROUND_OPTIONS = [5, 10] as const;
 export type AnimeGuessrRoundCount = (typeof ANIME_GUESSR_ROUND_OPTIONS)[number];
 export const ANIME_GUESSR_ROUNDS_STORAGE_KEY = "aniguessr_round_count";
-export const ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY = 1;
-export const ANIME_GUESSR_DIFFICULTY_OPTIONS = [1, 2, 3, 4, 5] as const;
-export type AnimeGuessrMaxDifficulty =
-  (typeof ANIME_GUESSR_DIFFICULTY_OPTIONS)[number];
-export const ANIME_GUESSR_DIFFICULTY_STORAGE_KEY = "aniguessr_max_difficulty";
+export const ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER = "beginner";
+export const ANIME_GUESSR_DIFFICULTY_TIERS = [
+  "beginner",
+  "intermediate",
+  "master",
+  "miracle",
+] as const;
+export type AnimeGuessrDifficultyTier =
+  (typeof ANIME_GUESSR_DIFFICULTY_TIERS)[number];
+export const ANIME_GUESSR_DIFFICULTY_STORAGE_KEY = "aniguessr_difficulty_tier";
 export const ANIME_GUESSR_UNKNOWN_DIFFICULTY = 5;
+
+export const ANIME_GUESSR_TIER_MAX_DIFFICULTY: Record<
+  AnimeGuessrDifficultyTier,
+  number
+> = {
+  beginner: 1,
+  intermediate: 2,
+  master: 3,
+  miracle: 5,
+};
 export const ANIME_GUESSR_DATA_URL = "/data/anime-guessr-questions.json";
 export const ANIME_GUESSR_PLACEHOLDER_IMAGE_URL =
   "/images/anime-placeholder.jpg";
 
 export const ANIME_GUESSR_IMAGE_BASE_URL =
   process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL;
+
+export function isAnimeGuessrLocalImagesEnabled() {
+  return (
+    process.env.NEXT_PUBLIC_ANIME_GUESSR_USE_LOCAL_IMAGES === "true" ||
+    process.env.NODE_ENV === "development"
+  );
+}
+
+export const ANIME_GUESSR_IMAGE_API_PREFIX = "/api/anime-guessr-image";
 
 export interface AnimeGuessrQuestionText {
   title: string;
@@ -147,7 +171,7 @@ function shuffle<T>(items: T[]): T[] {
 
 export function getAnimeGuessrQuestionDifficulty(
   question: AnimeGuessrQuestion,
-): AnimeGuessrMaxDifficulty {
+): number {
   const difficulty = question.difficulty;
   if (
     typeof difficulty === "number" &&
@@ -155,15 +179,22 @@ export function getAnimeGuessrQuestionDifficulty(
     difficulty >= 1 &&
     difficulty <= 5
   ) {
-    return difficulty as AnimeGuessrMaxDifficulty;
+    return difficulty;
   }
   return ANIME_GUESSR_UNKNOWN_DIFFICULTY;
 }
 
-export function filterAnimeGuessrQuestionsByMaxDifficulty(
+export function getAnimeGuessrTierMaxDifficulty(
+  tier: AnimeGuessrDifficultyTier,
+): number {
+  return ANIME_GUESSR_TIER_MAX_DIFFICULTY[tier];
+}
+
+export function filterAnimeGuessrQuestionsByTier(
   questions: AnimeGuessrQuestion[],
-  maxDifficulty: AnimeGuessrMaxDifficulty,
+  tier: AnimeGuessrDifficultyTier,
 ): AnimeGuessrQuestion[] {
+  const maxDifficulty = getAnimeGuessrTierMaxDifficulty(tier);
   return questions.filter(
     (question) =>
       getAnimeGuessrQuestionDifficulty(question) <= maxDifficulty,
@@ -173,12 +204,9 @@ export function filterAnimeGuessrQuestionsByMaxDifficulty(
 export function pickAnimeGuessrQuestions(
   questions: AnimeGuessrQuestion[],
   count = ANIME_GUESSR_ROUNDS,
-  maxDifficulty: AnimeGuessrMaxDifficulty = ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
+  tier: AnimeGuessrDifficultyTier = ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
 ): AnimeGuessrQuestion[] {
-  const pool = filterAnimeGuessrQuestionsByMaxDifficulty(
-    questions,
-    maxDifficulty,
-  );
+  const pool = filterAnimeGuessrQuestionsByTier(questions, tier);
   return shuffle(pool).slice(0, Math.min(count, pool.length));
 }
 
@@ -204,10 +232,17 @@ export function buildAnimeGuessrImageUrl(
 ): string | undefined {
   if (!imagePath) return undefined;
   if (/^https?:\/\//i.test(imagePath)) return imagePath;
+
+  const path = imagePath.replace(/^\/+/, "");
+  if (!path.startsWith("anime/")) return undefined;
+
+  if (isAnimeGuessrLocalImagesEnabled()) {
+    return `${ANIME_GUESSR_IMAGE_API_PREFIX}/${path}`;
+  }
+
   if (!baseUrl) return undefined;
 
   const base = baseUrl.replace(/\/+$/, "");
-  const path = imagePath.replace(/^\/+/, "");
   return `${base}/${path}`;
 }
 
@@ -314,53 +349,60 @@ export function getAnimeGuessrRoundCountFromSearch(
   return normalizeAnimeGuessrRoundCount(value);
 }
 
-export function normalizeAnimeGuessrMaxDifficulty(
+export function normalizeAnimeGuessrDifficultyTier(
   value: unknown,
-): AnimeGuessrMaxDifficulty {
-  const parsed =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number.parseInt(value, 10)
-        : NaN;
-  if (
-    ANIME_GUESSR_DIFFICULTY_OPTIONS.includes(
-      parsed as AnimeGuessrMaxDifficulty,
-    )
-  ) {
-    return parsed as AnimeGuessrMaxDifficulty;
+): AnimeGuessrDifficultyTier {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (
+      ANIME_GUESSR_DIFFICULTY_TIERS.includes(
+        trimmed as AnimeGuessrDifficultyTier,
+      )
+    ) {
+      return trimmed as AnimeGuessrDifficultyTier;
+    }
+    const legacy = Number.parseInt(trimmed, 10);
+    if (legacy === 1) return "beginner";
+    if (legacy === 2) return "intermediate";
+    if (legacy === 3) return "master";
+    if (legacy === 4 || legacy === 5) return "miracle";
   }
-  return ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY;
+
+  if (typeof value === "number") {
+    if (value === 1) return "beginner";
+    if (value === 2) return "intermediate";
+    if (value === 3) return "master";
+    if (value === 4 || value === 5) return "miracle";
+  }
+
+  return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
 }
 
-export function getStoredAnimeGuessrMaxDifficulty(): AnimeGuessrMaxDifficulty {
-  if (typeof window === "undefined") return ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY;
+export function getStoredAnimeGuessrDifficultyTier(): AnimeGuessrDifficultyTier {
+  if (typeof window === "undefined") {
+    return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
+  }
   try {
     const raw = window.localStorage.getItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY);
-    if (!raw) return ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY;
-    return normalizeAnimeGuessrMaxDifficulty(JSON.parse(raw));
+    if (!raw) return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
+    return normalizeAnimeGuessrDifficultyTier(JSON.parse(raw));
   } catch {
-    return normalizeAnimeGuessrMaxDifficulty(
+    return normalizeAnimeGuessrDifficultyTier(
       window.localStorage.getItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY),
     );
   }
 }
 
-export function saveAnimeGuessrMaxDifficulty(
-  difficulty: AnimeGuessrMaxDifficulty,
-) {
+export function saveAnimeGuessrDifficultyTier(tier: AnimeGuessrDifficultyTier) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    ANIME_GUESSR_DIFFICULTY_STORAGE_KEY,
-    String(difficulty),
-  );
+  window.localStorage.setItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY, tier);
 }
 
-export function getAnimeGuessrMaxDifficultyFromSearch(
+export function getAnimeGuessrDifficultyTierFromSearch(
   search: string,
-): AnimeGuessrMaxDifficulty | null {
+): AnimeGuessrDifficultyTier | null {
   const params = new URLSearchParams(search);
   const value = params.get("difficulty");
   if (value == null) return null;
-  return normalizeAnimeGuessrMaxDifficulty(value);
+  return normalizeAnimeGuessrDifficultyTier(value);
 }

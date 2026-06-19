@@ -14,12 +14,12 @@ import {
 import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
 import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
 import {
-  ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
-  getStoredAnimeGuessrMaxDifficulty,
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  getStoredAnimeGuessrDifficultyTier,
   getStoredAnimeGuessrRoundCount,
-  saveAnimeGuessrMaxDifficulty,
+  saveAnimeGuessrDifficultyTier,
   saveAnimeGuessrRoundCount,
-  type AnimeGuessrMaxDifficulty,
+  type AnimeGuessrDifficultyTier,
   type AnimeGuessrRoundCount,
 } from "~/lib/anime-guessr";
 import {
@@ -74,8 +74,8 @@ const COPY: Record<
     roundsLabel: string;
     roundsOption: (rounds: number) => string;
     difficultyLabel: string;
-    difficultyOption: (level: number) => string;
-    difficultyHint: string;
+    difficultyOption: (tier: AnimeGuessrDifficultyTier) => string;
+    difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
   }
 > = {
   zh: {
@@ -128,9 +128,18 @@ const COPY: Record<
     loading: "加载中...",
     roundsLabel: "局数",
     roundsOption: (rounds) => `${rounds} 轮`,
-    difficultyLabel: "难度上限",
-    difficultyOption: (level) => `${level}★`,
-    difficultyHint: "会抽取难度不超过所选星级的题目；未标注难度视为最高档。",
+    difficultyLabel: "难度档位",
+    difficultyOption: (tier) =>
+      ({ beginner: "入门", intermediate: "进阶", master: "大师", miracle: "神迹" })[
+        tier
+      ],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "仅包含难度 1 的题目。",
+        intermediate: "包含难度 1 与 2 的题目。",
+        master: "包含难度 1、2、3 的题目。",
+        miracle: "包含全部难度题目。",
+      })[tier],
   },
   ja: {
     lang: "日本語",
@@ -182,10 +191,21 @@ const COPY: Record<
     loading: "読み込み中...",
     roundsLabel: "ラウンド数",
     roundsOption: (rounds) => `${rounds} ラウンド`,
-    difficultyLabel: "難易度上限",
-    difficultyOption: (level) => `${level}★`,
-    difficultyHint:
-      "選択した星以下の難易度から出題します。未設定は最高難易度として扱います。",
+    difficultyLabel: "難易度",
+    difficultyOption: (tier) =>
+      ({
+        beginner: "入門",
+        intermediate: "進階",
+        master: "マスター",
+        miracle: "奇跡",
+      })[tier],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "難易度 1 の問題のみ。",
+        intermediate: "難易度 1 と 2 の問題。",
+        master: "難易度 1、2、3 の問題。",
+        miracle: "すべての難易度の問題。",
+      })[tier],
   },
   en: {
     lang: "English",
@@ -238,10 +258,21 @@ const COPY: Record<
     loading: "Loading...",
     roundsLabel: "Rounds",
     roundsOption: (rounds) => `${rounds} rounds`,
-    difficultyLabel: "Difficulty cap",
-    difficultyOption: (level) => `${level}★`,
-    difficultyHint:
-      "Questions with difficulty at or below the selected level are eligible. Unrated entries count as the hardest tier.",
+    difficultyLabel: "Difficulty",
+    difficultyOption: (tier) =>
+      ({
+        beginner: "Beginner",
+        intermediate: "Intermediate",
+        master: "Master",
+        miracle: "Miracle",
+      })[tier],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "Difficulty 1 questions only.",
+        intermediate: "Difficulty 1 and 2 questions.",
+        master: "Difficulty 1, 2, and 3 questions.",
+        miracle: "All difficulty levels.",
+      })[tier],
   },
 };
 
@@ -257,8 +288,8 @@ export default function Home() {
   const [leaderboardRounds, setLeaderboardRounds] = useState<5 | 10>(5);
   const [selectedRoundCount, setSelectedRoundCount] =
     useState<AnimeGuessrRoundCount>(5);
-  const [maxDifficulty, setMaxDifficulty] = useState<AnimeGuessrMaxDifficulty>(
-    ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
+  const [difficultyTier, setDifficultyTier] = useState<AnimeGuessrDifficultyTier>(
+    ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   );
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [profileName, setProfileName] = useState("");
@@ -267,7 +298,7 @@ export default function Home() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const copy = COPY[locale];
   const playUrl = withAnimeLocale(
-    `/game/anime?rounds=${selectedRoundCount}&difficulty=${maxDifficulty}`,
+    `/game/anime?rounds=${selectedRoundCount}&difficulty=${difficultyTier}`,
     locale,
   );
   const loginUrl = withAnimeLocale("/login", locale);
@@ -304,7 +335,7 @@ export default function Home() {
   useEffect(() => {
     setLocale(getStoredAnimeLocale());
     setSelectedRoundCount(getStoredAnimeGuessrRoundCount());
-    setMaxDifficulty(getStoredAnimeGuessrMaxDifficulty());
+    setDifficultyTier(getStoredAnimeGuessrDifficultyTier());
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
     if (storedSession) identifyPostHogUser(storedSession.user);
@@ -330,9 +361,9 @@ export default function Home() {
     saveAnimeGuessrRoundCount(nextRoundCount);
   }
 
-  function handleMaxDifficultyChange(nextMaxDifficulty: AnimeGuessrMaxDifficulty) {
-    setMaxDifficulty(nextMaxDifficulty);
-    saveAnimeGuessrMaxDifficulty(nextMaxDifficulty);
+  function handleDifficultyTierChange(nextDifficultyTier: AnimeGuessrDifficultyTier) {
+    setDifficultyTier(nextDifficultyTier);
+    saveAnimeGuessrDifficultyTier(nextDifficultyTier);
   }
 
   function selectLocale(nextLocale: AnimeLocale) {
@@ -581,9 +612,9 @@ export default function Home() {
 
             <div className="mt-8 flex flex-col gap-4">
               <AnimeDifficultySelector
-                value={maxDifficulty}
+                value={difficultyTier}
                 copy={copy}
-                onChange={handleMaxDifficultyChange}
+                onChange={handleDifficultyTierChange}
               />
               <AnimeRoundCountSelector
                 value={selectedRoundCount}
@@ -597,7 +628,7 @@ export default function Home() {
                   capturePostHogEvent(POSTHOG_EVENTS.homeStartClicked, {
                     locale,
                     rounds: selectedRoundCount,
-                    difficulty: maxDifficulty,
+                    difficulty: difficultyTier,
                   })
                 }
                 className="anime-button"

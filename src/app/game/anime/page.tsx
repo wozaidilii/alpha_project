@@ -8,22 +8,22 @@ import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
 import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
 import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
 import {
-  ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   ANIME_GUESSR_ROUNDS,
   buildAnimeGuessrImageUrl,
   buildGoogleMapsStreetViewUrl,
   fetchAnimeGuessrQuestions,
-  filterAnimeGuessrQuestionsByMaxDifficulty,
-  getAnimeGuessrMaxDifficultyFromSearch,
+  filterAnimeGuessrQuestionsByTier,
+  getAnimeGuessrDifficultyTierFromSearch,
   getAnimeGuessrQuestionText,
   getAnimeGuessrRoundCountFromSearch,
-  getStoredAnimeGuessrMaxDifficulty,
+  getStoredAnimeGuessrDifficultyTier,
   getStoredAnimeGuessrRoundCount,
   pickAnimeGuessrQuestions,
-  saveAnimeGuessrMaxDifficulty,
+  saveAnimeGuessrDifficultyTier,
   saveAnimeGuessrRoundCount,
   toAnimeStreetViewLocation,
-  type AnimeGuessrMaxDifficulty,
+  type AnimeGuessrDifficultyTier,
   type AnimeGuessrQuestion,
   type AnimeGuessrQuestionText,
   type AnimeGuessrRoundCount,
@@ -98,8 +98,8 @@ type GameCopy = {
   roundsLabel: string;
   roundsOption: (rounds: number) => string;
   difficultyLabel: string;
-  difficultyOption: (level: number) => string;
-  difficultyHint: string;
+  difficultyOption: (tier: AnimeGuessrDifficultyTier) => string;
+  difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
   animeClue: string;
   scene: string;
   answer: string;
@@ -189,9 +189,25 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     totalElapsed: (time) => `总用时 ${time}`,
     roundsLabel: "局数",
     roundsOption: (rounds) => `${rounds} 轮`,
-    difficultyLabel: "难度上限",
-    difficultyOption: (level) => `${level}★`,
-    difficultyHint: "会抽取难度不超过所选星级的题目；未标注难度视为最高档。",
+    difficultyLabel: "难度档位",
+    difficultyOption: (tier) =>
+      (
+        {
+          beginner: "入门",
+          intermediate: "进阶",
+          master: "大师",
+          miracle: "神迹",
+        } satisfies Record<AnimeGuessrDifficultyTier, string>
+      )[tier],
+    difficultyHint: (tier) =>
+      (
+        {
+          beginner: "仅包含难度 1 的题目。",
+          intermediate: "包含难度 1 与 2 的题目。",
+          master: "包含难度 1、2、3 的题目。",
+          miracle: "包含全部难度题目。",
+        } satisfies Record<AnimeGuessrDifficultyTier, string>
+      )[tier],
     animeClue: "动漫线索",
     scene: "场景",
     answer: "答案",
@@ -283,10 +299,25 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     totalElapsed: (time) => `合計 ${time}`,
     roundsLabel: "ラウンド数",
     roundsOption: (rounds) => `${rounds} ラウンド`,
-    difficultyLabel: "難易度上限",
-    difficultyOption: (level) => `${level}★`,
-    difficultyHint:
-      "選択した星以下の難易度から出題します。未設定は最高難易度として扱います。",
+    difficultyLabel: "難易度",
+    difficultyOption: (tier) =>
+      (
+        {
+          beginner: "入門",
+          intermediate: "進階",
+          master: "マスター",
+          miracle: "奇跡",
+        } satisfies Record<AnimeGuessrDifficultyTier, string>
+      )[tier],
+    difficultyHint: (tier) =>
+      (
+        {
+          beginner: "難易度 1 の問題のみ。",
+          intermediate: "難易度 1 と 2 の問題。",
+          master: "難易度 1、2、3 の問題。",
+          miracle: "すべての難易度の問題。",
+        } satisfies Record<AnimeGuessrDifficultyTier, string>
+      )[tier],
     animeClue: "アニメヒント",
     scene: "シーン",
     answer: "答え",
@@ -381,10 +412,25 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     totalElapsed: (time) => `Total ${time}`,
     roundsLabel: "Rounds",
     roundsOption: (rounds) => `${rounds} rounds`,
-    difficultyLabel: "Difficulty cap",
-    difficultyOption: (level) => `${level}★`,
-    difficultyHint:
-      "Questions with difficulty at or below the selected level are eligible. Unrated entries count as the hardest tier.",
+    difficultyLabel: "Difficulty",
+    difficultyOption: (tier) =>
+      (
+        {
+          beginner: "Beginner",
+          intermediate: "Intermediate",
+          master: "Master",
+          miracle: "Miracle",
+        } satisfies Record<AnimeGuessrDifficultyTier, string>
+      )[tier],
+    difficultyHint: (tier) =>
+      (
+        {
+          beginner: "Difficulty 1 questions only.",
+          intermediate: "Difficulty 1 and 2 questions.",
+          master: "Difficulty 1, 2, and 3 questions.",
+          miracle: "All difficulty levels.",
+        } satisfies Record<AnimeGuessrDifficultyTier, string>
+      )[tier],
     animeClue: "Anime clue",
     scene: "Scene",
     answer: "Answer",
@@ -573,8 +619,8 @@ export default function AnimeGuessrPage() {
   const [roundCount, setRoundCount] = useState<AnimeGuessrRoundCount>(
     ANIME_GUESSR_ROUNDS,
   );
-  const [maxDifficulty, setMaxDifficulty] = useState<AnimeGuessrMaxDifficulty>(
-    ANIME_GUESSR_DEFAULT_MAX_DIFFICULTY,
+  const [difficultyTier, setDifficultyTier] = useState<AnimeGuessrDifficultyTier>(
+    ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   );
   const roundStartedAtRef = useRef(Date.now());
   const recordedStartKeyRef = useRef<string | null>(null);
@@ -617,7 +663,7 @@ export default function AnimeGuessrPage() {
     () => (current ? toAnimeStreetViewLocation(current, locale) : null),
     [current, locale],
   );
-  const gameTimerKey = `${reloadKey}:${roundCount}:${maxDifficulty}:${questions.map((question) => question.id).join(",")}`;
+  const gameTimerKey = `${reloadKey}:${roundCount}:${difficultyTier}:${questions.map((question) => question.id).join(",")}`;
   const totalElapsedSeconds = useElapsedSeconds(
     loadState === "ready" && phase !== "final" && !guestBlocked,
     gameTimerKey,
@@ -638,13 +684,13 @@ export default function AnimeGuessrPage() {
     setRoundCount(nextRoundCount);
     saveAnimeGuessrRoundCount(nextRoundCount);
 
-    const difficultyFromSearch = getAnimeGuessrMaxDifficultyFromSearch(
+    const difficultyFromSearch = getAnimeGuessrDifficultyTierFromSearch(
       window.location.search,
     );
-    const nextMaxDifficulty =
-      difficultyFromSearch ?? getStoredAnimeGuessrMaxDifficulty();
-    setMaxDifficulty(nextMaxDifficulty);
-    saveAnimeGuessrMaxDifficulty(nextMaxDifficulty);
+    const nextDifficultyTier =
+      difficultyFromSearch ?? getStoredAnimeGuessrDifficultyTier();
+    setDifficultyTier(nextDifficultyTier);
+    saveAnimeGuessrDifficultyTier(nextDifficultyTier);
   }, []);
 
   const handleRoundCountChange = useCallback(
@@ -657,14 +703,14 @@ export default function AnimeGuessrPage() {
     [roundCount],
   );
 
-  const handleMaxDifficultyChange = useCallback(
-    (nextMaxDifficulty: AnimeGuessrMaxDifficulty) => {
-      if (nextMaxDifficulty === maxDifficulty) return;
-      saveAnimeGuessrMaxDifficulty(nextMaxDifficulty);
-      setMaxDifficulty(nextMaxDifficulty);
+  const handleDifficultyTierChange = useCallback(
+    (nextDifficultyTier: AnimeGuessrDifficultyTier) => {
+      if (nextDifficultyTier === difficultyTier) return;
+      saveAnimeGuessrDifficultyTier(nextDifficultyTier);
+      setDifficultyTier(nextDifficultyTier);
       setReloadKey((value) => value + 1);
     },
-    [maxDifficulty],
+    [difficultyTier],
   );
 
   const canChangeGameSetup =
@@ -719,15 +765,8 @@ export default function AnimeGuessrPage() {
     void fetchAnimeGuessrQuestions()
       .then((pool) => {
         if (!active) return;
-        const eligible = filterAnimeGuessrQuestionsByMaxDifficulty(
-          pool,
-          maxDifficulty,
-        );
-        const picked = pickAnimeGuessrQuestions(
-          pool,
-          roundCount,
-          maxDifficulty,
-        );
+        const eligible = filterAnimeGuessrQuestionsByTier(pool, difficultyTier);
+        const picked = pickAnimeGuessrQuestions(pool, roundCount, difficultyTier);
         if (picked.length < roundCount) {
           setLoadState("error");
           setLoadMessage(
@@ -755,7 +794,7 @@ export default function AnimeGuessrPage() {
     return () => {
       active = false;
     };
-  }, [copy, maxDifficulty, roundCount]);
+  }, [copy, difficultyTier, roundCount]);
 
   useEffect(() => {
     if (!ready) return;
@@ -1089,9 +1128,9 @@ export default function AnimeGuessrPage() {
         </p>
         <div className="flex max-w-md flex-col gap-4">
           <AnimeDifficultySelector
-            value={maxDifficulty}
+            value={difficultyTier}
             copy={copy}
-            onChange={handleMaxDifficultyChange}
+            onChange={handleDifficultyTierChange}
           />
           <AnimeRoundCountSelector
             value={roundCount}
@@ -1186,10 +1225,10 @@ export default function AnimeGuessrPage() {
 
           <div className="mb-6 flex flex-col items-center gap-4">
             <AnimeDifficultySelector
-              value={maxDifficulty}
+              value={difficultyTier}
               disabled={!canChangeGameSetup}
               copy={copy}
-              onChange={handleMaxDifficultyChange}
+              onChange={handleDifficultyTierChange}
             />
             <AnimeRoundCountSelector
               value={roundCount}
