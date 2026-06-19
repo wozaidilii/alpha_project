@@ -32,6 +32,86 @@ Questions to answer:
 
 <!-- Patterns that must always be used -->
 
+### Scenario: Passive Root Telemetry Integrations
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing passive browser telemetry providers rendered at the app root, such as Vercel Web Analytics, Vercel Speed Insights, or PostHog capture bootstrapping.
+- Applies to `src/app/layout.tsx`, telemetry provider components under `src/components/`, `package.json`, and package lockfiles.
+
+#### 2. Signatures
+
+- Vercel Web Analytics:
+
+```tsx
+import { Analytics } from "@vercel/analytics/next";
+
+<Analytics />;
+```
+
+- Vercel Speed Insights:
+
+```tsx
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
+<SpeedInsights />;
+```
+
+- PostHog remains project-owned and uses `PostHogScript` plus `PostHogRouteTracker`.
+
+#### 3. Contracts
+
+- Passive telemetry components belong in the root layout body so they are mounted once for the whole app.
+- Adding one telemetry provider must not remove or replace existing providers unless the task explicitly asks for a provider migration.
+- Public analytics tokens must remain public-only. Secret analytics API keys do not belong in client components or `NEXT_PUBLIC_*` variables.
+- Dependency additions must use the existing package manager and update the lockfile.
+
+#### 4. Validation & Error Matrix
+
+- Missing provider package -> TypeScript import failure during `npm run check`.
+- Provider component rendered outside the root layout -> duplicate page/app events are likely.
+- Replacing existing telemetry unintentionally -> loss of funnel data for that provider.
+- Secret server-side API key exposed in browser bundle -> security bug; move it to server-only env handling.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: add the provider package, import its root component in `src/app/layout.tsx`, preserve existing PostHog components, then run check/test/build.
+- Base: install one passive provider and verify the app layout still compiles.
+- Bad: merge an old provider PR branch directly when it reverts unrelated recent app changes, or remove existing tracking while adding a second provider.
+
+#### 6. Tests Required
+
+- `npm run check` after any telemetry import or dependency change.
+- `npm test` to catch unrelated package-lock or dependency resolution regressions.
+- `npm run build` to verify the root layout compiles in production mode.
+- Browser smoke is optional for passive providers, but useful when changing custom telemetry components such as PostHog.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```tsx
+<body>
+  <TRPCReactProvider>{children}</TRPCReactProvider>
+  {/* Removed existing PostHog while adding Vercel Analytics. */}
+  <Analytics />
+</body>
+```
+
+Correct:
+
+```tsx
+<body>
+  <PostHogScript />
+  <TRPCReactProvider>
+    <PostHogRouteTracker />
+    {children}
+  </TRPCReactProvider>
+  <Analytics />
+  <SpeedInsights />
+</body>
+```
+
 ### Scenario: Third-Party Browser Map / Street View Integrations
 
 #### 1. Scope / Trigger
