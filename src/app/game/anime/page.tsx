@@ -50,7 +50,7 @@ import {
   storeGuestProgress,
   type GuestProgress,
 } from "~/lib/guest-progress";
-import { capturePostHogEvent } from "~/lib/posthog";
+import { capturePostHogEvent, POSTHOG_EVENTS } from "~/lib/posthog";
 import { api } from "~/trpc/react";
 
 type Phase = "playing" | "result" | "final";
@@ -707,7 +707,7 @@ export default function AnimeGuessrPage() {
       setGameTimedOut(true);
       setPhase("final");
       capturePostHogEvent(
-        "anime_game_timed_out",
+        POSTHOG_EVENTS.animeGameTimedOut,
         {
           rounds_completed: results.length,
           auth_state: session ? "logged_in" : "guest",
@@ -742,7 +742,7 @@ export default function AnimeGuessrPage() {
         route: "/game/anime",
       });
       capturePostHogEvent(
-        "anime_game_started",
+        POSTHOG_EVENTS.animeGameStarted,
         { rounds: questions.length, auth_state: "logged_in" },
         session.user.id,
       );
@@ -754,7 +754,7 @@ export default function AnimeGuessrPage() {
       setGuestProgress(progress);
       setGuestBlocked(true);
       setAuthPromptReason("quota");
-      capturePostHogEvent("guest_quota_blocked", {
+      capturePostHogEvent(POSTHOG_EVENTS.guestQuotaBlocked, {
         games_started_today: progress.startedToday,
       });
       return;
@@ -763,7 +763,7 @@ export default function AnimeGuessrPage() {
     const nextProgress = markGuestGameStarted(progress);
     storeGuestProgress(nextProgress);
     setGuestProgress(nextProgress);
-    capturePostHogEvent("anime_game_started", {
+    capturePostHogEvent(POSTHOG_EVENTS.animeGameStarted, {
       rounds: questions.length,
       auth_state: "guest",
       games_remaining: getGuestGamesRemaining(nextProgress),
@@ -813,7 +813,7 @@ export default function AnimeGuessrPage() {
       });
     }
     capturePostHogEvent(
-      "anime_round_submitted",
+      POSTHOG_EVENTS.animeRoundSubmitted,
       {
         ...roundPayload,
         auth_state: session ? "logged_in" : "guest",
@@ -844,7 +844,7 @@ export default function AnimeGuessrPage() {
       `${window.location.origin}${gameNextUrl}`,
     );
     capturePostHogEvent(
-      "anime_score_shared",
+      POSTHOG_EVENTS.animeScoreShared,
       { score: totalScore, auth_state: session ? "logged_in" : "guest" },
       session?.user.id,
     );
@@ -902,7 +902,7 @@ export default function AnimeGuessrPage() {
         rounds: results.length,
       });
       capturePostHogEvent(
-        "anime_game_completed",
+        POSTHOG_EVENTS.animeGameCompleted,
         {
           score: totalScore,
           rounds: results.length,
@@ -925,7 +925,7 @@ export default function AnimeGuessrPage() {
       mode: "anime",
       rounds: results.length,
     });
-    capturePostHogEvent("anime_game_completed", {
+    capturePostHogEvent(POSTHOG_EVENTS.animeGameCompleted, {
       score: totalScore,
       rounds: results.length,
       auth_state: "guest",

@@ -194,6 +194,10 @@ recordActivity({
 - Logged-in completion must write `game_sessions.user_id` and may also record `player_activity_events`.
 - Retention prompts should appear only at retention points: new local record, leaderboard intent, history-save intent, or daily guest quota exhausted.
 - PostHog capture is optional and must be no-op when `NEXT_PUBLIC_POSTHOG_KEY` is missing; analytics failures must never block gameplay.
+- PostHog browser setup must initialize the official JS snippet once from the root layout when `NEXT_PUBLIC_POSTHOG_KEY` is present. Keep `person_profiles = 'identified_only'`, disable automatic pageview/autocapture, and track only the project-owned events from `POSTHOG_EVENTS`.
+- Client events must go through `capturePostHogEvent`; do not call `window.posthog.capture` directly from pages or components. The helper must prefer the browser SDK and keep the direct `/capture/` fallback for early-load events.
+- After a user session is created or restored, call `identifyPostHogUser` so PostHog links future events to `players.id`. On logout, call `resetPostHogUser` and restore guest registration.
+- Do not include passwords, verification codes, room invite codes, raw OAuth tokens, or nested objects in PostHog event properties. Email/name/provider/country may be sent only as PostHog identify person properties, not as arbitrary event payloads.
 - Google OAuth must sanitize `next` paths and reject external redirects.
 
 ### 4. Validation & Error Matrix

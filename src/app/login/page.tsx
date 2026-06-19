@@ -5,6 +5,11 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { normalizeEmailLoginCode } from "~/lib/email-login-code";
 import { savePlayerSession } from "~/lib/player-session";
+import {
+  capturePostHogEvent,
+  identifyPostHogUser,
+  POSTHOG_EVENTS,
+} from "~/lib/posthog";
 import { api } from "~/trpc/react";
 
 type AuthMode = "password" | "register" | "reset";
@@ -70,20 +75,36 @@ export default function LoginPage() {
 
   const handleAuthSuccess = (
     session: Parameters<typeof savePlayerSession>[0],
+    eventName:
+      | typeof POSTHOG_EVENTS.loginCompleted
+      | typeof POSTHOG_EVENTS.registerCompleted
+      | typeof POSTHOG_EVENTS.passwordResetCompleted,
   ) => {
     savePlayerSession(session);
+    identifyPostHogUser(session.user);
+    capturePostHogEvent(
+      eventName,
+      {
+        provider: session.user.provider ?? "password",
+      },
+      session.user.id,
+    );
     router.replace(getNextUrl());
   };
 
   const loginWithPassword = api.player.loginWithPassword.useMutation({
-    onSuccess: handleAuthSuccess,
+    onSuccess(session) {
+      handleAuthSuccess(session, POSTHOG_EVENTS.loginCompleted);
+    },
     onError(error) {
       setMessage(error.message);
     },
   });
 
   const registerWithPassword = api.player.registerWithPassword.useMutation({
-    onSuccess: handleAuthSuccess,
+    onSuccess(session) {
+      handleAuthSuccess(session, POSTHOG_EVENTS.registerCompleted);
+    },
     onError(error) {
       setMessage(error.message);
     },
@@ -106,7 +127,9 @@ export default function LoginPage() {
     });
 
   const resetPasswordWithCode = api.player.resetPasswordWithCode.useMutation({
-    onSuccess: handleAuthSuccess,
+    onSuccess(session) {
+      handleAuthSuccess(session, POSTHOG_EVENTS.passwordResetCompleted);
+    },
     onError(error) {
       setMessage(error.message);
     },
@@ -217,6 +240,11 @@ export default function LoginPage() {
 
             <a
               href={getGoogleLoginUrl()}
+              onClick={() =>
+                capturePostHogEvent(POSTHOG_EVENTS.googleLoginStarted, {
+                  next_path: getNextUrl(),
+                })
+              }
               className="mb-5 flex min-h-12 w-full items-center justify-center rounded-xl border border-white/15 bg-white px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
             >
               使用 Google 继续

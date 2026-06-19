@@ -16,7 +16,12 @@ import {
   getStoredPlayerSession,
   savePlayerSession,
 } from "~/lib/player-session";
-import { capturePostHogEvent } from "~/lib/posthog";
+import {
+  capturePostHogEvent,
+  identifyPostHogUser,
+  POSTHOG_EVENTS,
+  resetPostHogUser,
+} from "~/lib/posthog";
 import { type PlayerSession } from "~/types/player";
 import { api } from "~/trpc/react";
 
@@ -182,10 +187,16 @@ export default function Home() {
       if (!session) return;
       const nextSession = { token: session.token, user };
       savePlayerSession(nextSession);
+      identifyPostHogUser(user);
       setSession(nextSession);
       setProfileName(user.name);
       setProfileCountryCode(user.countryCode ?? "");
       setProfileMessage(copy.saved);
+      capturePostHogEvent(
+        POSTHOG_EVENTS.profileUpdated,
+        { has_country: Boolean(user.countryCode) },
+        user.id,
+      );
       void leaderboardQuery.refetch();
     },
   });
@@ -194,6 +205,7 @@ export default function Home() {
     setLocale(getStoredAnimeLocale());
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
+    if (storedSession) identifyPostHogUser(storedSession.user);
     setProfileName(storedSession?.user.name ?? "");
     setProfileCountryCode(storedSession?.user.countryCode ?? "");
   }, []);
@@ -204,6 +216,7 @@ export default function Home() {
       if (!current) return current;
       const nextSession = { token: current.token, user: meQuery.data };
       savePlayerSession(nextSession);
+      identifyPostHogUser(meQuery.data);
       return nextSession;
     });
     setProfileName(meQuery.data.name);
@@ -228,6 +241,7 @@ export default function Home() {
 
   function handleLogout() {
     clearPlayerSession();
+    resetPostHogUser();
     setSession(null);
     setProfileName("");
     setProfileCountryCode("");
@@ -286,7 +300,19 @@ export default function Home() {
                   aria-label={copy.profileTitle}
                   aria-expanded={profileMenuOpen}
                   aria-controls="home-profile-menu"
-                  onClick={() => setProfileMenuOpen((value) => !value)}
+                  onClick={() =>
+                    setProfileMenuOpen((value) => {
+                      const nextValue = !value;
+                      if (nextValue) {
+                        capturePostHogEvent(
+                          POSTHOG_EVENTS.profileOpened,
+                          { source: "home" },
+                          session.user.id,
+                        );
+                      }
+                      return nextValue;
+                    })
+                  }
                   className="grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-pink-200/40 bg-white/10 text-lg shadow-lg shadow-pink-950/20 transition hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                 >
                   {session.user.avatarUrl ? (
@@ -415,7 +441,9 @@ export default function Home() {
               <Link
                 href={playUrl}
                 onClick={() =>
-                  capturePostHogEvent("home_start_clicked", { locale })
+                  capturePostHogEvent(POSTHOG_EVENTS.homeStartClicked, {
+                    locale,
+                  })
                 }
                 className="anime-button"
               >
@@ -424,7 +452,7 @@ export default function Home() {
               <Link
                 href={battleUrl}
                 onClick={() =>
-                  capturePostHogEvent("home_battle_clicked", {
+                  capturePostHogEvent(POSTHOG_EVENTS.homeBattleClicked, {
                     locale,
                     loggedIn: Boolean(session),
                   })
