@@ -6,6 +6,7 @@ import {
   loginPlayer,
   loginPlayerWithPassword,
   recordBattleHistory,
+  recordGameSession,
   recordPlayerActivity,
   registerPlayerWithPassword,
   requestEmailLoginCode,
@@ -291,6 +292,21 @@ export const playerRouter = createTRPCRouter({
           userAgent: ctx.headers.get("user-agent"),
         }),
       );
+    }),
+
+  recordGameSession: publicProcedure
+    .input(
+      z.object({
+        token: z.string().min(1).optional(),
+        guestId: z.string().trim().min(1).max(120).optional(),
+        score: z.number().int().nonnegative().max(50000),
+        country: z.string().trim().min(1).max(80),
+        mode: z.string().trim().min(1).max(40),
+        rounds: z.number().int().nonnegative().max(20),
+      }),
+    )
+    .mutation(({ input }) => {
+      return withSessionError(() => recordGameSession(input));
     }),
 
   recordBattle: publicProcedure

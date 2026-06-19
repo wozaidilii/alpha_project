@@ -21,14 +21,22 @@ import {
   locationRoundScore,
   LOCATION_ROUND_SCORE_MAX,
 } from "~/lib/scoring";
+import { AuthLoading, useEmailSession } from "~/lib/player-session-guard";
 import {
-  AuthLoading,
-  useCompletedPlayerSession,
-} from "~/lib/player-session-guard";
+  canStartGuestGame,
+  getGuestGamesRemaining,
+  loadGuestProgress,
+  markGuestGameStarted,
+  saveGuestGameResult,
+  storeGuestProgress,
+  type GuestProgress,
+} from "~/lib/guest-progress";
+import { capturePostHogEvent } from "~/lib/posthog";
 import { api } from "~/trpc/react";
 
 type Phase = "playing" | "result" | "final";
 type LoadState = "loading" | "ready" | "error";
+type AuthPromptReason = "record" | "leaderboard" | "history" | "quota";
 
 interface AnimeRoundResult {
   question: AnimeGuessrQuestion;
@@ -39,6 +47,28 @@ interface AnimeRoundResult {
   elapsedSeconds: number;
   score: number;
 }
+
+const AUTH_PROMPT_COPY: Record<
+  AuthPromptReason,
+  { title: string; body: string }
+> = {
+  record: {
+    title: "保存这次新纪录",
+    body: "登录后可以把本地新纪录保存到账号，后续换设备也能继续追踪成绩。",
+  },
+  leaderboard: {
+    title: "登录查看排行榜",
+    body: "排行榜需要账号成绩，登录后会把本局分数写入你的成绩记录。",
+  },
+  history: {
+    title: "保存历史成绩",
+    body: "游客成绩只保存在当前浏览器。登录后可以长期保存每局记录。",
+  },
+  quota: {
+    title: "今日游客局数已用完",
+    body: "游客每天可以免费玩 3 局。登录后可以继续保存成绩并跨设备查看记录。",
+  },
+};
 
 function formatDistance(distanceKm: number): string {
   if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
@@ -55,6 +85,49 @@ function getRank(score: number) {
   if (score >= 240) return { label: "动漫地理通", symbol: "B" };
   if (score >= 120) return { label: "巡礼新手", symbol: "C" };
   return { label: "迷路中", symbol: "D" };
+}
+
+function AuthPromptModal({
+  reason,
+  onClose,
+}: {
+  reason: AuthPromptReason;
+  onClose: () => void;
+}) {
+  const copy = AUTH_PROMPT_COPY[reason];
+  const next = "/game/anime";
+
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/75 px-4 backdrop-blur-sm">
+      <div className="anime-panel w-full max-w-md p-6">
+        <div className="anime-chip mb-4 w-fit">账号同步</div>
+        <h2 className="text-2xl font-black text-pink-100">{copy.title}</h2>
+        <p className="mt-3 text-sm leading-6 text-pink-50/70">{copy.body}</p>
+
+        <div className="mt-6 grid gap-3">
+          <Link
+            href={`/api/auth/google/start?next=${encodeURIComponent(next)}`}
+            className="anime-button text-center"
+          >
+            使用 Google 继续
+          </Link>
+          <Link
+            href={`/login?next=${encodeURIComponent(next)}`}
+            className="anime-button-secondary text-center"
+          >
+            使用邮箱登录 / 注册
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 rounded-xl text-sm font-bold text-cyan-100/70 transition hover:bg-white/10 hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+          >
+            继续游客模式
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
@@ -92,10 +165,17 @@ function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
 }
 
 export default function AnimeGuessrPage() {
-  const { ready, session } = useCompletedPlayerSession();
+  const { ready, session } = useEmailSession();
   const [questions, setQuestions] = useState<AnimeGuessrQuestion[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadMessage, setLoadMessage] = useState("正在加载动漫巡礼题库...");
+  const [guestProgress, setGuestProgress] = useState<GuestProgress | null>(
+    null,
+  );
+  const [authPromptReason, setAuthPromptReason] =
+    useState<AuthPromptReason | null>(null);
+  const [guestBlocked, setGuestBlocked] = useState(false);
+  const [shareMessage, setShareMessage] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [round, setRound] = useState(0);
   const [phase, setPhase] = useState<Phase>("playing");
@@ -103,7 +183,9 @@ export default function AnimeGuessrPage() {
   const [results, setResults] = useState<AnimeRoundResult[]>([]);
   const roundStartedAtRef = useRef(Date.now());
   const recordedStartKeyRef = useRef<string | null>(null);
+  const recordedCompletionKeyRef = useRef<string | null>(null);
   const recordActivity = api.player.recordActivity.useMutation();
+  const recordGameSession = api.player.recordGameSession.useMutation();
 
   const current = questions[round];
   const latestResult = results[results.length - 1];
@@ -134,7 +216,10 @@ export default function AnimeGuessrPage() {
     setGuess(null);
     setResults([]);
     setPhase("playing");
+    setGuestBlocked(false);
+    setShareMessage("");
     roundStartedAtRef.current = Date.now();
+    recordedCompletionKeyRef.current = null;
 
     void fetchAnimeGuessrQuestions()
       .then((pool) => {
@@ -166,6 +251,11 @@ export default function AnimeGuessrPage() {
 
   useEffect(() => {
     if (!ready) return;
+    setGuestProgress(loadGuestProgress());
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
     return loadQuestions();
   }, [loadQuestions, ready, reloadKey]);
 
@@ -175,20 +265,49 @@ export default function AnimeGuessrPage() {
   }, [current, phase]);
 
   useEffect(() => {
-    if (!session || loadState !== "ready" || questions.length === 0) return;
+    if (loadState !== "ready" || questions.length === 0) return;
     const key = `${reloadKey}:${questions.map((question) => question.id).join(",")}`;
     if (recordedStartKeyRef.current === key) return;
     recordedStartKeyRef.current = key;
-    recordActivity.mutate({
-      token: session.token,
-      eventType: "anime_game_started",
-      payload: { rounds: questions.length },
-      route: "/game/anime",
+
+    if (session) {
+      recordActivity.mutate({
+        token: session.token,
+        eventType: "anime_game_started",
+        payload: { rounds: questions.length },
+        route: "/game/anime",
+      });
+      capturePostHogEvent(
+        "anime_game_started",
+        { rounds: questions.length, auth_state: "logged_in" },
+        session.user.id,
+      );
+      return;
+    }
+
+    const progress = loadGuestProgress();
+    if (!canStartGuestGame(progress)) {
+      setGuestProgress(progress);
+      setGuestBlocked(true);
+      setAuthPromptReason("quota");
+      capturePostHogEvent("guest_quota_blocked", {
+        games_started_today: progress.startedToday,
+      });
+      return;
+    }
+
+    const nextProgress = markGuestGameStarted(progress);
+    storeGuestProgress(nextProgress);
+    setGuestProgress(nextProgress);
+    capturePostHogEvent("anime_game_started", {
+      rounds: questions.length,
+      auth_state: "guest",
+      games_remaining: getGuestGamesRemaining(nextProgress),
     });
   }, [loadState, questions, recordActivity, reloadKey, session]);
 
   function handleSubmit() {
-    if (!current || !guess || !session) return;
+    if (!current || !guess || guestBlocked) return;
 
     const distanceKm = haversineDistance(
       current.lat,
@@ -210,34 +329,34 @@ export default function AnimeGuessrPage() {
         score: score.total,
       },
     ]);
-    recordActivity.mutate({
-      token: session.token,
-      eventType: "anime_round_submitted",
-      payload: {
-        round: round + 1,
-        questionId: current.id,
-        score: score.total,
-        distanceKm: Number(distanceKm.toFixed(3)),
-        elapsedSeconds: Math.round(elapsedSeconds),
+    const roundPayload = {
+      round: round + 1,
+      questionId: current.id,
+      score: score.total,
+      distanceKm: Number(distanceKm.toFixed(3)),
+      elapsedSeconds: Math.round(elapsedSeconds),
+    };
+    if (session) {
+      recordActivity.mutate({
+        token: session.token,
+        eventType: "anime_round_submitted",
+        payload: roundPayload,
+        route: "/game/anime",
+      });
+    }
+    capturePostHogEvent(
+      "anime_round_submitted",
+      {
+        ...roundPayload,
+        auth_state: session ? "logged_in" : "guest",
       },
-      route: "/game/anime",
-    });
+      session?.user.id,
+    );
     setPhase("result");
   }
 
   function handleNext() {
     if (round + 1 >= questions.length) {
-      if (session) {
-        recordActivity.mutate({
-          token: session.token,
-          eventType: "anime_game_completed",
-          payload: {
-            rounds: results.length,
-            totalScore,
-          },
-          route: "/game/anime",
-        });
-      }
       setPhase("final");
       return;
     }
@@ -250,6 +369,99 @@ export default function AnimeGuessrPage() {
   function handleRestart() {
     setReloadKey((value) => value + 1);
   }
+
+  async function handleShareScore() {
+    const text = `我在 AniGuessr 猜动漫模式拿到 ${totalScore.toLocaleString()} 分，你也来试试：${window.location.origin}/game/anime`;
+    capturePostHogEvent(
+      "anime_score_shared",
+      { score: totalScore, auth_state: session ? "logged_in" : "guest" },
+      session?.user.id,
+    );
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "AniGuessr 成绩", text });
+        setShareMessage("分享面板已打开。");
+        return;
+      }
+
+      await navigator.clipboard.writeText(text);
+      setShareMessage("成绩文案已复制。");
+    } catch {
+      setShareMessage("分享未完成，可以稍后再试。");
+    }
+  }
+
+  useEffect(() => {
+    if (phase !== "final" || results.length === 0) return;
+    const key = `${reloadKey}:${results.map((result) => result.question.id).join(",")}:${totalScore}`;
+    if (recordedCompletionKeyRef.current === key) return;
+    recordedCompletionKeyRef.current = key;
+
+    const maxScore = results.length * LOCATION_ROUND_SCORE_MAX;
+    const summary = {
+      id: key,
+      score: totalScore,
+      maxScore,
+      rounds: results.length,
+      playedAt: new Date().toISOString(),
+    };
+
+    if (session) {
+      recordActivity.mutate({
+        token: session.token,
+        eventType: "anime_game_completed",
+        payload: {
+          rounds: results.length,
+          totalScore,
+        },
+        route: "/game/anime",
+      });
+      recordGameSession.mutate({
+        token: session.token,
+        score: totalScore,
+        country: "global",
+        mode: "anime",
+        rounds: results.length,
+      });
+      capturePostHogEvent(
+        "anime_game_completed",
+        { score: totalScore, rounds: results.length, auth_state: "logged_in" },
+        session.user.id,
+      );
+      return;
+    }
+
+    const currentProgress = loadGuestProgress();
+    const saved = saveGuestGameResult(currentProgress, summary);
+    storeGuestProgress(saved.progress);
+    setGuestProgress(saved.progress);
+    recordGameSession.mutate({
+      guestId: saved.progress.guestId,
+      score: totalScore,
+      country: "global",
+      mode: "anime",
+      rounds: results.length,
+    });
+    capturePostHogEvent("anime_game_completed", {
+      score: totalScore,
+      rounds: results.length,
+      auth_state: "guest",
+      is_new_best: saved.isNewBest,
+    });
+
+    if (saved.isNewBest) {
+      setAuthPromptReason("record");
+    }
+  }, [
+    phase,
+    recordActivity,
+    recordGameSession,
+    reloadKey,
+    results,
+    session,
+    totalScore,
+  ]);
 
   const handleCurrentStreetViewUnavailable = useCallback(() => {
     if (!current) return;
@@ -286,7 +498,47 @@ export default function AnimeGuessrPage() {
     );
   }, [current, questions, results.length, round]);
 
-  if (!ready || !session) return <AuthLoading />;
+  if (!ready) return <AuthLoading />;
+
+  if (guestBlocked) {
+    return (
+      <main className="anime-shell grid min-h-screen place-items-center px-5 text-center text-white">
+        {authPromptReason && (
+          <AuthPromptModal
+            reason={authPromptReason}
+            onClose={() => setAuthPromptReason(null)}
+          />
+        )}
+        <div className="anime-panel w-full max-w-md p-7">
+          <div className="anime-chip mx-auto mb-4 w-fit">游客模式</div>
+          <h1 className="text-3xl font-black text-pink-100">
+            今日免费局数已用完
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-pink-50/70">
+            未登录每天可以免费玩 3
+            局，并保存在当前浏览器。登录后可以继续保存成绩和历史记录。
+          </p>
+          <div className="mt-6 grid gap-3">
+            <Link
+              href="/api/auth/google/start?next=/game/anime"
+              className="anime-button"
+            >
+              使用 Google 继续
+            </Link>
+            <Link
+              href="/login?next=/game/anime"
+              className="anime-button-secondary"
+            >
+              使用邮箱登录 / 注册
+            </Link>
+            <Link href="/" className="text-sm font-bold text-cyan-100/70">
+              返回主页
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (loadState === "loading") {
     return (
@@ -328,6 +580,12 @@ export default function AnimeGuessrPage() {
 
     return (
       <main className="anime-shell flex min-h-screen flex-col text-white">
+        {authPromptReason && (
+          <AuthPromptModal
+            reason={authPromptReason}
+            onClose={() => setAuthPromptReason(null)}
+          />
+        )}
         <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-3 backdrop-blur">
           <h1 className="text-xl font-black text-pink-200">AniGuessr</h1>
           <Link
@@ -352,6 +610,12 @@ export default function AnimeGuessrPage() {
             <div className="mt-1 text-pink-50/60">
               / {maxScore.toLocaleString()} 分
             </div>
+            {!session && guestProgress && (
+              <div className="mt-4 rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">
+                游客今日剩余 {getGuestGamesRemaining(guestProgress)} 局 ·
+                本地最高 {guestProgress.bestScore.toLocaleString()} 分
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -380,15 +644,50 @@ export default function AnimeGuessrPage() {
             ))}
           </div>
 
-          <div className="mt-8 flex gap-3">
+          {shareMessage && (
+            <div className="mt-6 rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-4 py-3 text-sm text-cyan-50">
+              {shareMessage}
+            </div>
+          )}
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleShareScore}
+              className="anime-button-secondary"
+            >
+              分享成绩
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                session
+                  ? setShareMessage("排行榜即将开放，当前成绩已保存。")
+                  : setAuthPromptReason("leaderboard")
+              }
+              className="anime-button-secondary"
+            >
+              查看排行榜
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                session
+                  ? setShareMessage("历史成绩已保存到账号。")
+                  : setAuthPromptReason("history")
+              }
+              className="anime-button-secondary"
+            >
+              保存历史成绩
+            </button>
             <button
               type="button"
               onClick={handleRestart}
-              className="anime-button flex-1"
+              className="anime-button"
             >
               再来一局
             </button>
-            <Link href="/" className="anime-button-secondary flex-1">
+            <Link href="/" className="anime-button-secondary sm:col-span-2">
               返回主页
             </Link>
           </div>
@@ -409,9 +708,16 @@ export default function AnimeGuessrPage() {
             返回主页
           </Link>
         </div>
-        <span className="anime-chip">
-          第 {round + 1} / {questions.length} 轮{roundResult ? "结果" : ""}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {!session && guestProgress && (
+            <span className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-3 py-1 text-xs font-bold text-cyan-50">
+              游客 · 今日剩余 {getGuestGamesRemaining(guestProgress)} 局
+            </span>
+          )}
+          <span className="anime-chip">
+            第 {round + 1} / {questions.length} 轮{roundResult ? "结果" : ""}
+          </span>
+        </div>
       </header>
 
       <div className="relative flex-1 overflow-hidden">

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { normalizeEmailLoginCode } from "~/lib/email-login-code";
 import { savePlayerSession } from "~/lib/player-session";
@@ -21,6 +21,10 @@ function getNextUrl() {
   const next = new URLSearchParams(window.location.search).get("next");
   if (!next?.startsWith("/") || next.startsWith("//")) return "/game/anime";
   return next;
+}
+
+function getGoogleLoginUrl() {
+  return `/api/auth/google/start?next=${encodeURIComponent(getNextUrl())}`;
 }
 
 export default function LoginPage() {
@@ -89,6 +93,13 @@ export default function LoginPage() {
       setMessage(error.message);
     },
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("error") === "google") {
+      setMessage("Google 登录失败，请稍后再试或使用邮箱登录。");
+    }
+  }, []);
 
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -181,6 +192,13 @@ export default function LoginPage() {
                 </button>
               ))}
             </div>
+
+            <a
+              href={getGoogleLoginUrl()}
+              className="mb-5 flex min-h-12 w-full items-center justify-center rounded-xl border border-white/15 bg-white px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+            >
+              使用 Google 继续
+            </a>
 
             {mode === "password" && (
               <form onSubmit={handlePasswordLogin} className="space-y-5">

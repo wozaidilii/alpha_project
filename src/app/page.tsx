@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { capturePostHogEvent } from "~/lib/posthog";
 
 type Locale = "zh" | "ja" | "en";
 
@@ -71,7 +72,7 @@ const COPY: Record<
 };
 
 const LOCALES: Locale[] = ["zh", "ja", "en"];
-const PLAY_URL = "/login?next=/game/anime";
+const PLAY_URL = "/game/anime";
 
 export default function Home() {
   const [locale, setLocale] = useState<Locale>("zh");
@@ -125,10 +126,22 @@ export default function Home() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href={PLAY_URL} className="anime-button">
+              <Link
+                href={PLAY_URL}
+                onClick={() =>
+                  capturePostHogEvent("home_start_clicked", { locale })
+                }
+                className="anime-button"
+              >
                 {copy.start}
               </Link>
-              <Link href={PLAY_URL} className="anime-button-secondary">
+              <Link
+                href={PLAY_URL}
+                onClick={() =>
+                  capturePostHogEvent("home_start_clicked", { locale })
+                }
+                className="anime-button-secondary"
+              >
                 {copy.continue}
               </Link>
             </div>

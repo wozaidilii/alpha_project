@@ -75,6 +75,15 @@
 - 已有验证码/微信账号若没有密码 hash，不允许通过密码登录。
 - 当前线上错误 `relation "player_email_verification_codes" does not exist` 表明数据库尚未应用验证码表迁移，本次需要执行 `npm run db:migrate` 补齐验证码表、活动事件表和 `players.password_hash`。
 
+## Scope Update: 游客直玩、Google 登录与留存埋点
+
+- 用户要求“进入直接玩”：首页开始按钮应直接进入 `/game/anime`，未登录也能开始第一局，不再强制跳转登录页。
+- 未登录为游客模式：每天免费玩 3 局，局数、最高分和最近历史成绩存 LocalStorage。
+- 第一留存点：获得新纪录、想查看排行榜、想保存历史成绩、游客局数用完时，才提示邮箱登录或 Google 登录。
+- 登录方式增加 Google OAuth；成功后复用现有 `PlayerSession`，并写入 `players.provider='google'`、`players.google_sub`、`players.avatar_url`。
+- 增加 PostHog 可选埋点：无配置时 no-op；配置 `NEXT_PUBLIC_POSTHOG_KEY` 后采集首页开始、游戏开始、回合提交、游戏完成、分享等事件。
+- 增加 `game_sessions` 表，用现有 `players` 作为用户表参考结构：`user_id` 对应 `players.id`，同时允许 `guest_id` 记录匿名游客局。
+
 ## Acceptance Criteria
 
 - [ ] `/game/solo` 展示新的国外模式入口。
@@ -103,10 +112,17 @@
 - [ ] `/login` 支持用户名、邮箱、密码注册，注册成功后自动登录。
 - [ ] `/login` 不再把邮箱验证码登录作为默认入口；未配置邮件服务时普通登录不触发验证码发送错误。
 - [ ] `/login` 支持忘记密码，用邮箱验证码重置密码后自动登录。
+- [ ] `/login` 支持 Google 登录入口。
 - [ ] 注册用户名大小写不敏感去重，不能有重复用户名。
 - [ ] 注册用户名写入 `players.name`，对战模式继续使用该字段作为展示名。
 - [ ] 已通过邮箱验证码登录过、但还没有密码的邮箱，可以通过注册表单补设用户名和密码，不应被“邮箱已注册”卡死。
 - [ ] 密码只保存 hash，数据库中不出现明文密码。
+- [ ] `/` 的开始按钮直接进入 `/game/anime`，未登录不再先跳 `/login`。
+- [ ] 游客每天可免费开始 3 局，局数和本地历史使用 LocalStorage 保存。
+- [ ] 游客在新纪录、排行榜、保存历史或额度用完时看到邮箱 / Google 登录提示。
+- [ ] 完成局后可分享成绩。
+- [ ] 登录用户完成局写入 `game_sessions.user_id`，游客完成局写入本地历史并可用 `guest_id` 做匿名分析。
+- [ ] PostHog 未配置时不影响游戏；配置后采集关键漏斗事件。
 - [ ] 数据库迁移后不再出现 `player_email_verification_codes` 缺表错误。
 - [ ] 生产环境未配置邮件服务或验证码密钥时，邮箱登录不能静默降级为无验证码登录。
 - [ ] 登录、开局、提交回合、完成整局等关键行为写入数据库活动事件表。

@@ -141,3 +141,95 @@ recordActivity({
   payload: { score, round, distanceKm },
 });
 ```
+
+## Scenario: Guest Retention, Google Login, And Game Sessions
+
+### 1. Scope / Trigger
+
+- Trigger: changing the default play flow, guest quota, Google OAuth login, PostHog analytics, or durable per-game score storage.
+- Applies to `/game/anime`, `/login`, `/api/auth/google/*`, `players`, `player_sessions`, `game_sessions`, `player_activity_events`, and client-side LocalStorage guest progress.
+
+### 2. Signatures
+
+- `GET /api/auth/google/start?next=/path`
+  - Redirects to Google OAuth with `scope=openid email profile`.
+  - Uses HTTP-only `aniguessr_google_oauth_state` and `aniguessr_google_oauth_next` cookies.
+- `GET /api/auth/google/callback`
+  - Validates OAuth `state`, exchanges `code`, fetches Google profile, calls `loginPlayerWithGoogle`, writes the resulting `PlayerSession` into browser LocalStorage via a no-store bridge page, then redirects to the sanitized `next` path.
+- `player.recordGameSession`
+  - Input: `{ token?: string, guestId?: string, score: number, country: string, mode: string, rounds: number }`
+  - Output: `{ ok: true }`
+- DB:
+  - `players.google_sub text` unique where non-null.
+  - `players.provider text` stores `email`, `password`, `google`, or `wechat` when known.
+  - `players.avatar_url text` stores profile image URLs from external identity providers.
+  - `game_sessions(id, user_id, guest_id, score, country, mode, rounds, played_at)`.
+- Client env:
+  - `NEXT_PUBLIC_POSTHOG_KEY` enables client capture.
+  - `NEXT_PUBLIC_POSTHOG_HOST` optionally overrides the capture host.
+- Server env:
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and optional `GOOGLE_REDIRECT_URI` enable Google login.
+
+### 3. Contracts
+
+- The homepage primary CTA must go directly to `/game/anime`; it must not force `/login` before first play.
+- Guest mode stores quota, best score, and recent history in LocalStorage under `aniguessr_guest_progress`.
+- Unauthenticated guests may start at most 3 games per local calendar day. A new local day resets only `startedToday`, not best score or history.
+- Guest completion should save the score locally and may write an anonymous `game_sessions.guest_id` row for aggregate analytics.
+- Logged-in completion must write `game_sessions.user_id` and may also record `player_activity_events`.
+- Retention prompts should appear only at retention points: new local record, leaderboard intent, history-save intent, or daily guest quota exhausted.
+- PostHog capture is optional and must be no-op when `NEXT_PUBLIC_POSTHOG_KEY` is missing; analytics failures must never block gameplay.
+- Google OAuth must sanitize `next` paths and reject external redirects.
+
+### 4. Validation & Error Matrix
+
+- Missing `GOOGLE_CLIENT_ID` on `/api/auth/google/start` -> `503` JSON error.
+- Missing `GOOGLE_CLIENT_SECRET` during callback -> redirect back to `/login?...&error=google`.
+- OAuth state missing or mismatched -> redirect back to `/login?...&error=google`.
+- `player.recordGameSession` without either `token` or `guestId` -> error.
+- Invalid session token passed to `recordGameSession` -> `UNAUTHORIZED` through the existing session error mapper.
+- Guest quota exhausted -> render quota/auth prompt, not a crash or silent redirect.
+
+### 5. Good/Base/Bad Cases
+
+- Good: first-time visitor clicks homepage start, enters `/game/anime`, plays as guest, completes a game, shares score, and is prompted to log in only if they want persistence or rankings.
+- Good: Google login links a matching email account instead of creating a duplicate user row.
+- Base: PostHog env is absent; gameplay and tests still pass with capture calls acting as no-op.
+- Bad: redirecting all unauthenticated users to `/login` before they can try the game.
+- Bad: storing OAuth state in readable client storage or accepting arbitrary external `next` URLs.
+
+### 6. Tests Required
+
+- Unit tests for guest daily reset, remaining quota, and new-record local history behavior.
+- Unit tests for Google OAuth URL/state helper behavior and `next` path sanitization.
+- Project checks:
+  - `npm run check`
+  - `npm test`
+  - `npm run build`
+- Database migration must be applied before relying on Google login or `game_sessions` in production.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+const PLAY_URL = "/login?next=/game/anime";
+```
+
+Correct:
+
+```typescript
+const PLAY_URL = "/game/anime";
+```
+
+Wrong:
+
+```typescript
+location.href = new URLSearchParams(location.search).get("next")!;
+```
+
+Correct:
+
+```typescript
+const next = sanitizeNextPath(request.cookies.get("next")?.value);
+```

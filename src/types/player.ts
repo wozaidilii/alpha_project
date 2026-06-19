@@ -32,6 +32,8 @@ export interface PlayerProfile {
   email: string | null;
   name: string;
   avatar: PlayerAvatar;
+  avatarUrl?: string | null;
+  provider?: string | null;
   profileCompleted: boolean;
   soloHighScore: number;
   createdAt: string;
@@ -41,6 +43,14 @@ export interface PlayerProfile {
 export interface PlayerSession {
   token: string;
   user: PlayerProfile;
+}
+
+export interface AnimeRoundResultSummary {
+  id: string;
+  score: number;
+  maxScore: number;
+  rounds: number;
+  playedAt: string;
 }
 
 export type BattleOutcome = "win" | "loss" | "draw";
@@ -97,6 +107,12 @@ export function isPlayerProfile(value: unknown): value is PlayerProfile {
     (typeof value.email === "string" || value.email === null) &&
     typeof value.name === "string" &&
     isPlayerAvatar(value.avatar) &&
+    (value.avatarUrl === undefined ||
+      typeof value.avatarUrl === "string" ||
+      value.avatarUrl === null) &&
+    (value.provider === undefined ||
+      typeof value.provider === "string" ||
+      value.provider === null) &&
     typeof value.profileCompleted === "boolean" &&
     (value.soloHighScore === undefined ||
       typeof value.soloHighScore === "number") &&

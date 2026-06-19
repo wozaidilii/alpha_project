@@ -10,6 +10,9 @@ create table if not exists players (
   solo_high_score integer not null default 0 check (solo_high_score >= 0),
   wechat_openid text,
   password_hash text,
+  google_sub text,
+  provider text,
+  avatar_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -35,6 +38,15 @@ alter table players
 alter table players
   add column if not exists password_hash text;
 
+alter table players
+  add column if not exists google_sub text;
+
+alter table players
+  add column if not exists provider text;
+
+alter table players
+  add column if not exists avatar_url text;
+
 create unique index if not exists players_email_idx
   on players(email);
 
@@ -44,6 +56,10 @@ create unique index if not exists players_username_key_idx
 
 create unique index if not exists players_wechat_openid_idx
   on players(wechat_openid);
+
+create unique index if not exists players_google_sub_idx
+  on players(google_sub)
+  where google_sub is not null;
 
 create table if not exists player_sessions (
   token text primary key,
@@ -89,6 +105,26 @@ create index if not exists player_activity_events_email_created_at_idx
 
 create index if not exists player_activity_events_type_created_at_idx
   on player_activity_events(event_type, created_at desc);
+
+create table if not exists game_sessions (
+  id text primary key,
+  user_id text references players(id) on delete set null,
+  guest_id text,
+  score integer not null check (score >= 0),
+  country text not null,
+  mode text not null default 'anime',
+  rounds integer not null default 0 check (rounds >= 0),
+  played_at timestamptz not null default now()
+);
+
+create index if not exists game_sessions_user_played_at_idx
+  on game_sessions(user_id, played_at desc);
+
+create index if not exists game_sessions_guest_played_at_idx
+  on game_sessions(guest_id, played_at desc);
+
+create index if not exists game_sessions_mode_played_at_idx
+  on game_sessions(mode, played_at desc);
 
 create table if not exists battle_history_records (
   id text primary key,

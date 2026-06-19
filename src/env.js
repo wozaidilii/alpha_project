@@ -14,6 +14,9 @@ export const env = createEnv({
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().min(1).optional(),
     EMAIL_VERIFICATION_SECRET: z.string().min(16).optional(),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_REDIRECT_URI: z.string().url().optional(),
   },
   client: {
     NEXT_PUBLIC_PUSHER_KEY: z.string().optional(),
@@ -22,6 +25,8 @@ export const env = createEnv({
     NEXT_PUBLIC_GOOGLE_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_TENCENT_MAP_AK: z.string().optional(),
     NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL: z.string().url().optional(),
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
   },
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
@@ -35,6 +40,9 @@ export const env = createEnv({
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
     EMAIL_VERIFICATION_SECRET: process.env.EMAIL_VERIFICATION_SECRET,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
     NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
     NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     NEXT_PUBLIC_BAIDU_MAP_AK: process.env.NEXT_PUBLIC_BAIDU_MAP_AK,
@@ -42,6 +50,8 @@ export const env = createEnv({
     NEXT_PUBLIC_TENCENT_MAP_AK: process.env.NEXT_PUBLIC_TENCENT_MAP_AK,
     NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL:
       process.env.NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+    NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,

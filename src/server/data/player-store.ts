@@ -9,6 +9,7 @@ import {
   normalizeUsername,
   normalizeUsernameKey,
 } from "~/server/auth/player-credentials";
+import { type GoogleProfile } from "~/server/auth/google-oauth";
 import { classifyPlayerUniqueViolation } from "~/server/data/postgres-errors";
 import { hashPassword, verifyPassword } from "~/server/auth/password";
 import { sendEmailVerificationCode } from "~/server/email/verification-code";
@@ -30,6 +31,8 @@ interface PlayerRow {
   avatar_color: string;
   profile_completed: boolean;
   solo_high_score: number;
+  provider?: string | null;
+  avatar_url?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -38,6 +41,7 @@ interface PasswordPlayerRow extends PlayerRow {
   username: string | null;
   username_key: string | null;
   password_hash: string | null;
+  google_sub?: string | null;
 }
 
 interface BattleHistoryRow {
@@ -98,6 +102,15 @@ interface RecordBattleInput {
   roundsPlayed: number;
 }
 
+interface RecordGameSessionInput {
+  token?: string;
+  guestId?: string;
+  score: number;
+  country: string;
+  mode: string;
+  rounds: number;
+}
+
 const MAX_HISTORY = 50;
 const MAX_SESSIONS = 10;
 const EMAIL_CODE_EXPIRES_IN_SECONDS = 10 * 60;
@@ -118,6 +131,8 @@ function toPublicPlayer(row: PlayerRow): PlayerProfile {
       icon: row.avatar_icon,
       color: row.avatar_color,
     }),
+    avatarUrl: row.avatar_url ?? null,
+    provider: row.provider ?? null,
     profileCompleted: row.profile_completed,
     soloHighScore: row.solo_high_score,
     createdAt: toIso(row.created_at),
@@ -400,6 +415,67 @@ export async function recordPlayerActivity(
   return { ok: true };
 }
 
+export async function recordGameSession(
+  input: RecordGameSessionInput,
+): Promise<{ ok: true }> {
+  let playerId: string | null = null;
+  let email: string | undefined;
+
+  if (input.token) {
+    const player = await requirePlayerByToken(input.token);
+    playerId = player.id;
+    email = player.email ?? undefined;
+  }
+
+  const normalizedGuestId = input.guestId?.trim();
+  const guestId =
+    normalizedGuestId && normalizedGuestId.length > 0
+      ? normalizedGuestId
+      : null;
+  if (!playerId && !guestId) {
+    throw new Error("Invalid game session owner");
+  }
+
+  await sql`
+    insert into game_sessions (
+      id,
+      user_id,
+      guest_id,
+      score,
+      country,
+      mode,
+      rounds,
+      played_at
+    )
+    values (
+      ${randomUUID()},
+      ${playerId},
+      ${guestId},
+      ${Math.max(0, Math.round(input.score))},
+      ${input.country.trim().slice(0, 80) || "global"},
+      ${input.mode.trim().slice(0, 40) || "anime"},
+      ${Math.max(0, Math.round(input.rounds))},
+      ${new Date()}
+    )
+  `;
+
+  if (playerId) {
+    await recordPlayerActivity({
+      playerId,
+      email,
+      eventType: "game_session_recorded",
+      payload: {
+        score: Math.max(0, Math.round(input.score)),
+        country: input.country,
+        mode: input.mode,
+        rounds: Math.max(0, Math.round(input.rounds)),
+      },
+    });
+  }
+
+  return { ok: true };
+}
+
 export async function requestEmailLoginCode(
   emailInput: string,
   meta: { userAgent?: string | null } = {},
@@ -522,6 +598,7 @@ export async function verifyEmailLoginCode(
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
         created_at,
         updated_at
       )
@@ -533,6 +610,7 @@ export async function verifyEmailLoginCode(
         ${avatar.color},
         true,
         0,
+        'email',
         ${now},
         ${now}
       )
@@ -543,6 +621,7 @@ export async function verifyEmailLoginCode(
           else excluded.name
         end,
         profile_completed = true,
+        provider = coalesce(players.provider, 'email'),
         updated_at = excluded.updated_at
       returning
         id,
@@ -552,6 +631,8 @@ export async function verifyEmailLoginCode(
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
+        avatar_url,
         created_at,
         updated_at
     `;
@@ -630,6 +711,7 @@ export async function registerPlayerWithPassword(
             profile_completed = true,
             solo_high_score = greatest(solo_high_score, 0),
             password_hash = ${passwordHash},
+            provider = 'password',
             updated_at = ${now}
           where id = ${existingEmail.id}
           returning
@@ -640,6 +722,8 @@ export async function registerPlayerWithPassword(
             avatar_color,
             profile_completed,
             solo_high_score,
+            provider,
+            avatar_url,
             created_at,
             updated_at
         `;
@@ -664,6 +748,7 @@ export async function registerPlayerWithPassword(
           profile_completed,
           solo_high_score,
           password_hash,
+          provider,
           created_at,
           updated_at
         )
@@ -678,6 +763,7 @@ export async function registerPlayerWithPassword(
           true,
           0,
           ${passwordHash},
+          'password',
           ${now},
           ${now}
         )
@@ -689,6 +775,8 @@ export async function registerPlayerWithPassword(
           avatar_color,
           profile_completed,
           solo_high_score,
+          provider,
+          avatar_url,
           created_at,
           updated_at
       `;
@@ -748,6 +836,8 @@ export async function loginPlayerWithPassword(
       profile_completed,
       solo_high_score,
       password_hash,
+      provider,
+      avatar_url,
       created_at,
       updated_at
     from players
@@ -776,6 +866,146 @@ export async function loginPlayerWithPassword(
     email: user.email ?? email ?? undefined,
     eventType: "password_login_completed",
     payload: { method: "password" },
+    userAgent: meta.userAgent,
+  });
+
+  return { token, user };
+}
+
+export async function loginPlayerWithGoogle(
+  profile: GoogleProfile,
+  meta: { userAgent?: string | null } = {},
+): Promise<PlayerSession> {
+  const now = new Date();
+  const email = normalizeEmail(profile.email);
+  const name = normalizeName(profile.name || displayNameFromEmail(email));
+  const avatar = normalizeAvatar();
+
+  const { token, user } = await sql.begin(async (tx) => {
+    const [existing] = await tx<PasswordPlayerRow[]>`
+      select
+        id,
+        email,
+        username,
+        username_key,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        password_hash,
+        google_sub,
+        provider,
+        avatar_url,
+        created_at,
+        updated_at
+      from players
+      where google_sub = ${profile.sub}
+        or email = ${email}
+      limit 1
+    `;
+
+    if (existing) {
+      const [player] = await tx<PlayerRow[]>`
+        update players
+        set
+          email = coalesce(email, ${email}),
+          google_sub = ${profile.sub},
+          provider = 'google',
+          avatar_url = ${profile.picture ?? null},
+          name = case
+            when profile_completed then players.name
+            else ${name}
+          end,
+          avatar_icon = case
+            when profile_completed then players.avatar_icon
+            else ${avatar.icon}
+          end,
+          avatar_color = case
+            when profile_completed then players.avatar_color
+            else ${avatar.color}
+          end,
+          profile_completed = true,
+          updated_at = ${now}
+        where id = ${existing.id}
+        returning
+          id,
+          email,
+          name,
+          avatar_icon,
+          avatar_color,
+          profile_completed,
+          solo_high_score,
+          provider,
+          avatar_url,
+          created_at,
+          updated_at
+      `;
+
+      const token = await createSessionForPlayer(tx, player!.id, now);
+
+      return {
+        token,
+        user: toPublicPlayer(player!),
+      };
+    }
+
+    const [player] = await tx<PlayerRow[]>`
+      insert into players (
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        google_sub,
+        provider,
+        avatar_url,
+        created_at,
+        updated_at
+      )
+      values (
+        ${randomUUID()},
+        ${email},
+        ${name},
+        ${avatar.icon},
+        ${avatar.color},
+        true,
+        0,
+        ${profile.sub},
+        'google',
+        ${profile.picture ?? null},
+        ${now},
+        ${now}
+      )
+      returning
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        provider,
+        avatar_url,
+        created_at,
+        updated_at
+    `;
+
+    const token = await createSessionForPlayer(tx, player!.id, now);
+
+    return {
+      token,
+      user: toPublicPlayer(player!),
+    };
+  });
+
+  await recordPlayerActivity({
+    playerId: user.id,
+    email,
+    eventType: "google_login_completed",
+    payload: { method: "google" },
     userAgent: meta.userAgent,
   });
 
@@ -811,6 +1041,8 @@ export async function resetPlayerPasswordWithCode(
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
+        avatar_url,
         created_at,
         updated_at
     `;
@@ -858,6 +1090,7 @@ export async function loginPlayerByWechatOpenId(
         profile_completed,
         solo_high_score,
         wechat_openid,
+        provider,
         created_at,
         updated_at
       )
@@ -870,11 +1103,14 @@ export async function loginPlayerByWechatOpenId(
         true,
         0,
         ${openId},
+        'wechat',
         ${now},
         ${now}
       )
       on conflict (wechat_openid) do update
-      set updated_at = players.updated_at
+      set
+        provider = coalesce(players.provider, 'wechat'),
+        updated_at = players.updated_at
       returning
         id,
         email,
@@ -883,6 +1119,8 @@ export async function loginPlayerByWechatOpenId(
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
+        avatar_url,
         created_at,
         updated_at
     `;
