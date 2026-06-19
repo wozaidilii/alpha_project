@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   buildAnimeGuessrImageUrl,
+  buildGoogleMapsStreetViewUrl,
   getAnimeGuessrQuestionText,
   isAnimeGuessrQuestion,
   pickAnimeGuessrQuestions,
@@ -95,6 +96,18 @@ describe("anime-guessr", () => {
     expect(ANIME_GUESSR_PLACEHOLDER_IMAGE_URL).toBe(
       "/images/anime-placeholder.jpg",
     );
+  });
+
+  it("builds a Google Maps Street View URL from answer coordinates", () => {
+    const url = new URL(buildGoogleMapsStreetViewUrl(sampleQuestion));
+
+    expect(url.origin).toBe("https://www.google.com");
+    expect(url.pathname).toBe("/maps/@");
+    expect(url.searchParams.get("api")).toBe("1");
+    expect(url.searchParams.get("map_action")).toBe("pano");
+    expect(url.searchParams.get("viewpoint")).toBe("35.7728,139.3545");
+    expect(url.searchParams.get("heading")).toMatch(/^\d+$/);
+    expect(url.searchParams.get("pitch")).toBe("0");
   });
 
   it("returns localized question text with base-field fallback", () => {

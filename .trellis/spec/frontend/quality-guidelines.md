@@ -54,6 +54,7 @@ Questions to answer:
 - Global street-view modes are an explicit exception to country clamping: pass a prop such as `restrictToCountry={false}`, initialize the map at a world zoom, and validate only global latitude/longitude ranges.
 - Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
 - If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
+- Result-page continuation links for Google Street View should use Google Maps URLs with `api=1`, `map_action=pano`, and answer coordinates as the `viewpoint`. Keep crawl/source URLs internal for traceability; do not expose third-party source links such as Anitabi as user-facing CTAs.
 
 #### 4. Validation & Error Matrix
 
@@ -62,6 +63,7 @@ Questions to answer:
 - Street-view service unavailable -> fail generation with retry, not a non-street-view fallback.
 - Insufficient confirmed panoramas -> do not start the round; show how many were found when useful.
 - Component unmount during SDK loading -> ignore late results and clean listeners/overlays.
+- Google Maps continuation URL -> opens a Street View panorama via `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=<lat>,<lng>`.
 
 #### 5. Good/Base/Bad Cases
 
@@ -72,6 +74,7 @@ Questions to answer:
 #### 6. Tests Required
 
 - Unit tests for country bounds, clamping, and country lookup.
+- Unit tests for Google Maps continuation URL helpers when adding or changing external Street View links.
 - Type-check/lint after adding SDK wrapper types.
 - Browser smoke for mode entry and provider error/loading/ready states when credentials are available.
 

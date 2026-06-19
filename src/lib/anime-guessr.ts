@@ -172,6 +172,16 @@ export function buildAnimeGuessrImageUrl(
   return `${base}/${path}`;
 }
 
+export function buildGoogleMapsStreetViewUrl(question: AnimeGuessrQuestion) {
+  const url = new URL("https://www.google.com/maps/@");
+  url.searchParams.set("api", "1");
+  url.searchParams.set("map_action", "pano");
+  url.searchParams.set("viewpoint", `${question.lat},${question.lng}`);
+  url.searchParams.set("heading", String(stableHeadingFromId(question.id)));
+  url.searchParams.set("pitch", "0");
+  return url.toString();
+}
+
 export function getAnimeGuessrQuestionText(
   question: AnimeGuessrQuestion,
   locale: AnimeLocale = DEFAULT_ANIME_LOCALE,

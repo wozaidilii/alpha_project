@@ -10,6 +10,7 @@ import {
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   ANIME_GUESSR_ROUNDS,
   buildAnimeGuessrImageUrl,
+  buildGoogleMapsStreetViewUrl,
   fetchAnimeGuessrQuestions,
   getAnimeGuessrQuestionText,
   pickAnimeGuessrQuestions,
@@ -93,7 +94,7 @@ type GameCopy = {
   speedBonus: string;
   elapsed: string;
   guessDistance: (distance: string) => string;
-  source: string;
+  streetViewLink: string;
   finalScore: string;
   nextRound: string;
   submitGuess: string;
@@ -180,7 +181,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     speedBonus: "速度补偿",
     elapsed: "用时",
     guessDistance: (distance) => `你的猜测距离实际地点 ${distance}。`,
-    source: "查看 Anitabi 来源",
+    streetViewLink: "在 Google 街景中继续浏览",
     finalScore: "查看最终得分",
     nextRound: "下一轮",
     submitGuess: "提交猜测",
@@ -269,7 +270,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     elapsed: "所要時間",
     guessDistance: (distance) =>
       `予想地点は正解から ${distance} 離れています。`,
-    source: "Anitabi の出典を見る",
+    streetViewLink: "Google ストリートビューで続きを見る",
     finalScore: "最終スコアを見る",
     nextRound: "次のラウンド",
     submitGuess: "予想を送信",
@@ -360,7 +361,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     elapsed: "Time",
     guessDistance: (distance) =>
       `Your guess was ${distance} from the real location.`,
-    source: "View Anitabi source",
+    streetViewLink: "Continue in Google Street View",
     finalScore: "View final score",
     nextRound: "Next round",
     submitGuess: "Submit guess",
@@ -1358,16 +1359,14 @@ export default function AnimeGuessrPage() {
               )}
             </div>
 
-            {roundResult.question.sourceUrl && (
-              <a
-                href={roundResult.question.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm font-bold text-cyan-100 underline-offset-4 hover:underline"
-              >
-                {copy.source}
-              </a>
-            )}
+            <a
+              href={buildGoogleMapsStreetViewUrl(roundResult.question)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-cyan-200/35 bg-cyan-200/10 px-4 text-center text-sm font-black text-cyan-50 transition hover:border-cyan-100 hover:bg-cyan-200/20 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+            >
+              {copy.streetViewLink}
+            </a>
 
             <button
               type="button"
