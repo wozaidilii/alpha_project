@@ -30,6 +30,7 @@ export interface GoogleMapInstance {
   ) => GoogleMapsListener;
   fitBounds: (bounds: GoogleLatLngBoundsInstance) => void;
   panTo?: (point: LatLng) => void;
+  setCenter?: (point: LatLng) => void;
   setZoom?: (zoom: number) => void;
 }
 

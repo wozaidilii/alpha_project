@@ -186,3 +186,10 @@
 - 根因：题目本体基础字段仍是中文，原先 `DEFAULT_ANIME_LOCALE = "zh"` 时缺失 locale 会自然落回基础字段；默认值变成 `en` 后，共享 fallback 逻辑开始把显式中文请求导向 `locales.en`。
 - 修复：`getAnimeGuessrQuestionText` 对显式 `zh` 缺失 locale 时保留基础字段，未指定语言或其他语言缺失时才使用英文默认 locale，并增加回归测试。
 - 预防：修改全站默认 locale 时，必须检查“未指定语言”和“显式选择某语言但 locale 缺失”两个路径；不要把默认 locale fallback 直接等同于所有显式语言的 fallback。
+
+## 持久地图切换新回合要重置视野
+
+- 问题：猜动漫模式进入下一题后，猜点地图仍停留在上一题答案区域，而不是回到日本全图。
+- 根因：`GoogleGuessMap` 为了避免重复加载第三方 SDK，在结果态和游玩态复用同一个地图实例；结果态会 `fitBounds` 到猜测点和答案点，但下一题把 `guess` / `answer` 清空时只清除了 marker，没有把 viewport 重置到初始国家视野。
+- 修复：抽出 `syncGoogleGuessMapViewport`，在 `guess === null && answer === null` 时恢复国家初始 `center` / `zoom`，结果态仍按 guess/answer `fitBounds`，guess-only 状态不重置玩家当前视野。
+- 预防：复用第三方地图实例时，每个状态转换都要同步覆盖物和 viewport；尤其是 result -> playing 的空状态必须有显式 reset，并用单元测试锁定。
