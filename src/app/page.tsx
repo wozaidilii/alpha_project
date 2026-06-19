@@ -519,7 +519,7 @@ export default function Home() {
           </div>
         </nav>
 
-        <div className="mx-auto grid min-h-[calc(100vh-92px)] w-full max-w-6xl items-center gap-8 py-8 lg:grid-cols-[1.04fr_0.96fr]">
+        <div className="mx-auto grid min-h-[calc(100vh-92px)] w-full max-w-7xl items-start gap-6 py-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(300px,0.9fr)_minmax(260px,0.62fr)] xl:gap-8">
           <div className="max-w-2xl">
             <div className="anime-chip mb-5 w-fit">{copy.kicker}</div>
             <h1 className="text-[clamp(3.1rem,7vw,6rem)] leading-[0.9] font-black text-balance text-white">
@@ -584,113 +584,114 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid gap-4">
-            <div className="relative min-h-[360px] lg:min-h-[430px]">
-              <div className="absolute top-2 right-2 left-10 h-[74%] overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+          <div className="grid gap-4 lg:pt-8">
+            <div className="relative">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-black/30 sm:aspect-[16/11] lg:aspect-[4/5] xl:aspect-[5/6]">
                 <div className="h-full w-full bg-[url('/images/anime-placeholder.jpg')] bg-cover bg-center" />
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.04),rgba(8,5,16,0.76))]" />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(8,5,16,0.36))]" />
               </div>
 
-              <div className="anime-panel absolute right-0 bottom-6 left-0 p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="anime-chip mb-3 w-fit">{copy.round}</div>
-                    <h2 className="text-2xl font-black text-white sm:text-3xl">
-                      {copy.panelTitle}
-                    </h2>
-                  </div>
-                  <div
-                    aria-hidden="true"
-                    className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-xl font-black text-cyan-100"
-                  >
-                    R1
-                  </div>
-                </div>
-                <p className="mt-4 text-sm leading-7 text-white/70">
-                  {copy.panelBody}
-                </p>
+              <div className="anime-chip absolute top-3 left-3 w-fit">
+                {copy.round}
               </div>
             </div>
 
-            <div>
-              <section className="anime-panel p-4">
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-black text-white">
-                    {copy.leaderboardTitle}
+            <div className="anime-panel p-4 sm:p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl leading-tight font-black text-white sm:text-2xl">
+                    {copy.panelTitle}
                   </h2>
-                  <div className="flex overflow-hidden rounded-full border border-white/10">
-                    {([5, 10] as const).map((rounds) => (
-                      <button
-                        key={rounds}
-                        type="button"
-                        onClick={() => setLeaderboardRounds(rounds)}
-                        className={`px-3 py-1 text-xs font-black transition ${
-                          leaderboardRounds === rounds
-                            ? "bg-cyan-200/20 text-cyan-50"
-                            : "bg-white/5 text-pink-50/70 hover:bg-white/10"
-                        }`}
-                      >
-                        {copy.leaderboardRounds(rounds)}
-                      </button>
-                    ))}
-                  </div>
                 </div>
-
-                <div className="grid gap-2">
-                  {leaderboard.length > 0 ? (
-                    leaderboard.map((entry) => (
-                      <div
-                        key={entry.userId}
-                        className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border px-3 py-2 ${
-                          entry.isCurrentUser
-                            ? "border-pink-300/50 bg-pink-400/15"
-                            : "border-white/10 bg-white/5"
-                        }`}
-                      >
-                        <span className="font-mono text-sm font-black text-cyan-100">
-                          #{entry.rank}
-                        </span>
-                        <span className="min-w-0 truncate text-sm font-bold text-white">
-                          {countryCodeToFlagEmoji(entry.countryCode)}{" "}
-                          {entry.name}
-                        </span>
-                        <span className="text-sm font-black text-pink-100">
-                          {entry.score.toLocaleString()} {copy.points}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-sm text-pink-100/60">
-                      {leaderboardQuery.isLoading
-                        ? copy.loading
-                        : copy.leaderboardEmpty}
-                    </p>
-                  )}
-
-                  {showDetachedCurrentUser && currentUserEntry && (
-                    <div className="mt-2 rounded-xl border border-cyan-200/30 bg-cyan-200/10 px-3 py-2">
-                      <div className="mb-1 text-xs font-bold text-cyan-100/70">
-                        {copy.myRank}
-                      </div>
-                      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2">
-                        <span className="font-mono text-sm font-black text-cyan-100">
-                          #{currentUserEntry.rank}
-                        </span>
-                        <span className="min-w-0 truncate text-sm font-bold text-white">
-                          {countryCodeToFlagEmoji(currentUserEntry.countryCode)}{" "}
-                          {currentUserEntry.name}
-                        </span>
-                        <span className="text-sm font-black text-pink-100">
-                          {currentUserEntry.score.toLocaleString()}{" "}
-                          {copy.points}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                <div
+                  aria-hidden="true"
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-full border border-cyan-200/40 bg-cyan-200/10 text-sm font-black text-cyan-100"
+                >
+                  R1
                 </div>
-              </section>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-white/70">
+                {copy.panelBody}
+              </p>
             </div>
           </div>
+
+          <aside className="lg:pt-8">
+            <section className="anime-panel p-4">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-black text-white">
+                  {copy.leaderboardTitle}
+                </h2>
+                <div className="flex overflow-hidden rounded-full border border-white/10">
+                  {([5, 10] as const).map((rounds) => (
+                    <button
+                      key={rounds}
+                      type="button"
+                      onClick={() => setLeaderboardRounds(rounds)}
+                      className={`px-3 py-1 text-xs font-black transition ${
+                        leaderboardRounds === rounds
+                          ? "bg-cyan-200/20 text-cyan-50"
+                          : "bg-white/5 text-pink-50/70 hover:bg-white/10"
+                      }`}
+                    >
+                      {copy.leaderboardRounds(rounds)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                {leaderboard.length > 0 ? (
+                  leaderboard.map((entry) => (
+                    <div
+                      key={entry.userId}
+                      className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border px-3 py-2 ${
+                        entry.isCurrentUser
+                          ? "border-pink-300/50 bg-pink-400/15"
+                          : "border-white/10 bg-white/5"
+                      }`}
+                    >
+                      <span className="font-mono text-sm font-black text-cyan-100">
+                        #{entry.rank}
+                      </span>
+                      <span className="min-w-0 truncate text-sm font-bold text-white">
+                        {countryCodeToFlagEmoji(entry.countryCode)} {entry.name}
+                      </span>
+                      <span className="text-sm font-black text-pink-100">
+                        {entry.score.toLocaleString()} {copy.points}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-sm text-pink-100/60">
+                    {leaderboardQuery.isLoading
+                      ? copy.loading
+                      : copy.leaderboardEmpty}
+                  </p>
+                )}
+
+                {showDetachedCurrentUser && currentUserEntry && (
+                  <div className="mt-2 rounded-xl border border-cyan-200/30 bg-cyan-200/10 px-3 py-2">
+                    <div className="mb-1 text-xs font-bold text-cyan-100/70">
+                      {copy.myRank}
+                    </div>
+                    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2">
+                      <span className="font-mono text-sm font-black text-cyan-100">
+                        #{currentUserEntry.rank}
+                      </span>
+                      <span className="min-w-0 truncate text-sm font-bold text-white">
+                        {countryCodeToFlagEmoji(currentUserEntry.countryCode)}{" "}
+                        {currentUserEntry.name}
+                      </span>
+                      <span className="text-sm font-black text-pink-100">
+                        {currentUserEntry.score.toLocaleString()} {copy.points}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </aside>
         </div>
       </section>
     </main>
