@@ -97,6 +97,12 @@ import {
   mergeBattleSubmittedGuesses,
 } from "~/lib/battle-room-sync";
 import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
+import { calcBattleDamage } from "~/lib/battle-scoring";
+import {
+  areBattlePlayersReady,
+  isBattleFinalRound,
+  shouldFinishBattleFromResult,
+} from "~/lib/battle-flow";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -319,20 +325,6 @@ function calcBattlePlayerGuess(
   );
 }
 
-function calcDamage(
-  scoreA: number,
-  scoreB: number,
-  modeType: BattleSettings["questionType"],
-): number {
-  const diff = Math.abs(scoreA - scoreB);
-  return modeType === "tuxun" ||
-    modeType === "foreign" ||
-    modeType === "history-tuxun" ||
-    modeType === "anime-tuxun"
-    ? Math.floor(diff / 5)
-    : Math.floor(diff / 500);
-}
-
 // ─── component ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -501,6 +493,7 @@ export function BattleGame({
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
   const resultsRef = useRef<BattleRoundResult[]>([]);
   const resolvedRef = useRef(false);
+  const gameOverRequestedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
   const roundReadyRef = useRef<Record<string, boolean>>({});
   const phaseRef = useRef(phase);
@@ -774,6 +767,7 @@ export function BattleGame({
     syncRoomPlayState(snapshot);
 
     if (snapshot.roundStatus === "game-over") {
+      gameOverRequestedRef.current = true;
       setPhase("game-over");
       return;
     }
@@ -785,7 +779,7 @@ export function BattleGame({
       if (result) {
         upsertLocalRoundResult(result);
         setPhase("round-result");
-        if (isHost) checkAllReadyAndProceed();
+        checkAllReadyAndProceed();
       }
       return;
     }
@@ -805,6 +799,7 @@ export function BattleGame({
 
   function beginRound(roundIndex: number, startTime: number) {
     resolvedRef.current = false;
+    gameOverRequestedRef.current = false;
     collectedGuesses.current = {};
     setCurrentRound(roundIndex);
     currentRoundRef.current = roundIndex;
@@ -850,42 +845,54 @@ export function BattleGame({
     } satisfies PusherRoundStarted);
   }
 
-  function checkAllReadyAndProceed() {
-    if (!isHost) return;
+  function requestGameOver() {
+    if (gameOverRequestedRef.current) return;
+    gameOverRequestedRef.current = true;
 
     const ids = Object.keys(playersRef.current);
-    if (ids.length < 2) return;
-    if (!ids.every((id) => roundReadyRef.current[id])) return;
+    const finalHp: Record<string, number> = {};
+    for (const id of ids) {
+      finalHp[id] = playersRef.current[id]?.hp ?? 0;
+    }
+
+    const finalResults = resultsRef.current;
+    void postBattleRoomAction(roomId, {
+      action: "game-over",
+      results: finalResults,
+      finalHp,
+    })
+      .then((snapshot) => {
+        if (snapshot) void applyRoomSnapshot(snapshot);
+      })
+      .catch(() => undefined);
+    void sendPusherEvent(channel, "game-over", {
+      results: finalResults,
+      finalHp,
+    } satisfies PusherGameOver);
+    setPhase("game-over");
+  }
+
+  function checkAllReadyAndProceed() {
+    if (
+      shouldFinishBattleFromResult({
+        roundIndex: currentRoundRef.current,
+        settings: settingsRef.current,
+        players: playersRef.current,
+        roundReady: roundReadyRef.current,
+      })
+    ) {
+      requestGameOver();
+      return;
+    }
+
+    if (!areBattlePlayersReady(playersRef.current, roundReadyRef.current)) {
+      return;
+    }
+
+    if (!isHost) return;
 
     roundReadyRef.current = {};
     setRoundReady({});
-
-    const roundIdx = currentRoundRef.current;
-    const isLastRound =
-      roundIdx >= settingsRef.current.rounds - 1 ||
-      ids.some((id) => (playersRef.current[id]?.hp ?? 0) <= 0);
-
-    if (isLastRound) {
-      const finalHp: Record<string, number> = {};
-      for (const id of ids) {
-        finalHp[id] = playersRef.current[id]?.hp ?? 0;
-      }
-      void postBattleRoomAction(roomId, {
-        action: "game-over",
-        results: resultsRef.current,
-        finalHp,
-      })
-        .then((snapshot) => {
-          if (snapshot) void applyRoomSnapshot(snapshot);
-        })
-        .catch(() => undefined);
-      void sendPusherEvent(channel, "game-over", {
-        results: resultsRef.current,
-        finalHp,
-      } satisfies PusherGameOver);
-      setPhase("game-over");
-      return;
-    }
 
     void handleNextRoundInternal();
   }
@@ -910,7 +917,7 @@ export function BattleGame({
       roundIndex: roundIdx,
     } satisfies PusherRoundReady);
 
-    if (isHost) checkAllReadyAndProceed();
+    checkAllReadyAndProceed();
   }
 
   function resolveRound() {
@@ -952,7 +959,7 @@ export function BattleGame({
       for (const id of playerIds) {
         const score = guesses[id]?.total ?? 0;
         if (score >= topScore) continue;
-        const dmg = calcDamage(topScore, score, modeType);
+        const dmg = calcBattleDamage(topScore, score, modeType);
         damage[id] = dmg;
         hpAfter[id] = Math.max(0, (hpAfter[id] ?? 0) - dmg);
       }
@@ -966,6 +973,7 @@ export function BattleGame({
       damage,
     };
     applyRoundResult(result);
+    checkAllReadyAndProceed();
     void postBattleRoomAction(roomId, {
       action: "round-result",
       result,
@@ -981,15 +989,13 @@ export function BattleGame({
 
   function applyRoundResult(result: BattleRoundResult) {
     upsertLocalRoundResult(result);
-    setPlayers((prev) => {
-      const next = { ...prev };
-      for (const [pid, hp] of Object.entries(result.hpAfter)) {
-        const existing = next[pid];
-        if (existing) next[pid] = { ...existing, hp };
-      }
-      playersRef.current = next;
-      return next;
-    });
+    const nextPlayers = { ...playersRef.current };
+    for (const [pid, hp] of Object.entries(result.hpAfter)) {
+      const existing = nextPlayers[pid];
+      if (existing) nextPlayers[pid] = { ...existing, hp };
+    }
+    playersRef.current = nextPlayers;
+    setPlayers(nextPlayers);
     roundReadyRef.current = {};
     setRoundReady({});
     setPhase("round-result");
@@ -1068,16 +1074,18 @@ export function BattleGame({
         ...data.result,
         question: localQuestion,
       });
+      checkAllReadyAndProceed();
     });
 
     ch.bind("round-ready", (data: PusherRoundReady) => {
       if (data.roundIndex !== currentRoundRef.current) return;
       roundReadyRef.current[data.playerId] = true;
       setRoundReady({ ...roundReadyRef.current });
-      if (isHost) checkAllReadyAndProceed();
+      checkAllReadyAndProceed();
     });
 
     ch.bind("game-over", (data: PusherGameOver) => {
+      gameOverRequestedRef.current = true;
       if (data.results.length > 0) replaceResults(data.results);
       setPlayers((prev) => {
         const next = { ...prev };
@@ -1088,7 +1096,7 @@ export function BattleGame({
         playersRef.current = next;
         return next;
       });
-      if (!isHost) setPhase("game-over");
+      setPhase("game-over");
     });
 
     return () => {
@@ -1663,9 +1671,11 @@ export function BattleGame({
   }
 
   if (phase === "round-result" && lastResult) {
-    const isLastRound =
-      lastResult.roundIndex >= settings.rounds - 1 ||
-      Object.values(lastResult.hpAfter).some((hp) => hp <= 0);
+    const isLastRound = isBattleFinalRound(
+      lastResult.roundIndex,
+      settings,
+      players,
+    );
     return (
       <BattleRoundResultView
         result={lastResult}

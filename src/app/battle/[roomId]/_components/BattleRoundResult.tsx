@@ -21,6 +21,7 @@ import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import { type AnimeLocale } from "~/lib/anime-locale";
 import { formatBattleDistance, getBattleCopy } from "~/lib/battle-copy";
 import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
+import { areBattlePlayersReady } from "~/lib/battle-flow";
 
 interface Props {
   result: BattleRoundResult;
@@ -66,8 +67,7 @@ export function BattleRoundResultView({
     : undefined;
   const playerIds = Object.keys(players);
   const iAmReady = roundReady[myId] === true;
-  const allReady =
-    playerIds.length >= 2 && playerIds.every((id) => roundReady[id] === true);
+  const allReady = areBattlePlayersReady(players, roundReady);
 
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
     if (standardQuestion && isFunfactQuestion(standardQuestion)) {

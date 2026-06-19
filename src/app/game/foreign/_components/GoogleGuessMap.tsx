@@ -45,6 +45,24 @@ function formatDistanceZh(distanceKm: number) {
   return `${Math.round(distanceKm).toLocaleString()} 公里`;
 }
 
+function buildMarkerIcon({
+  color,
+  label,
+  size,
+}: {
+  color: string;
+  label: string;
+  size: number;
+}) {
+  const text = label.slice(0, 2);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">
+  <path d="M${size / 2} ${size + 8} C${size / 2} ${size + 8} ${size * 0.2} ${size * 0.55} ${size * 0.2} ${size * 0.35} C${size * 0.2} ${size * 0.13} ${size * 0.33} 2 ${size / 2} 2 C${size * 0.67} 2 ${size * 0.8} ${size * 0.13} ${size * 0.8} ${size * 0.35} C${size * 0.8} ${size * 0.55} ${size / 2} ${size + 8} ${size / 2} ${size + 8} Z" fill="${color}" stroke="white" stroke-width="3"/>
+  <circle cx="${size / 2}" cy="${size * 0.35}" r="${size * 0.2}" fill="rgba(15,23,42,0.22)"/>
+  <text x="${size / 2}" y="${size * 0.42}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${size * 0.28}" font-weight="800" fill="white">${text}</text>
+</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 export function GoogleGuessMap({
   country,
   guess,
@@ -101,7 +119,12 @@ export function GoogleGuessMap({
           title: answerLabel
             ? `${labels.answerTitle}: ${answerLabel}`
             : labels.answerTitle,
-          label: labels.answerMarkerLabel,
+          icon: buildMarkerIcon({
+            color: "#22c55e",
+            label: labels.answerMarkerLabel,
+            size: 44,
+          }),
+          zIndex: 10,
         }),
       );
     }
@@ -112,7 +135,12 @@ export function GoogleGuessMap({
           position: guess,
           map,
           title: labels.guessTitle,
-          label: labels.guessMarkerLabel,
+          icon: buildMarkerIcon({
+            color: "#f59e0b",
+            label: labels.guessMarkerLabel,
+            size: 36,
+          }),
+          zIndex: 20,
         }),
       );
     }

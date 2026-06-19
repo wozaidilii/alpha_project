@@ -100,6 +100,8 @@ export interface GoogleMapsApi {
     map: GoogleMapInstance;
     title?: string;
     label?: string;
+    icon?: string;
+    zIndex?: number;
   }) => GoogleMarkerInstance;
   Polyline: new (options: {
     path: LatLng[];
