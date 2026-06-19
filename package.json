@@ -37,6 +37,7 @@
     "@trpc/server": "^11.0.0",
     "@types/leaflet": "^1.9.21",
     "@vercel/blob": "^2.4.0",
+    "@vercel/speed-insights": "^2.0.0",
     "leaflet": "^1.9.4",
     "next": "^15.2.3",
     "postgres": "^3.4.9",
