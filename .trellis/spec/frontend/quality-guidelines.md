@@ -224,6 +224,7 @@ export const metadata: Metadata = {
 - Guess-map click handlers must clamp or reject points outside the active country/region bounds.
 - Global street-view modes are an explicit exception to country clamping: pass a prop such as `restrictToCountry={false}`, initialize the map at a world zoom, and validate only global latitude/longitude ranges.
 - Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
+- Persistent guess maps must also reset their viewport when a new round starts with no guess and no answer. Result states may `fitBounds` to the guess/answer pair, but clearing the result for the next round must restore the active country/world overview instead of inheriting the previous answer-area viewport.
 - If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
 - Result-page continuation links for Google Street View should use Google Maps URLs with `api=1`, `map_action=pano`, and answer coordinates as the `viewpoint`. Keep crawl/source URLs internal for traceability; do not expose third-party source links such as Anitabi as user-facing CTAs.
 
@@ -245,6 +246,7 @@ export const metadata: Metadata = {
 #### 6. Tests Required
 
 - Unit tests for country bounds, clamping, and country lookup.
+- Unit tests for persistent guess-map viewport synchronization: result state fits to guess/answer, next-round empty state resets to the active overview, and guess-only state does not recenter the player unexpectedly.
 - Unit tests for Google Maps continuation URL helpers when adding or changing external Street View links.
 - Type-check/lint after adding SDK wrapper types.
 - Browser smoke for mode entry and provider error/loading/ready states when credentials are available.

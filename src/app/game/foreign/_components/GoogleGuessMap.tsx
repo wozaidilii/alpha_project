@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clampToBounds, type ForeignCountryConfig } from "~/lib/foreign-map";
 import {
+  getGoogleGuessMapInitialView,
+  syncGoogleGuessMapViewport,
+} from "~/lib/google-guess-map-view";
+import {
   GOOGLE_MAP_AK,
   getGoogleMapsApi,
   googleBoundsForCountry,
@@ -107,16 +111,17 @@ export function GoogleGuessMap({
         strokeOpacity: 0.9,
         strokeWeight: 4,
       });
-
-      const bounds = new api.LatLngBounds();
-      bounds.extend(guess);
-      bounds.extend(answer);
-      map.fitBounds(bounds);
-    } else if (answer) {
-      map.panTo?.(answer);
-      map.setZoom?.(9);
     }
-  }, [answer, answerLabel, clearOverlays, guess]);
+
+    syncGoogleGuessMapViewport({
+      map,
+      api,
+      country,
+      restrictToCountry,
+      guess,
+      answer,
+    });
+  }, [answer, answerLabel, clearOverlays, country, guess, restrictToCountry]);
 
   useEffect(() => {
     if (!GOOGLE_MAP_AK || !containerRef.current || mapRef.current) return;
@@ -130,9 +135,13 @@ export function GoogleGuessMap({
         const api = getGoogleMapsApi();
         if (!api?.Map) throw new Error("Google Maps API 未加载");
 
+        const initialView = getGoogleGuessMapInitialView(
+          country,
+          restrictToCountry,
+        );
         const map = new api.Map(containerRef.current, {
-          center: restrictToCountry ? country.center : { lat: 20, lng: 0 },
-          zoom: restrictToCountry ? country.zoom : 2,
+          center: initialView.center,
+          zoom: initialView.zoom,
           ...(restrictToCountry
             ? {
                 restriction: {
