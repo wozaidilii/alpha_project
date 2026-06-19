@@ -52,6 +52,7 @@ Questions to answer:
 - Street-view gameplay must only start after point generation confirms enough usable panoramas for the configured round count.
 - Guess-map click handlers must clamp or reject points outside the active country/region bounds.
 - Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
+- If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
 
 #### 4. Validation & Error Matrix
 

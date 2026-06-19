@@ -2,6 +2,7 @@ import {
   DEFAULT_FOREIGN_COUNTRY,
   isPointInsideBounds,
 } from "~/lib/foreign-map";
+import { type TuxunLocation } from "~/lib/tuxun-locations";
 
 export const ANIME_GUESSR_ROUNDS = 5;
 export const ANIME_GUESSR_DATA_URL = "/data/anime-guessr-questions.json";
@@ -115,4 +116,28 @@ export function buildAnimeGuessrImageUrl(
   const base = baseUrl.replace(/\/+$/, "");
   const path = imagePath.replace(/^\/+/, "");
   return `${base}/${path}`;
+}
+
+function stableHeadingFromId(id: string): number {
+  let hash = 0;
+  for (const char of id) {
+    hash = (hash * 31 + char.charCodeAt(0)) % 360;
+  }
+  return hash;
+}
+
+export function toAnimeStreetViewLocation(
+  question: AnimeGuessrQuestion,
+): TuxunLocation {
+  return {
+    id: `anime:${question.id}`,
+    title: question.answerName,
+    province: DEFAULT_FOREIGN_COUNTRY.label,
+    city: question.location,
+    lat: question.lat,
+    lng: question.lng,
+    heading: stableHeadingFromId(question.id),
+    pitch: 0,
+    hint: question.description,
+  };
 }

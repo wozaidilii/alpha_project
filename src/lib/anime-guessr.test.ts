@@ -4,6 +4,7 @@ import {
   buildAnimeGuessrImageUrl,
   isAnimeGuessrQuestion,
   pickAnimeGuessrQuestions,
+  toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
 } from "~/lib/anime-guessr";
 
@@ -65,5 +66,22 @@ describe("anime-guessr", () => {
 
   it("picks at most the requested number of questions", () => {
     expect(pickAnimeGuessrQuestions([sampleQuestion], 5)).toHaveLength(1);
+  });
+
+  it("maps anime questions to Google Street View locations", () => {
+    const location = toAnimeStreetViewLocation(sampleQuestion);
+
+    expect(location).toMatchObject({
+      id: "anime:anitabi_51_5c4dgq9pm",
+      title: "东京都东大和市多摩湖附近坡道",
+      province: "日本",
+      city: "东京都",
+      lat: 35.7728,
+      lng: 139.3545,
+      pitch: 0,
+      hint: "在《CLANNAD》的片头动画中出现的坡道。",
+    });
+    expect(location.heading).toBeGreaterThanOrEqual(0);
+    expect(location.heading).toBeLessThan(360);
   });
 });

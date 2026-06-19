@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
+import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
 import {
   ANIME_GUESSR_IMAGE_BASE_URL,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
@@ -10,9 +11,11 @@ import {
   buildAnimeGuessrImageUrl,
   fetchAnimeGuessrQuestions,
   pickAnimeGuessrQuestions,
+  toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
 } from "~/lib/anime-guessr";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
+import { GOOGLE_MAP_AK } from "~/lib/google-street-view";
 import {
   haversineDistance,
   locationRoundScore,
@@ -53,7 +56,7 @@ function getRank(score: number) {
   return { label: "迷路中", symbol: "D" };
 }
 
-function QuestionImage({ question }: { question: AnimeGuessrQuestion }) {
+function AnimeClueImage({ question }: { question: AnimeGuessrQuestion }) {
   const [showPlaceholder, setShowPlaceholder] = useState(false);
   const imageUrl = buildAnimeGuessrImageUrl(question.imagePath);
   const displayImageUrl =
@@ -66,18 +69,18 @@ function QuestionImage({ question }: { question: AnimeGuessrQuestion }) {
   }, [question.id]);
 
   return (
-    <div className="relative h-full min-h-[300px] bg-stone-800">
+    <div className="relative aspect-video overflow-hidden rounded-lg border border-stone-700 bg-stone-800">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={displayImageUrl}
         alt={question.title}
-        className="h-full min-h-[300px] w-full object-cover"
+        className="h-full w-full object-cover"
         onError={() => {
           if (!showPlaceholder) setShowPlaceholder(true);
         }}
       />
       {(!imageUrl || showPlaceholder) && (
-        <div className="absolute right-4 bottom-4 max-w-xs rounded-lg border border-stone-700 bg-stone-950/85 px-3 py-2 text-xs leading-5 text-stone-300 shadow-lg shadow-black/30">
+        <div className="absolute right-2 bottom-2 left-2 rounded-md border border-stone-700 bg-stone-950/85 px-2 py-1.5 text-[11px] leading-4 text-stone-300 shadow-lg shadow-black/30">
           {ANIME_GUESSR_IMAGE_BASE_URL
             ? "题目图片暂不可用，已显示占位图"
             : "图片前缀未配置，已显示占位图"}
@@ -113,6 +116,10 @@ export default function AnimeGuessrPage() {
   const totalScore = useMemo(
     () => results.reduce((sum, result) => sum + result.score, 0),
     [results],
+  );
+  const currentStreetViewLocation = useMemo(
+    () => (current ? toAnimeStreetViewLocation(current) : null),
+    [current],
   );
 
   const loadQuestions = useCallback(() => {
@@ -204,6 +211,41 @@ export default function AnimeGuessrPage() {
   function handleRestart() {
     setReloadKey((value) => value + 1);
   }
+
+  const handleCurrentStreetViewUnavailable = useCallback(() => {
+    if (!current) return;
+
+    if (!GOOGLE_MAP_AK) {
+      setLoadState("error");
+      setLoadMessage(
+        "未配置 Google Maps AK，无法加载猜动漫模式的现实街景；请配置 NEXT_PUBLIC_GOOGLE_MAP_AK 后重试。",
+      );
+      return;
+    }
+
+    const nextQuestions = questions.filter(
+      (question) => question.id !== current.id,
+    );
+    setQuestions(nextQuestions);
+    setGuess(null);
+
+    if (nextQuestions.length <= results.length) {
+      if (results.length > 0) {
+        setPhase("final");
+        return;
+      }
+
+      setLoadState("error");
+      setLoadMessage("当前没有可用的 Google 街景题目，请重新加载题库。");
+      return;
+    }
+
+    setRound(Math.min(round, nextQuestions.length - 1));
+    setPhase("playing");
+    setLoadMessage(
+      "上一道动漫巡礼题的现实街景加载失败，已跳过并切换到下一题。",
+    );
+  }, [current, questions, results.length, round]);
 
   if (!ready) return <AuthLoading />;
 
@@ -341,15 +383,26 @@ export default function AnimeGuessrPage() {
 
       <div className="relative flex-1 overflow-hidden">
         <section
-          className={`h-full min-h-0 ${roundResult ? "opacity-35" : ""}`}
+          className={`h-full min-h-0 ${
+            roundResult ? "pointer-events-none opacity-0" : ""
+          }`}
+          aria-hidden={Boolean(roundResult)}
         >
-          {current && <QuestionImage question={current} />}
+          {currentStreetViewLocation && !roundResult && (
+            <GoogleStreetView
+              key={currentStreetViewLocation.id}
+              location={currentStreetViewLocation}
+              onUnavailable={handleCurrentStreetViewUnavailable}
+            />
+          )}
         </section>
 
         {!roundResult && current && (
-          <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),400px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/90 p-4 shadow-lg shadow-black/30">
+          <aside className="absolute top-4 left-4 z-20 flex max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] flex-col gap-3 overflow-y-auto rounded-xl border border-stone-700 bg-stone-950/90 p-4 shadow-lg shadow-black/30">
+            <AnimeClueImage question={current} />
+
             <div>
-              <div className="text-sm text-stone-500">作品</div>
+              <div className="text-sm text-stone-500">动漫线索</div>
               <h2 className="mt-1 text-2xl font-extrabold text-pink-300">
                 {current.animeTitle}
               </h2>
@@ -365,6 +418,12 @@ export default function AnimeGuessrPage() {
             {current.aspect && (
               <div className="text-sm leading-6 text-stone-400">
                 场景：{current.aspect}
+              </div>
+            )}
+
+            {loadMessage && (
+              <div className="rounded-lg border border-pink-500/20 bg-pink-500/10 px-3 py-2 text-xs leading-5 text-pink-50">
+                {loadMessage}
               </div>
             )}
           </aside>
