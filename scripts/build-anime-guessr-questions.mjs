@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -17,6 +18,12 @@ const LOCALIZED_TEXT_KEYS = [
   "episodeContext",
   "funfact",
 ];
+
+const LOCAL_ANIME_ROOT = path.join(
+  process.cwd(),
+  "scripts/python/rawdata/anime",
+);
+const LOCAL_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
 
 const inputPath = process.argv[2];
 const outputPath =
@@ -130,11 +137,30 @@ function compactLocaleOverride(text, fallback) {
   );
 }
 
-function compactRecord(record) {
-  const details = record.details ?? {};
-  const imagePath =
+function resolveImagePath(record) {
+  const fromRecord =
     record.image_url ??
     record.images?.find((image) => image.role === "point")?.local_path;
+  if (fromRecord) return fromRecord;
+
+  const raw = record.raw ?? {};
+  const subjectDir = cleanString(raw.subject_dir);
+  const pointId = cleanString(raw.point_id);
+  if (!subjectDir || !pointId) return undefined;
+
+  for (const ext of LOCAL_IMAGE_EXTENSIONS) {
+    const absolutePath = path.join(LOCAL_ANIME_ROOT, subjectDir, `${pointId}${ext}`);
+    if (existsSync(absolutePath)) {
+      return `anime/${subjectDir}/${pointId}${ext}`;
+    }
+  }
+
+  return undefined;
+}
+
+function compactRecord(record) {
+  const details = record.details ?? {};
+  const imagePath = resolveImagePath(record);
   const zh = compactLocalizedText(record, "zh");
   const locales = Object.fromEntries(
     LOCALIZED_OUTPUT_LOCALES.map((locale) => [
@@ -201,12 +227,16 @@ const payload = {
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`);
 
+const withImagePath = questions.filter((question) => question.imagePath).length;
+
 console.log(
   JSON.stringify(
     {
       outputPath,
       sourceTotal: records.length,
       questions: questions.length,
+      withImagePath,
+      withoutImagePath: questions.length - withImagePath,
     },
     null,
     2,
