@@ -5,12 +5,21 @@ import {
   scoreRound,
   yearScore,
   locationScore,
+  locationDistanceScore,
   locationRoundScore,
+  locationSpeedCompensationScore,
   LOCATION_ROUND_SCORE_MAX,
+  LOCATION_FULL_SCORE_DISTANCE_KM,
+  LOCATION_PRECISION_ZONE_KM,
+  LOCATION_CITY_GUESS_MAX_DISTANCE_PTS,
+  LOCATION_FAR_DISTANCE_KM,
+  LOCATION_FAR_DISTANCE_MAX_PTS,
+  LOCATION_SPEED_COMPENSATION_MAX,
   getTargetYear,
   formatAnswerYear,
   quizScore,
   CHINA_LOCATION_SCORE_ZERO_KM,
+  LOCATION_ROUND_ZERO_DISTANCE_KM,
 } from "~/lib/scoring";
 
 describe("getTargetYear", () => {
@@ -187,28 +196,75 @@ describe("yearScore / locationScore", () => {
   });
 });
 
+describe("locationDistanceScore", () => {
+  it("1 km 内得满分", () => {
+    expect(locationDistanceScore(0)).toBe(100);
+    expect(locationDistanceScore(1)).toBe(100);
+  });
+
+  it("1–3 km 从 100 线性递减至 80", () => {
+    expect(locationDistanceScore(2)).toBe(90);
+    expect(locationDistanceScore(3)).toBe(80);
+  });
+
+  it("刚超过 3 km 时距离分上限为 80", () => {
+    expect(locationDistanceScore(3.1)).toBeLessThanOrEqual(80);
+    expect(locationDistanceScore(50)).toBeLessThanOrEqual(80);
+  });
+
+  it("数十 km 误差仍在城市段，分数显著低于满分", () => {
+    const pts = locationDistanceScore(50);
+    expect(pts).toBeGreaterThan(40);
+    expect(pts).toBeLessThanOrEqual(80);
+  });
+
+  it("400 km 时距离分为 40", () => {
+    expect(locationDistanceScore(LOCATION_FAR_DISTANCE_KM)).toBe(
+      LOCATION_FAR_DISTANCE_MAX_PTS,
+    );
+  });
+
+  it("超过 400 km 后距离分低于 40", () => {
+    expect(locationDistanceScore(401)).toBeLessThan(40);
+    expect(locationDistanceScore(800)).toBeLessThan(40);
+  });
+
+  it("极远误差距离分归零", () => {
+    expect(locationDistanceScore(LOCATION_ROUND_ZERO_DISTANCE_KM)).toBe(0);
+  });
+});
+
+describe("locationSpeedCompensationScore", () => {
+  it("开局 10 分，每 10 秒扣 1 分", () => {
+    expect(locationSpeedCompensationScore(0)).toBe(10);
+    expect(locationSpeedCompensationScore(9)).toBe(10);
+    expect(locationSpeedCompensationScore(10)).toBe(9);
+    expect(locationSpeedCompensationScore(50)).toBe(5);
+    expect(locationSpeedCompensationScore(100)).toBe(0);
+    expect(locationSpeedCompensationScore(120)).toBe(0);
+  });
+});
+
 describe("locationRoundScore", () => {
-  it("地点重合时每题满分 100，速度补偿不突破满分", () => {
+  it("精确命中且即时提交时距离满分、速度满分，总分封顶 100", () => {
     const result = locationRoundScore({
       distanceKm: 0,
       elapsedSeconds: 0,
     });
 
     expect(result.distancePts).toBe(LOCATION_ROUND_SCORE_MAX);
-    expect(result.speedCompensationPts).toBe(0);
+    expect(result.speedCompensationPts).toBe(LOCATION_SPEED_COMPENSATION_MAX);
     expect(result.total).toBe(LOCATION_ROUND_SCORE_MAX);
   });
 
-  it("仅按距离给基础分，速度越快补偿越高", () => {
+  it("距离分相同时，提交越快速度补偿越高", () => {
     const fast = locationRoundScore({
-      distanceKm: 600,
+      distanceKm: 50,
       elapsedSeconds: 0,
-      speedCompensationWindowSeconds: 60,
     });
     const slow = locationRoundScore({
-      distanceKm: 600,
-      elapsedSeconds: 60,
-      speedCompensationWindowSeconds: 60,
+      distanceKm: 50,
+      elapsedSeconds: 50,
     });
 
     expect(fast.distancePts).toBe(slow.distancePts);
@@ -219,13 +275,14 @@ describe("locationRoundScore", () => {
     expect(fast.total).toBeLessThanOrEqual(LOCATION_ROUND_SCORE_MAX);
   });
 
-  it("超过计分距离后仍只可能获得少量速度补偿", () => {
+  it("极远误差时距离分归零，仅剩少量速度补偿", () => {
     const result = locationRoundScore({
-      distanceKm: CHINA_LOCATION_SCORE_ZERO_KM,
+      distanceKm: LOCATION_ROUND_ZERO_DISTANCE_KM,
       elapsedSeconds: 0,
     });
 
     expect(result.distancePts).toBe(0);
-    expect(result.total).toBeLessThan(LOCATION_ROUND_SCORE_MAX);
+    expect(result.speedCompensationPts).toBe(LOCATION_SPEED_COMPENSATION_MAX);
+    expect(result.total).toBe(LOCATION_SPEED_COMPENSATION_MAX);
   });
 });
