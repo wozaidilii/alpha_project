@@ -40,6 +40,10 @@ export const LOCATION_SPEED_COMPENSATION_WINDOW_SECONDS = 60;
 export const LOCATION_SOLO_ANIME_TIME_CAP_SECONDS = 100;
 /** 单人猜动漫：超过 TIME_CAP 后单轮总分上限 */
 export const LOCATION_SOLO_ANIME_OVER_TIME_MAX = 90;
+/** 单人猜动漫：突破满分所需最低距离分 */
+export const LOCATION_SOLO_ANIME_BREAKTHROUGH_MIN_DISTANCE_PTS = 90;
+/** 单人猜动漫：精确+快速时可突破到的单轮最高分 */
+export const LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX = 120;
 export const HISTORY_YEAR_SCORE_MAX = 10000;
 export const HISTORY_YEAR_MIN_CLUE_MULTIPLIER = 0.4;
 
@@ -64,6 +68,18 @@ export interface LocationRoundScoreResult {
   distancePts: number;
   speedCompensationPts: number;
   total: number;
+  /** 单人模式：100 秒内距离 ≥90 且总分突破 100 */
+  scoreBreakthrough?: boolean;
+}
+
+export function canSoloAnimeScoreBreakthrough(
+  distancePts: number,
+  elapsedSeconds: number,
+): boolean {
+  return (
+    elapsedSeconds <= LOCATION_SOLO_ANIME_TIME_CAP_SECONDS &&
+    distancePts >= LOCATION_SOLO_ANIME_BREAKTHROUGH_MIN_DISTANCE_PTS
+  );
 }
 
 /**
@@ -134,12 +150,20 @@ export function locationRoundScore({
   const rawTotal = distancePts + speedCompensationPts;
 
   let total: number;
+  let scoreBreakthrough: boolean | undefined;
+
   if (soloAnimeScoring) {
     const elapsed = Math.max(0, elapsedSeconds ?? 0);
-    total =
-      elapsed <= LOCATION_SOLO_ANIME_TIME_CAP_SECONDS
-        ? Math.min(LOCATION_ROUND_SCORE_MAX, rawTotal)
-        : Math.min(LOCATION_SOLO_ANIME_OVER_TIME_MAX, rawTotal);
+    if (elapsed <= LOCATION_SOLO_ANIME_TIME_CAP_SECONDS) {
+      if (canSoloAnimeScoreBreakthrough(distancePts, elapsed)) {
+        total = Math.min(LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX, rawTotal);
+        scoreBreakthrough = total > LOCATION_ROUND_SCORE_MAX;
+      } else {
+        total = Math.min(LOCATION_ROUND_SCORE_MAX, rawTotal);
+      }
+    } else {
+      total = Math.min(LOCATION_SOLO_ANIME_OVER_TIME_MAX, rawTotal);
+    }
   } else {
     total = Math.min(LOCATION_ROUND_SCORE_MAX, rawTotal);
   }
@@ -148,6 +172,7 @@ export function locationRoundScore({
     distancePts,
     speedCompensationPts,
     total,
+    ...(scoreBreakthrough ? { scoreBreakthrough: true } : {}),
   };
 }
 

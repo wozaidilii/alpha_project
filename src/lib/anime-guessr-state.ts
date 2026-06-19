@@ -22,6 +22,7 @@ export interface AnimeRoundResult {
   speedCompensationPts: number;
   elapsedSeconds: number;
   score: number;
+  scoreBreakthrough?: boolean;
 }
 
 export interface PendingAnimeFinalResult {

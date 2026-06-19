@@ -15,6 +15,7 @@ import {
   LOCATION_FAR_DISTANCE_KM,
   LOCATION_FAR_DISTANCE_MAX_PTS,
   LOCATION_SPEED_COMPENSATION_MAX,
+  LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX,
   LOCATION_SOLO_ANIME_OVER_TIME_MAX,
   LOCATION_SOLO_ANIME_TIME_CAP_SECONDS,
   getTargetYear,
@@ -249,7 +250,7 @@ describe("locationSpeedCompensationScore", () => {
 });
 
 describe("locationRoundScore", () => {
-  it("精确命中且 100 秒内提交时可拿满分", () => {
+  it("100 秒内精确命中时可突破 100 分上限", () => {
     const result = locationRoundScore({
       distanceKm: 0,
       elapsedSeconds: 50,
@@ -258,7 +259,31 @@ describe("locationRoundScore", () => {
 
     expect(result.distancePts).toBe(LOCATION_ROUND_SCORE_MAX);
     expect(result.speedCompensationPts).toBe(15);
-    expect(result.total).toBe(LOCATION_ROUND_SCORE_MAX);
+    expect(result.total).toBe(115);
+    expect(result.scoreBreakthrough).toBe(true);
+  });
+
+  it("100 秒内即时提交且距离满分时可达到 120", () => {
+    const result = locationRoundScore({
+      distanceKm: 0,
+      elapsedSeconds: 0,
+      soloAnimeScoring: true,
+    });
+
+    expect(result.total).toBe(LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX);
+    expect(result.scoreBreakthrough).toBe(true);
+  });
+
+  it("100 秒内距离分不足 90 时仍按 100 封顶", () => {
+    const result = locationRoundScore({
+      distanceKm: 50,
+      elapsedSeconds: 0,
+      soloAnimeScoring: true,
+    });
+
+    expect(result.distancePts).toBeLessThan(90);
+    expect(result.total).toBeLessThanOrEqual(LOCATION_ROUND_SCORE_MAX);
+    expect(result.scoreBreakthrough).toBeUndefined();
   });
 
   it("100 秒内距离分相同时，提交越快速度补偿越高", () => {
@@ -279,6 +304,18 @@ describe("locationRoundScore", () => {
     );
     expect(fast.total).toBeGreaterThan(slow.total);
     expect(fast.total).toBeLessThanOrEqual(LOCATION_ROUND_SCORE_MAX);
+  });
+
+  it("100 秒内距离 ≥90 且速度极快时可突破 100", () => {
+    const result = locationRoundScore({
+      distanceKm: 2,
+      elapsedSeconds: 5,
+      soloAnimeScoring: true,
+    });
+
+    expect(result.distancePts).toBeGreaterThanOrEqual(90);
+    expect(result.total).toBeGreaterThan(LOCATION_ROUND_SCORE_MAX);
+    expect(result.scoreBreakthrough).toBe(true);
   });
 
   it("超过 100 秒后即使距离满分也不能再到 100", () => {

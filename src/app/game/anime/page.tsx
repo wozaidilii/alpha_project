@@ -45,6 +45,7 @@ import {
   haversineDistance,
   locationRoundScore,
   LOCATION_ROUND_SCORE_MAX,
+  LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX,
 } from "~/lib/scoring";
 import { AuthLoading, useEmailSession } from "~/lib/player-session-guard";
 import {
@@ -118,6 +119,8 @@ type GameCopy = {
   roundLabel: (round: number) => string;
   resultLine: (location: string, distance: string, elapsed: string) => string;
   scoreUnit: string;
+  scoreBreakthrough: string;
+  scoreBreakthroughFinal: string;
   ranks: {
     s: string;
     a: string;
@@ -207,6 +210,9 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     resultLine: (location, distance, elapsed) =>
       `${location} · 偏差 ${distance} · 用时 ${elapsed}`,
     scoreUnit: "分",
+    scoreBreakthrough:
+      "精确度与用时都超乎寻常，本轮得分突破了常规满分上限。",
+    scoreBreakthroughFinal: "本局有轮次突破了单轮满分上限。",
     ranks: {
       s: "圣地巡礼大师",
       a: "取景地猎手",
@@ -296,6 +302,9 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     resultLine: (location, distance, elapsed) =>
       `${location} · 誤差 ${distance} · ${elapsed}`,
     scoreUnit: "点",
+    scoreBreakthrough:
+      "精度とスピードが際立っているため、このラウンドは通常上限を超えて得点しました。",
+    scoreBreakthroughFinal: "この対局では満点上限を超えたラウンドがありました。",
     ranks: {
       s: "聖地巡礼マスター",
       a: "ロケ地ハンター",
@@ -387,6 +396,10 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     resultLine: (location, distance, elapsed) =>
       `${location} · ${distance} away · ${elapsed}`,
     scoreUnit: "pts",
+    scoreBreakthrough:
+      "Your accuracy and speed were exceptional, so this round scored above the usual cap.",
+    scoreBreakthroughFinal:
+      "This run included at least one round above the normal per-round cap.",
     ranks: {
       s: "Pilgrimage master",
       a: "Location hunter",
@@ -822,6 +835,7 @@ export default function AnimeGuessrPage() {
         speedCompensationPts: score.speedCompensationPts,
         elapsedSeconds,
         score: score.total,
+        ...(score.scoreBreakthrough ? { scoreBreakthrough: true } : {}),
       },
     ]);
     const roundPayload = {
@@ -900,7 +914,7 @@ export default function AnimeGuessrPage() {
     if (recordedCompletionKeyRef.current === key) return;
     recordedCompletionKeyRef.current = key;
 
-    const maxScore = roundCount * LOCATION_ROUND_SCORE_MAX;
+    const maxScore = roundCount * LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX;
     const summary = {
       id: key,
       score: totalScore,
@@ -1091,7 +1105,9 @@ export default function AnimeGuessrPage() {
   }
 
   if (phase === "final") {
-    const maxScore = roundCount * LOCATION_ROUND_SCORE_MAX;
+    const standardMaxScore = roundCount * LOCATION_ROUND_SCORE_MAX;
+    const absoluteMaxScore = roundCount * LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX;
+    const hasScoreBreakthrough = results.some((result) => result.scoreBreakthrough);
     const rank = getRank(totalScore, locale);
     const guestModeBest = guestProgress
       ? getGuestBestScoreForRounds(guestProgress, roundCount)
@@ -1129,8 +1145,19 @@ export default function AnimeGuessrPage() {
               {totalScore.toLocaleString()}
             </div>
             <div className="mt-1 text-pink-50/60">
-              / {maxScore.toLocaleString()} {copy.scoreUnit}
+              / {standardMaxScore.toLocaleString()} {copy.scoreUnit}
+              {hasScoreBreakthrough ? (
+                <span className="text-cyan-100/70">
+                  {" "}
+                  (上限 {absoluteMaxScore.toLocaleString()})
+                </span>
+              ) : null}
             </div>
+            {hasScoreBreakthrough ? (
+              <div className="mt-4 rounded-xl border border-cyan-200/30 bg-cyan-200/10 px-3 py-2 text-sm leading-6 text-cyan-50">
+                {copy.scoreBreakthroughFinal}
+              </div>
+            ) : null}
             <div className="mt-3 text-sm font-bold text-cyan-100/80">
               {copy.totalElapsed(
                 formatAnimeGameCountdown(totalElapsedSeconds),
@@ -1350,12 +1377,24 @@ export default function AnimeGuessrPage() {
 
             <div className="rounded-xl border border-white/10 bg-white/10 p-5 text-center">
               <div className="text-sm text-cyan-100/70">{copy.roundScore}</div>
-              <div className="text-6xl font-extrabold text-white">
+              <div
+                className={`text-6xl font-extrabold ${
+                  roundResult.scoreBreakthrough ? "text-cyan-100" : "text-white"
+                }`}
+              >
                 {roundResult.score.toLocaleString()}
               </div>
               <div className="text-sm text-pink-50/50">
-                / {LOCATION_ROUND_SCORE_MAX}
+                /{" "}
+                {roundResult.scoreBreakthrough
+                  ? LOCATION_SOLO_ANIME_BREAKTHROUGH_MAX
+                  : LOCATION_ROUND_SCORE_MAX}
               </div>
+              {roundResult.scoreBreakthrough ? (
+                <div className="mt-4 rounded-xl border border-cyan-200/30 bg-cyan-200/10 px-3 py-2 text-sm leading-6 text-cyan-50">
+                  {copy.scoreBreakthrough}
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
