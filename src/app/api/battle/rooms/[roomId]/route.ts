@@ -3,11 +3,16 @@ import { z } from "zod";
 import { isBattleGameModeSlug } from "~/lib/game-mode";
 import {
   cancelBattleRoomStart,
+  finishBattleRoom,
   getBattleRoomSnapshot,
   joinBattleRoom,
   leaveBattleRoom,
+  markBattleRoomRoundReady,
   markBattleRoomStarting,
+  recordBattleRoomRoundResult,
   startBattleRoom,
+  startBattleRoomRound,
+  submitBattleRoomGuess,
 } from "~/server/data/battle-room-store";
 import {
   type BattlePlayer,
@@ -41,6 +46,41 @@ const settingsSchema = z.object({
   questionType: z.string().refine(isBattleGameModeSlug, {
     message: "Unsupported battle mode",
   }),
+});
+
+const guessSchema = z.object({
+  playerId: z.string().min(1),
+  roundIndex: z.number().int().min(0),
+  lat: z.number().finite(),
+  lng: z.number().finite(),
+  year: z.number().finite(),
+  guessIndex: z.number().int().nullable().optional(),
+  submittedAt: z.number().finite(),
+});
+
+const playerGuessSchema = z.object({
+  lat: z.number().finite(),
+  lng: z.number().finite(),
+  year: z.number().finite(),
+  guessIndex: z.number().int().nullable().optional(),
+  locationPts: z.number().finite(),
+  yearPts: z.number().finite(),
+  quizPts: z.number().finite(),
+  total: z.number().finite(),
+  distanceKm: z.number().finite(),
+  speedMultiplier: z.number().finite(),
+  speedCompensationPts: z.number().finite().optional(),
+  elapsedSeconds: z.number().finite().optional(),
+  submitted: z.boolean().optional(),
+  isCorrect: z.boolean().optional(),
+});
+
+const roundResultSchema = z.object({
+  roundIndex: z.number().int().min(0),
+  question: z.custom<BattleQuestion>(),
+  guesses: z.record(playerGuessSchema),
+  hpAfter: z.record(z.number().finite()),
+  damage: z.record(z.number().finite()),
 });
 
 function toSettings(input: z.infer<typeof settingsSchema>): BattleSettings {
@@ -83,6 +123,11 @@ export async function POST(request: Request, context: RouteContext) {
           "starting",
           "cancel-start",
           "started",
+          "submit-guess",
+          "round-result",
+          "round-ready",
+          "round-started",
+          "game-over",
           "leave",
         ]),
       })
@@ -147,6 +192,87 @@ export async function POST(request: Request, context: RouteContext) {
         roundIndex: parsed.roundIndex,
         startTime: parsed.startTime,
       });
+      return NextResponse.json({ room });
+    }
+
+    if (action === "submit-guess") {
+      const parsed = z
+        .object({
+          action: z.literal("submit-guess"),
+          guess: guessSchema,
+        })
+        .parse(body);
+      const room = submitBattleRoomGuess({
+        roomId,
+        guess: parsed.guess,
+      });
+      if (!room) return jsonError("Battle room not found", 404);
+      return NextResponse.json({ room });
+    }
+
+    if (action === "round-result") {
+      const parsed = z
+        .object({
+          action: z.literal("round-result"),
+          result: roundResultSchema,
+        })
+        .parse(body);
+      const room = recordBattleRoomRoundResult({
+        roomId,
+        result: parsed.result,
+      });
+      if (!room) return jsonError("Battle room not found", 404);
+      return NextResponse.json({ room });
+    }
+
+    if (action === "round-ready") {
+      const parsed = z
+        .object({
+          action: z.literal("round-ready"),
+          playerId: z.string().min(1),
+          roundIndex: z.number().int().min(0),
+        })
+        .parse(body);
+      const room = markBattleRoomRoundReady({
+        roomId,
+        playerId: parsed.playerId,
+        roundIndex: parsed.roundIndex,
+      });
+      if (!room) return jsonError("Battle room not found", 404);
+      return NextResponse.json({ room });
+    }
+
+    if (action === "round-started") {
+      const parsed = z
+        .object({
+          action: z.literal("round-started"),
+          roundIndex: z.number().int().min(0),
+          startTime: z.number().finite(),
+        })
+        .parse(body);
+      const room = startBattleRoomRound({
+        roomId,
+        roundIndex: parsed.roundIndex,
+        startTime: parsed.startTime,
+      });
+      if (!room) return jsonError("Battle room not found", 404);
+      return NextResponse.json({ room });
+    }
+
+    if (action === "game-over") {
+      const parsed = z
+        .object({
+          action: z.literal("game-over"),
+          results: z.array(roundResultSchema),
+          finalHp: z.record(z.number().finite()),
+        })
+        .parse(body);
+      const room = finishBattleRoom({
+        roomId,
+        results: parsed.results,
+        finalHp: parsed.finalHp,
+      });
+      if (!room) return jsonError("Battle room not found", 404);
       return NextResponse.json({ room });
     }
 

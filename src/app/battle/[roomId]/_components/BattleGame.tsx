@@ -47,6 +47,7 @@ import {
   isTuxunBattleQuestion,
 } from "~/lib/battle-question";
 import {
+  BATTLE_MAX_PLAYERS,
   type BattlePhase,
   type BattleForeignQuestion,
   type BattleAnimeTuxunQuestion,
@@ -433,7 +434,9 @@ export function BattleGame({
   const [guessYear, setGuessYear] = useState(1900);
   const [guessIndex, setGuessIndex] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [opponentSubmitted, setOpponentSubmitted] = useState(false);
+  const [submittedPlayers, setSubmittedPlayers] = useState<
+    Record<string, boolean>
+  >({});
 
   const [results, setResults] = useState<BattleRoundResult[]>([]);
   const [lobbyError, setLobbyError] = useState("");
@@ -469,6 +472,7 @@ export function BattleGame({
   }, [settings]);
 
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
+  const resultsRef = useRef<BattleRoundResult[]>([]);
   const resolvedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
   const roundReadyRef = useRef<Record<string, boolean>>({});
@@ -477,6 +481,10 @@ export function BattleGame({
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  useEffect(() => {
+    resultsRef.current = results;
+  }, [results]);
 
   const gameMode = getGameMode(settings.questionType);
   const currentQuestion = questions[currentRound];
@@ -585,6 +593,60 @@ export function BattleGame({
     playersRef.current = players;
   }
 
+  function syncSubmittedPlayers(
+    guesses: Record<string, PusherGuessSubmitted> | undefined,
+  ) {
+    const submittedMap = Object.fromEntries(
+      Object.keys(guesses ?? {}).map((playerId) => [playerId, true]),
+    );
+    collectedGuesses.current = guesses ? { ...guesses } : {};
+    setSubmittedPlayers(submittedMap);
+    setSubmitted(Boolean(guesses?.[myId.current]));
+  }
+
+  function replaceResults(nextResults: BattleRoundResult[] | undefined) {
+    const safeResults = nextResults ?? [];
+    resultsRef.current = safeResults;
+    setResults(safeResults);
+  }
+
+  function upsertLocalRoundResult(result: BattleRoundResult) {
+    const nextResults = [...resultsRef.current];
+    const existingIndex = nextResults.findIndex(
+      (entry) => entry.roundIndex === result.roundIndex,
+    );
+    if (existingIndex >= 0) {
+      nextResults[existingIndex] = result;
+    } else {
+      nextResults.push(result);
+    }
+    nextResults.sort((a, b) => a.roundIndex - b.roundIndex);
+    replaceResults(nextResults);
+  }
+
+  function syncRoomPlayState(snapshot: BattleRoomSnapshot) {
+    setSettings(snapshot.settings);
+    settingsRef.current = snapshot.settings;
+    setPlayers(snapshot.players);
+    playersRef.current = snapshot.players;
+    replaceResults(snapshot.results);
+    roundReadyRef.current = snapshot.roundReady ?? {};
+    setRoundReady({ ...roundReadyRef.current });
+    syncSubmittedPlayers(snapshot.guesses);
+
+    if (snapshot.finalHp) {
+      setPlayers((prev) => {
+        const next = { ...prev };
+        for (const [pid, hp] of Object.entries(snapshot.finalHp ?? {})) {
+          const existing = next[pid];
+          if (existing) next[pid] = { ...existing, hp };
+        }
+        playersRef.current = next;
+        return next;
+      });
+    }
+  }
+
   async function handleRemoteGameStarted(data: PusherGameStarted) {
     setLobbyError("");
     setGameSyncing(true);
@@ -633,23 +695,53 @@ export function BattleGame({
     }
 
     if (snapshot.phase !== "playing") return;
-    if (phaseRef.current !== "lobby" && questionsRef.current.length > 0) {
-      return;
-    }
 
     if (snapshot.roundIndex == null || snapshot.startTime == null) {
       setLobbyError("房间已开局，但题目状态不完整，请重新创建房间");
       return;
     }
 
-    await handleRemoteGameStarted({
-      settings: snapshot.settings,
-      players: snapshot.players,
-      questionIds: snapshot.questionIds,
-      questions: snapshot.questions,
-      roundIndex: snapshot.roundIndex,
-      startTime: snapshot.startTime,
-    });
+    if (questionsRef.current.length === 0) {
+      await handleRemoteGameStarted({
+        settings: snapshot.settings,
+        players: snapshot.players,
+        questionIds: snapshot.questionIds,
+        questions: snapshot.questions,
+        roundIndex: snapshot.roundIndex,
+        startTime: snapshot.startTime,
+      });
+    }
+
+    syncRoomPlayState(snapshot);
+
+    if (snapshot.roundStatus === "game-over") {
+      setPhase("game-over");
+      return;
+    }
+
+    if (snapshot.roundStatus === "round-result") {
+      const result = snapshot.results?.find(
+        (entry) => entry.roundIndex === snapshot.roundIndex,
+      );
+      if (result) {
+        upsertLocalRoundResult(result);
+        setPhase("round-result");
+        if (isHost) checkAllReadyAndProceed();
+      }
+      return;
+    }
+
+    if (
+      phaseRef.current !== "playing" ||
+      currentRoundRef.current !== snapshot.roundIndex
+    ) {
+      beginRound(snapshot.roundIndex, snapshot.startTime);
+      syncSubmittedPlayers(snapshot.guesses);
+      return;
+    }
+
+    setRoundStartTime(snapshot.startTime);
+    roundStartTimeRef.current = snapshot.startTime;
   }
 
   function beginRound(roundIndex: number, startTime: number) {
@@ -672,18 +764,27 @@ export function BattleGame({
     setGuessYear(bounds.defaultYear);
     setGuessIndex(null);
     setSubmitted(false);
-    setOpponentSubmitted(false);
+    setSubmittedPlayers({});
     setStreetViewError("");
     roundReadyRef.current = {};
     setRoundReady({});
     setPhase("playing");
   }
 
-  function handleNextRoundInternal() {
+  async function handleNextRoundInternal() {
     const next = currentRoundRef.current + 1;
     if (next >= settingsRef.current.rounds) return;
     const startTime = Date.now();
-    beginRound(next, startTime);
+    const snapshot = await postBattleRoomAction(roomId, {
+      action: "round-started",
+      roundIndex: next,
+      startTime,
+    }).catch(() => null);
+    if (snapshot) {
+      await applyRoomSnapshot(snapshot);
+    } else {
+      beginRound(next, startTime);
+    }
     void sendPusherEvent(channel, "round-started", {
       roundIndex: next,
       startTime,
@@ -710,15 +811,24 @@ export function BattleGame({
       for (const id of ids) {
         finalHp[id] = playersRef.current[id]?.hp ?? 0;
       }
+      void postBattleRoomAction(roomId, {
+        action: "game-over",
+        results: resultsRef.current,
+        finalHp,
+      })
+        .then((snapshot) => {
+          if (snapshot) void applyRoomSnapshot(snapshot);
+        })
+        .catch(() => undefined);
       void sendPusherEvent(channel, "game-over", {
-        results: [],
+        results: resultsRef.current,
         finalHp,
       } satisfies PusherGameOver);
       setPhase("game-over");
       return;
     }
 
-    handleNextRoundInternal();
+    void handleNextRoundInternal();
   }
 
   function handleRoundReady() {
@@ -727,6 +837,15 @@ export function BattleGame({
 
     roundReadyRef.current[myId.current] = true;
     setRoundReady({ ...roundReadyRef.current });
+    void postBattleRoomAction(roomId, {
+      action: "round-ready",
+      playerId: myId.current,
+      roundIndex: roundIdx,
+    })
+      .then((snapshot) => {
+        if (snapshot) void applyRoomSnapshot(snapshot);
+      })
+      .catch(() => undefined);
     void sendPusherEvent(channel, "round-ready", {
       playerId: myId.current,
       roundIndex: roundIdx,
@@ -767,17 +886,16 @@ export function BattleGame({
       damage[id] = 0;
     }
 
-    if (playerIds.length === 2) {
-      const [a, b] = playerIds as [string, string];
-      const scoreA = guesses[a]?.total ?? 0;
-      const scoreB = guesses[b]?.total ?? 0;
-      const dmg = calcDamage(scoreA, scoreB, modeType);
-      if (scoreA < scoreB) {
-        damage[a] = dmg;
-        hpAfter[a] = Math.max(0, (hpAfter[a] ?? 0) - dmg);
-      } else if (scoreB < scoreA) {
-        damage[b] = dmg;
-        hpAfter[b] = Math.max(0, (hpAfter[b] ?? 0) - dmg);
+    if (playerIds.length >= 2) {
+      const topScore = Math.max(
+        ...playerIds.map((id) => guesses[id]?.total ?? 0),
+      );
+      for (const id of playerIds) {
+        const score = guesses[id]?.total ?? 0;
+        if (score >= topScore) continue;
+        const dmg = calcDamage(topScore, score, modeType);
+        damage[id] = dmg;
+        hpAfter[id] = Math.max(0, (hpAfter[id] ?? 0) - dmg);
       }
     }
 
@@ -789,13 +907,21 @@ export function BattleGame({
       damage,
     };
     applyRoundResult(result);
+    void postBattleRoomAction(roomId, {
+      action: "round-result",
+      result,
+    })
+      .then((snapshot) => {
+        if (snapshot) void applyRoomSnapshot(snapshot);
+      })
+      .catch(() => undefined);
     void sendPusherEvent(channel, "round-results", {
       result,
     } satisfies PusherRoundResults);
   }
 
   function applyRoundResult(result: BattleRoundResult) {
-    setResults((prev) => [...prev, result]);
+    upsertLocalRoundResult(result);
     setPlayers((prev) => {
       const next = { ...prev };
       for (const [pid, hp] of Object.entries(result.hpAfter)) {
@@ -858,7 +984,8 @@ export function BattleGame({
     });
 
     ch.bind("guess-submitted", (data: PusherGuessSubmitted) => {
-      if (data.playerId !== myId.current) setOpponentSubmitted(true);
+      if (data.roundIndex !== currentRoundRef.current) return;
+      setSubmittedPlayers((prev) => ({ ...prev, [data.playerId]: true }));
       collectedGuesses.current[data.playerId] = data;
 
       if (isHost) {
@@ -887,6 +1014,7 @@ export function BattleGame({
     });
 
     ch.bind("game-over", (data: PusherGameOver) => {
+      if (data.results.length > 0) replaceResults(data.results);
       setPlayers((prev) => {
         const next = { ...prev };
         for (const [pid, hp] of Object.entries(data.finalHp)) {
@@ -934,7 +1062,6 @@ export function BattleGame({
   }, []);
 
   useEffect(() => {
-    if (phase !== "lobby") return;
     let active = true;
 
     async function syncRoom() {
@@ -955,7 +1082,7 @@ export function BattleGame({
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, roomId]);
+  }, [roomId]);
 
   useEffect(() => {
     const url = battleRoomUrl(roomId);
@@ -1018,6 +1145,14 @@ export function BattleGame({
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, roundStartTime]);
+
+  useEffect(() => {
+    if (!isHost || phase !== "playing") return;
+    const ids = Object.keys(playersRef.current);
+    if (ids.length < 2) return;
+    if (ids.every((id) => collectedGuesses.current[id])) resolveRound();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHost, phase, submittedPlayers]);
 
   useEffect(() => {
     if (phase !== "playing") {
@@ -1320,21 +1455,41 @@ export function BattleGame({
     }
     if (needsQuiz && guessIndex === null) return;
 
-    setSubmitted(true);
-    void sendPusherEvent(channel, "guess-submitted", {
+    const guess = {
       playerId: myId.current,
+      roundIndex: currentRoundRef.current,
       lat: guessLat ?? 0,
       lng: guessLng ?? 0,
       year: needsQuiz || needsLocationOnlyGuess ? 0 : guessYear,
       guessIndex: needsQuiz ? guessIndex : undefined,
       submittedAt: Date.now(),
-    } satisfies PusherGuessSubmitted);
+    } satisfies PusherGuessSubmitted;
+
+    setSubmitted(true);
+    collectedGuesses.current[myId.current] = guess;
+    setSubmittedPlayers((prev) => ({ ...prev, [myId.current]: true }));
+    void postBattleRoomAction(roomId, {
+      action: "submit-guess",
+      guess,
+    })
+      .then((snapshot) => {
+        if (snapshot) void applyRoomSnapshot(snapshot);
+      })
+      .catch(() => undefined);
+    void sendPusherEvent(channel, "guess-submitted", guess);
+
+    if (isHost) {
+      const allIn = Object.keys(playersRef.current).every(
+        (id) => collectedGuesses.current[id],
+      );
+      if (allIn) resolveRound();
+    }
   }
 
-  const me = players[myId.current];
-  const opponent = Object.values(players).find((p) => p.id !== myId.current);
   const lastResult = results[results.length - 1];
   const playerList = Object.values(players);
+  const submittedCount = Object.keys(submittedPlayers).length;
+  const submittedSummary = `${submittedCount} / ${playerList.length} 已提交`;
 
   const speedPreview =
     roundStartTime && phase === "playing"
@@ -1360,82 +1515,120 @@ export function BattleGame({
         ? "先在地图上选地点"
         : "提交猜测";
 
+  function renderBattleHeader() {
+    return (
+      <>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#0d081a]/90 px-4 py-3 backdrop-blur">
+          <div>
+            <div className="text-sm font-bold text-pink-100">
+              对战 · {gameMode?.emoji} {gameMode?.title}
+            </div>
+            <div className="text-xs text-pink-100/55">
+              第 {currentRound + 1} / {settings.rounds} 轮 · {submittedSummary}
+            </div>
+          </div>
+          <div className="flex max-w-full flex-wrap justify-end gap-2">
+            {playerList.map((player) => (
+              <HPBar
+                key={player.id}
+                player={player}
+                flipped={false}
+                isMe={player.id === myId.current}
+                submitted={submittedPlayers[player.id] === true}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="h-1.5 w-full bg-white/10">
+          <div
+            className={`h-full transition-all ${timerColor}`}
+            style={{ width: `${timerPct}%` }}
+          />
+        </div>
+      </>
+    );
+  }
+
   if (phase === "lobby") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-stone-900 text-white">
-        <div className="w-full max-w-sm px-4">
+      <div className="anime-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-white">
+        <div className="w-full max-w-2xl">
           <Link
             href="/battle"
-            className="mb-6 inline-block text-sm text-stone-400 hover:text-white"
+            className="mb-6 inline-block text-sm text-pink-100/70 hover:text-pink-50"
           >
             ← 返回大厅
           </Link>
-          <div className="mb-6 rounded-2xl bg-stone-800 p-6 text-center">
-            <div className="mb-1 text-sm text-stone-400">房间号</div>
-            <div className="mb-3 font-mono text-5xl font-extrabold tracking-widest text-amber-400">
+          <div className="anime-panel mb-6 p-6 text-center">
+            <div className="mb-1 text-sm text-pink-100/60">房间号</div>
+            <div className="mb-3 font-mono text-5xl font-extrabold tracking-widest text-cyan-100">
               {roomId}
             </div>
             <button
               onClick={() => void navigator.clipboard.writeText(roomId)}
-              className="text-xs text-stone-500 hover:text-stone-300"
+              className="text-xs text-pink-100/55 hover:text-pink-50"
             >
               点击复制
             </button>
           </div>
 
           <div className="mb-6 space-y-2">
-            <div className="text-sm text-stone-400">
-              房间人数 ({playerList.length}/2)
+            <div className="flex items-center justify-between text-sm text-pink-100/65">
+              <span>房间人数</span>
+              <span>
+                {playerList.length} / {BATTLE_MAX_PLAYERS}
+              </span>
             </div>
-            {playerList.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-3 rounded-lg bg-stone-800 px-4 py-2.5"
-              >
-                <span
-                  className="grid h-9 w-9 place-items-center rounded-full text-lg"
-                  style={{ backgroundColor: p.avatar.color }}
+            <div className="grid gap-2 sm:grid-cols-2">
+              {playerList.map((p) => (
+                <div
+                  key={p.id}
+                  className="anime-panel flex items-center gap-3 rounded-xl px-4 py-3"
                 >
-                  {p.avatar.icon}
-                </span>
-                <span className="font-medium">{p.name}</span>
-                {p.isHost && (
-                  <span className="ml-auto text-xs text-stone-500">房主</span>
-                )}
-              </div>
-            ))}
+                  <span
+                    className="grid h-10 w-10 place-items-center rounded-full text-lg"
+                    style={{ backgroundColor: p.avatar.color }}
+                  >
+                    {p.avatar.icon}
+                  </span>
+                  <span className="font-medium text-pink-50">{p.name}</span>
+                  {p.isHost && <span className="anime-chip ml-auto">房主</span>}
+                </div>
+              ))}
+            </div>
             {playerList.length < 2 && (
-              <div className="rounded-lg border border-dashed border-stone-700 px-4 py-2.5 text-center text-sm text-stone-500">
-                等待对手加入…
+              <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-center text-sm text-pink-100/55">
+                至少 2 人即可开局；更多玩家可继续加入同一房间。
               </div>
             )}
           </div>
 
           {(isHost || lobbySynced) && (
-            <div className="mb-4 space-y-1 rounded-xl bg-stone-800 p-4 text-sm text-stone-400">
+            <div className="anime-panel mb-4 space-y-1 p-4 text-sm text-pink-100/65">
               <div className="flex justify-between">
                 <span>游戏类型</span>
-                <span className="text-white">
+                <span className="text-pink-50">
                   {gameMode?.emoji} {gameMode?.title ?? settings.questionType}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>轮数</span>
-                <span className="text-white">{settings.rounds}</span>
+                <span className="text-pink-50">{settings.rounds}</span>
               </div>
               <div className="flex justify-between">
                 <span>每轮时间</span>
-                <span className="text-white">{settings.timePerRound}s</span>
+                <span className="text-pink-50">{settings.timePerRound}s</span>
               </div>
               <div className="flex justify-between">
                 <span>初始血量</span>
-                <span className="text-white">{settings.startingHp}</span>
+                <span className="text-pink-50">{settings.startingHp}</span>
               </div>
             </div>
           )}
 
           {!isHost && !lobbySynced && (
-            <div className="mb-4 rounded-xl bg-stone-800 p-4 text-center text-sm text-stone-400">
+            <div className="anime-panel mb-4 p-4 text-center text-sm text-pink-100/65">
               正在同步房间设置…
             </div>
           )}
@@ -1444,21 +1637,21 @@ export function BattleGame({
             <button
               onClick={handleStartGame}
               disabled={playerList.length < 2 || isStarting}
-              className="w-full rounded-xl bg-red-500 py-3 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {playerList.length < 2
-                ? "等待对手…"
+                ? "等待玩家…"
                 : isStarting
                   ? "正在生成题目…"
-                  : "开始游戏 ⚔️"}
+                  : "开始对战"}
             </button>
           ) : (
-            <p className="text-center text-stone-400">
+            <p className="text-center text-pink-100/65">
               {gameSyncing ? "房主正在生成题目，请稍候…" : "等待房主开始游戏…"}
             </p>
           )}
           {lobbyError && (
-            <p className="mt-3 text-center text-sm text-red-400">
+            <p className="mt-3 text-center text-sm text-red-200">
               {lobbyError}
             </p>
           )}
@@ -1532,27 +1725,8 @@ export function BattleGame({
     const isForeignQuestion = isForeignBattleQuestion(currentQuestion);
 
     return (
-      <div className="flex h-screen flex-col bg-stone-900 text-white">
-        <div className="flex items-center justify-between border-b border-stone-700 px-4 py-2">
-          <span className="font-bold text-red-400">
-            ⚔️ 对战 · {gameMode?.emoji} {gameMode?.title}
-          </span>
-          <span className="text-sm text-stone-400">
-            第 {currentRound + 1} / {settings.rounds} 轮
-          </span>
-          <div className="flex items-center gap-3">
-            {me && <HPBar player={me} flipped={false} />}
-            <span className="text-stone-500">VS</span>
-            {opponent && <HPBar player={opponent} flipped={true} />}
-          </div>
-        </div>
-
-        <div className="h-1.5 w-full bg-stone-700">
-          <div
-            className={`h-full transition-all ${timerColor}`}
-            style={{ width: `${timerPct}%` }}
-          />
-        </div>
+      <div className="flex h-screen flex-col bg-[#0a0612] text-white">
+        {renderBattleHeader()}
 
         <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
           {isTuxunBattleQuestion(currentQuestion) ? (
@@ -1599,11 +1773,11 @@ export function BattleGame({
             />
           )}
 
-          <aside className="absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 rounded-xl border border-stone-700 bg-stone-950/85 p-4 shadow-lg shadow-black/30">
-            <div className="flex items-center justify-between rounded-lg bg-stone-900 px-3 py-2">
+          <aside className="anime-panel absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 p-4">
+            <div className="flex items-center justify-between rounded-lg bg-white/8 px-3 py-2">
               <div>
-                <div className="text-xs text-stone-500">剩余时间</div>
-                <div className="text-sm text-amber-300">
+                <div className="text-xs text-pink-100/50">剩余时间</div>
+                <div className="text-sm text-cyan-100">
                   提交越快，速度补偿越高
                 </div>
               </div>
@@ -1616,15 +1790,11 @@ export function BattleGame({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 rounded-lg bg-stone-900 px-3 py-2">
-              <span className="text-sm text-stone-400">对手：</span>
-              {opponentSubmitted ? (
-                <span className="text-sm font-medium text-green-400">
-                  ✓ 已提交
-                </span>
-              ) : (
-                <span className="text-sm text-stone-500">思考中…</span>
-              )}
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-white/8 px-3 py-2">
+              <span className="text-sm text-pink-100/60">提交进度</span>
+              <span className="text-sm font-medium text-green-300">
+                {submittedSummary}
+              </span>
             </div>
 
             {streetViewError && (
@@ -1748,7 +1918,7 @@ export function BattleGame({
               <div className="rounded-xl bg-green-800/85 px-6 py-3 text-center shadow-lg shadow-black/30 backdrop-blur-sm">
                 <div className="text-lg font-bold text-green-200">✓ 已锁定</div>
                 <div className="text-sm text-green-100/80">
-                  等待对手或计时结束…
+                  等待其他玩家或计时结束…
                 </div>
               </div>
             </div>
@@ -1759,27 +1929,8 @@ export function BattleGame({
   }
 
   return (
-    <div className="flex h-screen flex-col bg-stone-900 text-white">
-      <div className="flex items-center justify-between border-b border-stone-700 px-4 py-2">
-        <span className="font-bold text-red-400">
-          ⚔️ 对战 · {gameMode?.emoji} {gameMode?.title}
-        </span>
-        <span className="text-sm text-stone-400">
-          第 {currentRound + 1} / {settings.rounds} 轮
-        </span>
-        <div className="flex items-center gap-3">
-          {me && <HPBar player={me} flipped={false} />}
-          <span className="text-stone-500">VS</span>
-          {opponent && <HPBar player={opponent} flipped={true} />}
-        </div>
-      </div>
-
-      <div className="h-1.5 w-full bg-stone-700">
-        <div
-          className={`h-full transition-all ${timerColor}`}
-          style={{ width: `${timerPct}%` }}
-        />
-      </div>
+    <div className="flex h-screen flex-col bg-[#0a0612] text-white">
+      {renderBattleHeader()}
 
       <div
         className={`grid flex-1 overflow-hidden ${
@@ -1793,11 +1944,11 @@ export function BattleGame({
             needsMap ? "" : "mx-auto w-full max-w-2xl"
           }`}
         >
-          <div className="flex items-center justify-between rounded-lg bg-stone-800 px-4 py-2">
+          <div className="anime-panel flex items-center justify-between rounded-lg px-4 py-2">
             <div>
-              <div className="text-sm text-stone-400">剩余时间</div>
+              <div className="text-sm text-pink-100/60">剩余时间</div>
               {!submitted && speedPreview && (
-                <div className="text-xs text-amber-400">
+                <div className="text-xs text-cyan-100">
                   现在提交 ×{speedPreview.toFixed(2)}
                 </div>
               )}
@@ -1809,15 +1960,11 @@ export function BattleGame({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg bg-stone-800 px-4 py-2">
-            <span className="text-sm text-stone-400">对手：</span>
-            {opponentSubmitted ? (
-              <span className="text-sm font-medium text-green-400">
-                ✓ 已提交
-              </span>
-            ) : (
-              <span className="text-sm text-stone-500">思考中…</span>
-            )}
+          <div className="anime-panel flex items-center justify-between gap-2 rounded-lg px-4 py-2">
+            <span className="text-sm text-pink-100/60">提交进度</span>
+            <span className="text-sm font-medium text-green-300">
+              {submittedSummary}
+            </span>
           </div>
 
           {currentStandardQuestion && (
@@ -1858,7 +2005,7 @@ export function BattleGame({
                 ? "bg-green-700 text-green-300"
                 : !canSubmit
                   ? "cursor-not-allowed bg-stone-700 text-stone-500"
-                  : "bg-red-500 text-white hover:bg-red-400"
+                  : "bg-pink-300 text-zinc-950 hover:bg-pink-200"
             }`}
           >
             {submitLabel}
@@ -1884,7 +2031,7 @@ export function BattleGame({
                     ✓ 已锁定
                   </div>
                   <div className="text-sm text-green-400">
-                    等待对手或计时结束…
+                    等待其他玩家或计时结束…
                   </div>
                 </div>
               </div>

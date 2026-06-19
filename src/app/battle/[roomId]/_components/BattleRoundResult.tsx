@@ -230,10 +230,10 @@ export function BattleRoundResultView({
   }
 
   return (
-    <div className="flex h-screen flex-col bg-stone-900 text-white">
-      <div className="flex items-center justify-between border-b border-stone-700 px-6 py-3">
-        <h1 className="font-bold text-red-400">⚔️ 对战</h1>
-        <span className="text-stone-400">
+    <div className="anime-shell flex h-screen flex-col text-white">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#0d081a]/90 px-6 py-3 backdrop-blur">
+        <h1 className="font-bold text-pink-100">对战结算</h1>
+        <span className="text-pink-100/60">
           第 {result.roundIndex + 1} 轮结果
         </span>
       </div>
@@ -242,13 +242,13 @@ export function BattleRoundResultView({
         {showMap && (
           <div
             ref={containerRef}
-            className="w-full border-b border-stone-700"
+            className="w-full border-b border-white/10"
             style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           />
         )}
         {showLocationOnlyMap && (
           <div
-            className="w-full border-b border-stone-700"
+            className="w-full border-b border-white/10"
             style={{ height: "min(42vh, 420px)", minHeight: 320 }}
           >
             {showForeignMap ? (
@@ -280,7 +280,7 @@ export function BattleRoundResultView({
           <h2 className="mb-1 text-xl font-bold text-amber-400">
             {getBattleQuestionTitle(question)}
           </h2>
-          <p className="mb-5 text-sm text-stone-400">
+          <p className="mb-5 text-sm text-pink-100/60">
             {getBattleQuestionSubtitle(question)}
             {standardQuestion &&
               !isFunfactQuestion(standardQuestion) &&
@@ -289,7 +289,7 @@ export function BattleRoundResultView({
               )}
           </p>
 
-          <div className="mb-5 grid grid-cols-2 gap-3">
+          <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
             {playerIds.map((pid) => {
               const player = players[pid]!;
               const guess = result.guesses[pid];
@@ -300,7 +300,7 @@ export function BattleRoundResultView({
               return (
                 <div
                   key={pid}
-                  className={`rounded-xl p-4 ${isMe ? "bg-amber-900/30 ring-1 ring-amber-500" : "bg-stone-800"}`}
+                  className={`anime-panel p-4 ${isMe ? "ring-1 ring-pink-300/60" : ""}`}
                 >
                   <div className="mb-2 flex items-center gap-2">
                     <span className="font-semibold">{player.name}</span>
@@ -308,13 +308,13 @@ export function BattleRoundResultView({
                       <span className="text-xs text-amber-400">(你)</span>
                     )}
                   </div>
-                  <div className="text-xs text-stone-500">本轮总分</div>
+                  <div className="text-xs text-pink-100/50">本轮总分</div>
                   <div className="text-3xl font-extrabold text-white">
                     {guess?.total.toLocaleString() ?? 0}
                   </div>
                   {guess && renderScoreBreakdown(guess)}
                   <div className="mt-3 flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-stone-700">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
                       <div
                         className={`h-full rounded-full transition-all ${hpAfter > 50 ? "bg-green-500" : hpAfter > 20 ? "bg-amber-500" : "bg-red-500"}`}
                         style={{ width: `${hpAfter}%` }}
@@ -335,7 +335,7 @@ export function BattleRoundResultView({
           {standardQuestion &&
             isFunfactQuestion(standardQuestion) &&
             standardQuestion.explanation && (
-              <p className="mb-4 rounded-lg bg-stone-800 px-4 py-3 text-sm text-stone-300">
+              <p className="anime-panel mb-4 px-4 py-3 text-sm text-pink-100/75">
                 {standardQuestion.explanation}
               </p>
             )}
@@ -349,31 +349,31 @@ export function BattleRoundResultView({
             )}
 
           {(() => {
-            const [a, b] = playerIds;
-            if (!a || !b) return null;
-            const scoreA = result.guesses[a]?.total ?? 0;
-            const scoreB = result.guesses[b]?.total ?? 0;
-            const diff = Math.abs(scoreA - scoreB);
-            const loser = scoreA < scoreB ? a : scoreB < scoreA ? b : null;
-            if (!loser) {
+            const topScore = Math.max(
+              ...playerIds.map((pid) => result.guesses[pid]?.total ?? 0),
+            );
+            const damagedPlayers = playerIds.filter(
+              (pid) => (result.damage[pid] ?? 0) > 0,
+            );
+            if (damagedPlayers.length === 0) {
               return (
-                <p className="mb-4 text-center text-sm text-stone-400">
-                  本轮平局，无扣血
+                <p className="mb-4 text-center text-sm text-pink-100/60">
+                  本轮无人扣血
                 </p>
               );
             }
             return (
-              <p className="mb-4 text-center text-sm text-stone-400">
-                分差 <span className="text-white">{diff.toLocaleString()}</span>
-                ，
-                <span className="font-semibold text-red-400">
-                  {players[loser]?.name}
-                </span>{" "}
-                损失{" "}
-                <span className="font-bold text-red-400">
-                  {result.damage[loser] ?? 0} HP
-                </span>
-              </p>
+              <div className="anime-panel mb-4 flex flex-wrap justify-center gap-2 px-4 py-3 text-sm text-pink-100/70">
+                <span>本轮最高分 {topScore.toLocaleString()}</span>
+                {damagedPlayers.map((pid) => (
+                  <span
+                    key={pid}
+                    className="rounded-full bg-red-400/12 px-3 py-1 text-red-100"
+                  >
+                    {players[pid]?.name} -{result.damage[pid] ?? 0} HP
+                  </span>
+                ))}
+              </div>
             );
           })()}
 
@@ -383,8 +383,8 @@ export function BattleRoundResultView({
                 key={pid}
                 className={`rounded-full px-3 py-1 text-xs ${
                   roundReady[pid]
-                    ? "bg-green-900/40 text-green-300"
-                    : "bg-stone-800 text-stone-400"
+                    ? "bg-green-400/15 text-green-200"
+                    : "bg-white/8 text-pink-100/55"
                 }`}
               >
                 {players[pid]?.name}
@@ -398,20 +398,20 @@ export function BattleRoundResultView({
             disabled={iAmReady || allReady}
             className={`w-full rounded-xl py-3 font-bold transition ${
               iAmReady
-                ? "cursor-default bg-green-800 text-green-200"
-                : "bg-red-500 text-white hover:bg-red-400"
+                ? "cursor-default bg-green-500/20 text-green-200"
+                : "bg-pink-300 text-zinc-950 hover:bg-pink-200"
             }`}
           >
             {iAmReady
-              ? "✓ 已准备，等待对手…"
+              ? "✓ 已准备，等待其他玩家…"
               : isLastRound
                 ? "准备 · 查看最终结果"
                 : "准备 · 下一轮"}
           </button>
 
           {allReady && (
-            <p className="mt-3 text-center text-sm text-amber-300">
-              双方已准备，即将继续…
+            <p className="mt-3 text-center text-sm text-cyan-100">
+              所有玩家已准备，即将继续…
             </p>
           )}
         </div>

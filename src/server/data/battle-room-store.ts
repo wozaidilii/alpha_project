@@ -1,14 +1,16 @@
 import "server-only";
 
 import {
+  BATTLE_MAX_PLAYERS,
   type BattlePlayer,
   type BattleQuestion,
+  type BattleRoundResult,
   type BattleRoomSnapshot,
   type BattleSettings,
+  type PusherGuessSubmitted,
 } from "~/types/battle";
 
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
-const MAX_PLAYERS = 2;
 
 export const DEFAULT_BATTLE_SETTINGS: BattleSettings = {
   rounds: 5,
@@ -17,7 +19,15 @@ export const DEFAULT_BATTLE_SETTINGS: BattleSettings = {
   questionType: "historical",
 };
 
-const rooms = new Map<string, BattleRoomSnapshot>();
+const globalForBattleRooms = globalThis as typeof globalThis & {
+  __aniguessrBattleRooms?: Map<string, BattleRoomSnapshot>;
+};
+
+const rooms =
+  globalForBattleRooms.__aniguessrBattleRooms ??
+  new Map<string, BattleRoomSnapshot>();
+
+globalForBattleRooms.__aniguessrBattleRooms = rooms;
 
 function now() {
   return Date.now();
@@ -36,7 +46,36 @@ function cloneSnapshot(snapshot: BattleRoomSnapshot): BattleRoomSnapshot {
     players: clonePlayers(snapshot.players),
     questionIds: snapshot.questionIds ? [...snapshot.questionIds] : undefined,
     questions: snapshot.questions ? [...snapshot.questions] : undefined,
+    guesses: snapshot.guesses ? { ...snapshot.guesses } : undefined,
+    results: snapshot.results ? cloneResults(snapshot.results) : undefined,
+    roundReady: snapshot.roundReady ? { ...snapshot.roundReady } : undefined,
+    finalHp: snapshot.finalHp ? { ...snapshot.finalHp } : undefined,
   };
+}
+
+function cloneResults(results: BattleRoundResult[]) {
+  return results.map((result) => ({
+    ...result,
+    guesses: { ...result.guesses },
+    hpAfter: { ...result.hpAfter },
+    damage: { ...result.damage },
+  }));
+}
+
+function upsertRoundResult(
+  results: BattleRoundResult[] | undefined,
+  result: BattleRoundResult,
+) {
+  const next = results ? cloneResults(results) : [];
+  const existingIndex = next.findIndex(
+    (entry) => entry.roundIndex === result.roundIndex,
+  );
+  if (existingIndex >= 0) {
+    next[existingIndex] = result;
+  } else {
+    next.push(result);
+  }
+  return next.sort((a, b) => a.roundIndex - b.roundIndex);
 }
 
 function pruneExpiredRooms(timestamp = now()) {
@@ -90,7 +129,7 @@ export function joinBattleRoom(input: {
   }
 
   const existing = snapshot.players[input.player.id];
-  if (!existing && Object.keys(snapshot.players).length >= MAX_PLAYERS) {
+  if (!existing && Object.keys(snapshot.players).length >= BATTLE_MAX_PLAYERS) {
     throw new Error("房间已满");
   }
 
@@ -117,6 +156,11 @@ export function markBattleRoomStarting(input: {
   snapshot.players = clonePlayers(input.players);
   snapshot.questionIds = undefined;
   snapshot.questions = undefined;
+  snapshot.guesses = undefined;
+  snapshot.results = undefined;
+  snapshot.roundReady = undefined;
+  snapshot.finalHp = undefined;
+  snapshot.roundStatus = undefined;
   snapshot.roundIndex = undefined;
   snapshot.startTime = undefined;
   snapshot.updatedAt = now();
@@ -133,6 +177,11 @@ export function cancelBattleRoomStart(input: {
     snapshot.phase = "lobby";
     snapshot.questionIds = undefined;
     snapshot.questions = undefined;
+    snapshot.guesses = undefined;
+    snapshot.results = undefined;
+    snapshot.roundReady = undefined;
+    snapshot.finalHp = undefined;
+    snapshot.roundStatus = undefined;
     snapshot.roundIndex = undefined;
     snapshot.startTime = undefined;
     snapshot.updatedAt = now();
@@ -156,8 +205,121 @@ export function startBattleRoom(input: {
   snapshot.players = clonePlayers(input.players);
   snapshot.questionIds = input.questionIds ? [...input.questionIds] : undefined;
   snapshot.questions = input.questions ? [...input.questions] : undefined;
+  snapshot.guesses = {};
+  snapshot.results = [];
+  snapshot.roundReady = {};
+  snapshot.finalHp = undefined;
+  snapshot.roundStatus = "playing";
   snapshot.roundIndex = input.roundIndex;
   snapshot.startTime = input.startTime;
+  snapshot.updatedAt = now();
+
+  return cloneSnapshot(snapshot);
+}
+
+export function submitBattleRoomGuess(input: {
+  roomId: string;
+  guess: PusherGuessSubmitted;
+}): BattleRoomSnapshot | null {
+  const snapshot = rooms.get(input.roomId);
+  if (snapshot?.phase !== "playing") return null;
+  if (snapshot.roundStatus !== "playing") return cloneSnapshot(snapshot);
+  if (!snapshot.players[input.guess.playerId]) return cloneSnapshot(snapshot);
+  if (snapshot.roundIndex !== input.guess.roundIndex) {
+    return cloneSnapshot(snapshot);
+  }
+
+  snapshot.guesses = {
+    ...(snapshot.guesses ?? {}),
+    [input.guess.playerId]: { ...input.guess },
+  };
+  snapshot.updatedAt = now();
+
+  return cloneSnapshot(snapshot);
+}
+
+export function recordBattleRoomRoundResult(input: {
+  roomId: string;
+  result: BattleRoundResult;
+}): BattleRoomSnapshot | null {
+  const snapshot = rooms.get(input.roomId);
+  if (snapshot?.phase !== "playing") return null;
+  if (snapshot.roundStatus === "game-over") return cloneSnapshot(snapshot);
+  if (snapshot.roundIndex !== input.result.roundIndex) {
+    return cloneSnapshot(snapshot);
+  }
+
+  snapshot.roundStatus = "round-result";
+  snapshot.results = upsertRoundResult(snapshot.results, input.result);
+  snapshot.roundReady = {};
+  snapshot.guesses = snapshot.guesses ?? {};
+  snapshot.roundIndex = input.result.roundIndex;
+  for (const [pid, hp] of Object.entries(input.result.hpAfter)) {
+    const existing = snapshot.players[pid];
+    if (existing) snapshot.players[pid] = { ...existing, hp };
+  }
+  snapshot.updatedAt = now();
+
+  return cloneSnapshot(snapshot);
+}
+
+export function markBattleRoomRoundReady(input: {
+  roomId: string;
+  playerId: string;
+  roundIndex: number;
+}): BattleRoomSnapshot | null {
+  const snapshot = rooms.get(input.roomId);
+  if (snapshot?.phase !== "playing") return null;
+  if (snapshot.roundStatus !== "round-result") return cloneSnapshot(snapshot);
+  if (!snapshot.players[input.playerId]) return cloneSnapshot(snapshot);
+  if (snapshot.roundIndex !== input.roundIndex) return cloneSnapshot(snapshot);
+
+  snapshot.roundReady = {
+    ...(snapshot.roundReady ?? {}),
+    [input.playerId]: true,
+  };
+  snapshot.updatedAt = now();
+
+  return cloneSnapshot(snapshot);
+}
+
+export function startBattleRoomRound(input: {
+  roomId: string;
+  roundIndex: number;
+  startTime: number;
+}): BattleRoomSnapshot | null {
+  const snapshot = rooms.get(input.roomId);
+  if (snapshot?.phase !== "playing") return null;
+  if (snapshot.roundStatus === "game-over") return cloneSnapshot(snapshot);
+
+  snapshot.roundStatus = "playing";
+  snapshot.roundIndex = input.roundIndex;
+  snapshot.startTime = input.startTime;
+  snapshot.guesses = {};
+  snapshot.roundReady = {};
+  snapshot.updatedAt = now();
+
+  return cloneSnapshot(snapshot);
+}
+
+export function finishBattleRoom(input: {
+  roomId: string;
+  results: BattleRoundResult[];
+  finalHp: Record<string, number>;
+}): BattleRoomSnapshot | null {
+  const snapshot = rooms.get(input.roomId);
+  if (snapshot?.phase !== "playing") return null;
+
+  snapshot.roundStatus = "game-over";
+  snapshot.results = cloneResults(input.results);
+  snapshot.finalHp = Object.fromEntries(
+    Object.entries(input.finalHp).filter(([pid]) => snapshot.players[pid]),
+  );
+  snapshot.roundReady = {};
+  for (const [pid, hp] of Object.entries(input.finalHp)) {
+    const existing = snapshot.players[pid];
+    if (existing) snapshot.players[pid] = { ...existing, hp };
+  }
   snapshot.updatedAt = now();
 
   return cloneSnapshot(snapshot);
