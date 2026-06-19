@@ -32,11 +32,11 @@ const COPY: Record<
     continue: "进入当前玩法",
     clue: "动漫截图线索",
     street: "现实街景观察",
-    map: "全球地图猜点",
+    map: "日本地图猜点",
     round: "5 轮挑战",
     panelTitle: "现实与番剧重叠的瞬间",
     panelBody:
-      "主画面保持真实街景，动漫图案只作为线索出现。地图不再锁定日本，后续题库可以覆盖任何有 Google 街景的地区。",
+      "主画面保持真实街景，动漫图案只作为线索出现。当前地图锚定日本；可走动街景会作为后续玩法扩展。",
   },
   ja: {
     lang: "日本語",
@@ -47,11 +47,11 @@ const COPY: Record<
     continue: "ゲームへ",
     clue: "アニメ画像ヒント",
     street: "現実のストリートビュー",
-    map: "世界地図で推理",
+    map: "日本地図で推理",
     round: "5 ラウンド",
     panelTitle: "現実と物語が重なる場所",
     panelBody:
-      "メイン画面はあくまで実写の街景。アニメ画像はヒントとして表示され、地図は日本以外の聖地にも対応します。",
+      "メイン画面はあくまで実写の街景。アニメ画像はヒントとして表示され、現在の地図は日本に固定されています。",
   },
   en: {
     lang: "English",
@@ -63,11 +63,11 @@ const COPY: Record<
     continue: "Open game",
     clue: "Anime clue image",
     street: "Real street view",
-    map: "Global map guess",
+    map: "Japan map guess",
     round: "5 rounds",
     panelTitle: "Where frames meet the real world",
     panelBody:
-      "The main scene stays as real-world Street View. Anime artwork appears only as the clue, and guesses are no longer locked to Japan.",
+      "The main scene stays as real-world Street View. Anime artwork appears only as the clue, and the current map is anchored to Japan.",
   },
 };
 

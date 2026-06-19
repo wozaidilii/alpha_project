@@ -14,6 +14,14 @@ import {
   toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
 } from "~/lib/anime-guessr";
+import {
+  ANIME_GUESSR_TIME_LIMIT_SECONDS,
+  clearPendingAnimeFinalResult,
+  formatAnimeGameCountdown,
+  loadPendingAnimeFinalResult,
+  savePendingAnimeFinalResult,
+  type AnimeRoundResult,
+} from "~/lib/anime-guessr-state";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import { GOOGLE_MAP_AK } from "~/lib/google-street-view";
 import {
@@ -37,16 +45,6 @@ import { api } from "~/trpc/react";
 type Phase = "playing" | "result" | "final";
 type LoadState = "loading" | "ready" | "error";
 type AuthPromptReason = "record" | "leaderboard" | "history" | "quota";
-
-interface AnimeRoundResult {
-  question: AnimeGuessrQuestion;
-  guess: { lat: number; lng: number };
-  distanceKm: number;
-  distancePts: number;
-  speedCompensationPts: number;
-  elapsedSeconds: number;
-  score: number;
-}
 
 const AUTH_PROMPT_COPY: Record<
   AuthPromptReason,
@@ -90,9 +88,11 @@ function getRank(score: number) {
 function AuthPromptModal({
   reason,
   onClose,
+  onBeforeAuth,
 }: {
   reason: AuthPromptReason;
   onClose: () => void;
+  onBeforeAuth?: () => void;
 }) {
   const copy = AUTH_PROMPT_COPY[reason];
   const next = "/game/anime";
@@ -107,12 +107,14 @@ function AuthPromptModal({
         <div className="mt-6 grid gap-3">
           <Link
             href={`/api/auth/google/start?next=${encodeURIComponent(next)}`}
+            onClick={onBeforeAuth}
             className="anime-button text-center"
           >
             使用 Google 继续
           </Link>
           <Link
             href={`/login?next=${encodeURIComponent(next)}`}
+            onClick={onBeforeAuth}
             className="anime-button-secondary text-center"
           >
             使用邮箱登录 / 注册
@@ -181,7 +183,13 @@ export default function AnimeGuessrPage() {
   const [phase, setPhase] = useState<Phase>("playing");
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [results, setResults] = useState<AnimeRoundResult[]>([]);
+  const [timeLeftSeconds, setTimeLeftSeconds] = useState(
+    ANIME_GUESSR_TIME_LIMIT_SECONDS,
+  );
+  const [gameTimedOut, setGameTimedOut] = useState(false);
+  const gameStartedAtRef = useRef(Date.now());
   const roundStartedAtRef = useRef(Date.now());
+  const timeExpiredRef = useRef(false);
   const recordedStartKeyRef = useRef<string | null>(null);
   const recordedCompletionKeyRef = useRef<string | null>(null);
   const recordActivity = api.player.recordActivity.useMutation();
@@ -207,6 +215,41 @@ export default function AnimeGuessrPage() {
     [current],
   );
 
+  const persistPendingFinalResult = useCallback(() => {
+    if (phase !== "final") return;
+    savePendingAnimeFinalResult({
+      questions,
+      results,
+      gameTimedOut,
+    });
+  }, [gameTimedOut, phase, questions, results]);
+
+  const restorePendingFinalResult = useCallback(() => {
+    const pending = loadPendingAnimeFinalResult();
+    if (!pending) return false;
+
+    clearPendingAnimeFinalResult();
+    setQuestions(pending.questions);
+    setRound(
+      Math.max(
+        0,
+        Math.min(pending.results.length, pending.questions.length - 1),
+      ),
+    );
+    setGuess(null);
+    setResults(pending.results);
+    setPhase("final");
+    setLoadState("ready");
+    setLoadMessage("");
+    setGuestBlocked(false);
+    setAuthPromptReason(null);
+    setShareMessage("登录成功，已回到刚才的成绩页。");
+    setTimeLeftSeconds(0);
+    setGameTimedOut(pending.gameTimedOut);
+    timeExpiredRef.current = pending.gameTimedOut;
+    return true;
+  }, []);
+
   const loadQuestions = useCallback(() => {
     let active = true;
     setLoadState("loading");
@@ -218,7 +261,11 @@ export default function AnimeGuessrPage() {
     setPhase("playing");
     setGuestBlocked(false);
     setShareMessage("");
+    setTimeLeftSeconds(ANIME_GUESSR_TIME_LIMIT_SECONDS);
+    setGameTimedOut(false);
+    gameStartedAtRef.current = Date.now();
     roundStartedAtRef.current = Date.now();
+    timeExpiredRef.current = false;
     recordedCompletionKeyRef.current = null;
 
     void fetchAnimeGuessrQuestions()
@@ -235,6 +282,11 @@ export default function AnimeGuessrPage() {
         setQuestions(picked);
         setLoadMessage("");
         setLoadState("ready");
+        setTimeLeftSeconds(ANIME_GUESSR_TIME_LIMIT_SECONDS);
+        setGameTimedOut(false);
+        gameStartedAtRef.current = Date.now();
+        roundStartedAtRef.current = Date.now();
+        timeExpiredRef.current = false;
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -256,13 +308,57 @@ export default function AnimeGuessrPage() {
 
   useEffect(() => {
     if (!ready) return;
+    if (session && restorePendingFinalResult()) return;
     return loadQuestions();
-  }, [loadQuestions, ready, reloadKey]);
+  }, [loadQuestions, ready, reloadKey, restorePendingFinalResult, session]);
 
   useEffect(() => {
     if (phase !== "playing" || !current) return;
     roundStartedAtRef.current = Date.now();
   }, [current, phase]);
+
+  useEffect(() => {
+    if (
+      phase === "final" ||
+      loadState !== "ready" ||
+      questions.length === 0 ||
+      guestBlocked
+    ) {
+      return;
+    }
+
+    const tick = () => {
+      const elapsed = Math.floor(
+        (Date.now() - gameStartedAtRef.current) / 1000,
+      );
+      const remaining = Math.max(0, ANIME_GUESSR_TIME_LIMIT_SECONDS - elapsed);
+      setTimeLeftSeconds(remaining);
+
+      if (remaining > 0 || timeExpiredRef.current) return;
+      timeExpiredRef.current = true;
+      setGameTimedOut(true);
+      setPhase("final");
+      capturePostHogEvent(
+        "anime_game_timed_out",
+        {
+          rounds_completed: results.length,
+          auth_state: session ? "logged_in" : "guest",
+        },
+        session?.user.id,
+      );
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [
+    guestBlocked,
+    loadState,
+    phase,
+    questions.length,
+    results.length,
+    session,
+  ]);
 
   useEffect(() => {
     if (loadState !== "ready" || questions.length === 0) return;
@@ -307,7 +403,7 @@ export default function AnimeGuessrPage() {
   }, [loadState, questions, recordActivity, reloadKey, session]);
 
   function handleSubmit() {
-    if (!current || !guess || guestBlocked) return;
+    if (!current || !guess || guestBlocked || timeLeftSeconds <= 0) return;
 
     const distanceKm = haversineDistance(
       current.lat,
@@ -316,7 +412,11 @@ export default function AnimeGuessrPage() {
       guess.lng,
     );
     const elapsedSeconds = (Date.now() - roundStartedAtRef.current) / 1000;
-    const score = locationRoundScore({ distanceKm, elapsedSeconds });
+    const score = locationRoundScore({
+      distanceKm,
+      elapsedSeconds,
+      speedCompensationWindowSeconds: ANIME_GUESSR_TIME_LIMIT_SECONDS,
+    });
     setResults((prev) => [
       ...prev,
       {
@@ -393,12 +493,17 @@ export default function AnimeGuessrPage() {
   }
 
   useEffect(() => {
-    if (phase !== "final" || results.length === 0) return;
-    const key = `${reloadKey}:${results.map((result) => result.question.id).join(",")}:${totalScore}`;
+    if (phase !== "final") return;
+    const questionKey =
+      results.length > 0
+        ? results.map((result) => result.question.id).join(",")
+        : questions.map((question) => question.id).join(",");
+    const key = `${reloadKey}:${questionKey}:${totalScore}:${gameTimedOut ? "timeout" : "complete"}`;
     if (recordedCompletionKeyRef.current === key) return;
     recordedCompletionKeyRef.current = key;
 
-    const maxScore = results.length * LOCATION_ROUND_SCORE_MAX;
+    const maxScore =
+      Math.max(results.length, questions.length) * LOCATION_ROUND_SCORE_MAX;
     const summary = {
       id: key,
       score: totalScore,
@@ -414,19 +519,25 @@ export default function AnimeGuessrPage() {
         payload: {
           rounds: results.length,
           totalScore,
+          timedOut: gameTimedOut,
         },
         route: "/game/anime",
       });
       recordGameSession.mutate({
         token: session.token,
         score: totalScore,
-        country: "global",
+        country: "japan",
         mode: "anime",
         rounds: results.length,
       });
       capturePostHogEvent(
         "anime_game_completed",
-        { score: totalScore, rounds: results.length, auth_state: "logged_in" },
+        {
+          score: totalScore,
+          rounds: results.length,
+          auth_state: "logged_in",
+          timed_out: gameTimedOut,
+        },
         session.user.id,
       );
       return;
@@ -439,7 +550,7 @@ export default function AnimeGuessrPage() {
     recordGameSession.mutate({
       guestId: saved.progress.guestId,
       score: totalScore,
-      country: "global",
+      country: "japan",
       mode: "anime",
       rounds: results.length,
     });
@@ -448,6 +559,7 @@ export default function AnimeGuessrPage() {
       rounds: results.length,
       auth_state: "guest",
       is_new_best: saved.isNewBest,
+      timed_out: gameTimedOut,
     });
 
     if (saved.isNewBest) {
@@ -455,6 +567,8 @@ export default function AnimeGuessrPage() {
     }
   }, [
     phase,
+    gameTimedOut,
+    questions,
     recordActivity,
     recordGameSession,
     reloadKey,
@@ -575,7 +689,8 @@ export default function AnimeGuessrPage() {
   }
 
   if (phase === "final") {
-    const maxScore = results.length * LOCATION_ROUND_SCORE_MAX;
+    const maxScore =
+      Math.max(results.length, questions.length) * LOCATION_ROUND_SCORE_MAX;
     const rank = getRank(totalScore);
 
     return (
@@ -584,6 +699,7 @@ export default function AnimeGuessrPage() {
           <AuthPromptModal
             reason={authPromptReason}
             onClose={() => setAuthPromptReason(null)}
+            onBeforeAuth={persistPendingFinalResult}
           />
         )}
         <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-3 backdrop-blur">
@@ -610,6 +726,11 @@ export default function AnimeGuessrPage() {
             <div className="mt-1 text-pink-50/60">
               / {maxScore.toLocaleString()} 分
             </div>
+            {gameTimedOut && (
+              <div className="mt-4 rounded-xl border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-sm font-bold text-amber-50">
+                时间到，已自动结算当前成绩。
+              </div>
+            )}
             {!session && guestProgress && (
               <div className="mt-4 rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm text-cyan-50">
                 游客今日剩余 {getGuestGamesRemaining(guestProgress)} 局 ·
@@ -716,6 +837,15 @@ export default function AnimeGuessrPage() {
           )}
           <span className="anime-chip">
             第 {round + 1} / {questions.length} 轮{roundResult ? "结果" : ""}
+          </span>
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-black ${
+              timeLeftSeconds <= 15
+                ? "border-rose-300/40 bg-rose-300/15 text-rose-50"
+                : "border-amber-200/30 bg-amber-200/10 text-amber-50"
+            }`}
+          >
+            剩余 {formatAnimeGameCountdown(timeLeftSeconds)}
           </span>
         </div>
       </header>
@@ -876,7 +1006,6 @@ export default function AnimeGuessrPage() {
                 distanceKm={roundResult?.distanceKm}
                 disabled={Boolean(roundResult)}
                 minHeightClass="min-h-0"
-                restrictToCountry={false}
                 onGuess={setGuess}
               />
             </div>

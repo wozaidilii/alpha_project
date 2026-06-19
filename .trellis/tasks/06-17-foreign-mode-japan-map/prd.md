@@ -51,12 +51,14 @@
 - 本地已将用户提供的截图复制为 `public/images/anime-placeholder.jpg`，动漫模式在图片公网前缀缺失或题图加载失败时使用该占位图。
 - 已将占位图上传到 R2：`npx wrangler r2 object put anime-gussr/anime-placeholder.jpg --file public/images/anime-placeholder.jpg --remote`。后续题图上传命令沉淀为 `npm run images:upload-anime -- <local-file> <object-key>`。
 
-## Scope Update: 单一动漫模式与全球猜点
+## Scope Update: 单一动漫模式与日本锚定猜点
 
 - 用户要求项目入口只保留“猜动漫模式”；`/` 作为三语首页，`/game`、`/game/solo`、`/battle` 都应导向 `/game/anime`。
 - 首页需要提供中文、日文、英文三语切换，并把产品视觉统一为二次元猜谜游戏，而不是历史地图/多模式大厅。
 - 猜动漫模式仍然以现实 Google Street View 为主画面，左上角只展示动漫图案和文字线索。
-- 猜点地图不再限制日本：动漫题库 guard 只校验全球经纬度合法范围，Google 猜点地图在该模式下不设置日本 `restriction`，初始视野使用世界地图。
+- 猜点地图当前继续锚定日本：Google 猜点地图在该模式下使用日本 `restriction`，初始视野使用日本地图。
+- Street View 当前为不可走动模式：允许转头观察，但关闭前进箭头和点击前进；可走动 Street View 作为后续玩法扩展。
+- 猜动漫模式每局总时限为 2 分钟；时间到直接进入最终结算页，按已完成回合记录成绩。
 - 旧模式代码可暂时保留以便回滚，但普通用户入口不再展示或引导进入旧模式。
 
 ## Scope Update: 邮箱验证码登录与用户行为数据
@@ -103,7 +105,10 @@
 - [ ] `/game/anime` 能加载转换后的动漫巡礼题库并随机抽取整局题目。
 - [ ] `/game/anime` 主画面展示题目对应现实 Google Street View，而不是把动漫图片作为主画面。
 - [ ] 动漫线索图片展示在左上角线索卡中，用于辅助判断现实街景对应的作品/场景。
-- [ ] 动漫题目答案只要求经纬度在全球合法范围内，玩家可以在不限制日本的 Google Maps 上猜点并查看偏差和得分。
+- [ ] 动漫模式 Google Maps 猜点地图锚定日本，点击会被限制在日本 bounds 内。
+- [ ] 动漫模式 Google Street View 当前不能通过箭头或点击向前移动，只能观察当前点位；可走动模式留作后续玩法。
+- [ ] 动漫模式每局总时限为 2 分钟，时间到自动结算当前成绩。
+- [ ] 游客在最终得分页选择 Google / 邮箱登录后，登录成功应回到刚才的结果页并保存成绩，不应再次停在登录页。
 - [ ] 未配置或无法访问图片公网前缀时，动漫题卡显示占位状态且游戏仍可进行。
 - [ ] 动漫题库转换脚本从原始大 JSON 生成精简 public JSON，不把 100MB 级原始抓取数据打进客户端 bundle。
 - [ ] `/login` 支持邮箱获取验证码和验证码登录。

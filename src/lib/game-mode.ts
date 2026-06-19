@@ -75,7 +75,7 @@ export const GAME_MODES: Record<GameModeSlug, GameModeConfig> = {
     title: "猜动漫模式",
     emoji: "🎞️",
     description: "观察现实街景，参考左上角动漫线索猜取景地",
-    tagline: "Google 街景 + 动漫线索 + 全球地图猜点",
+    tagline: "Google 街景 + 动漫线索 + 日本地图猜点",
     accentClass: "text-pink-300",
     borderHoverClass: "hover:border-pink-500",
     enabled: true,

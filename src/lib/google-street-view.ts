@@ -117,9 +117,14 @@ export interface GoogleMapsApi {
       zoom?: number;
       visible?: boolean;
       addressControl?: boolean;
+      clickToGo?: boolean;
       fullscreenControl?: boolean;
+      linksControl?: boolean;
       motionTracking?: boolean;
       motionTrackingControl?: boolean;
+      panControl?: boolean;
+      showRoadLabels?: boolean;
+      zoomControl?: boolean;
     },
   ) => GoogleStreetViewPanoramaInstance;
   StreetViewService: new () => GoogleStreetViewService;

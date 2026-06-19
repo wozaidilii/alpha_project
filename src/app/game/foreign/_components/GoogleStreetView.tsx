@@ -11,12 +11,17 @@ import { type TuxunLocation } from "~/lib/tuxun-locations";
 
 interface Props {
   location: TuxunLocation;
+  allowMovement?: boolean;
   onUnavailable?: () => void;
 }
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
-export function GoogleStreetView({ location, onUnavailable }: Props) {
+export function GoogleStreetView({
+  location,
+  allowMovement = false,
+  onUnavailable,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panoramaRef = useRef<GoogleStreetViewPanoramaInstance | null>(null);
   const onUnavailableRef = useRef(onUnavailable);
@@ -51,9 +56,14 @@ export function GoogleStreetView({ location, onUnavailable }: Props) {
           zoom: 1,
           visible: true,
           addressControl: false,
+          clickToGo: allowMovement,
           fullscreenControl: true,
+          linksControl: allowMovement,
           motionTracking: false,
           motionTrackingControl: false,
+          panControl: true,
+          showRoadLabels: allowMovement,
+          zoomControl: true,
         });
         panoramaRef.current = panorama;
         setState("ready");
@@ -80,6 +90,7 @@ export function GoogleStreetView({ location, onUnavailable }: Props) {
     location.lng,
     location.panoId,
     location.pitch,
+    allowMovement,
   ]);
 
   return (
