@@ -14,6 +14,7 @@ import {
   getBattleAnswerPoint,
   getBattleQuestionSubtitle,
   getBattleQuestionTitle,
+  isAnimeTuxunBattleQuestion,
   isForeignBattleQuestion,
   isLocationOnlyBattleQuestion,
   isStandardBattleQuestion,
@@ -71,7 +72,8 @@ export function BattleRoundResultView({
       : null;
   const showMap = questionType === "historical" && historicalQuestion !== null;
   const showLocationOnlyMap = locationOnlyAnswer !== null;
-  const showForeignMap = isForeignBattleQuestion(question);
+  const showForeignMap =
+    isForeignBattleQuestion(question) || isAnimeTuxunBattleQuestion(question);
   const yearEnd = standardQuestion
     ? getQuestionYearEnd(standardQuestion)
     : undefined;

@@ -14,9 +14,12 @@ import { classifyPlayerUniqueViolation } from "~/server/data/postgres-errors";
 import { hashPassword, verifyPassword } from "~/server/auth/password";
 import { sendEmailVerificationCode } from "~/server/email/verification-code";
 import { sql } from "~/server/db/client";
+import { normalizeCountryCode } from "~/lib/country";
 import {
   type BattleHistoryRecord,
   type BattleOutcome,
+  type LeaderboardEntry,
+  type LeaderboardResult,
   type PlayerAvatar,
   type PlayerProfile,
   type PlayerSession,
@@ -33,6 +36,7 @@ interface PlayerRow {
   solo_high_score: number;
   provider?: string | null;
   avatar_url?: string | null;
+  country_code?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -42,6 +46,19 @@ interface PasswordPlayerRow extends PlayerRow {
   username_key: string | null;
   password_hash: string | null;
   google_sub?: string | null;
+}
+
+interface LeaderboardRow {
+  rank: number;
+  user_id: string;
+  name: string;
+  avatar_icon: string;
+  avatar_color: string;
+  avatar_url: string | null;
+  country_code: string | null;
+  score: number;
+  rounds: number;
+  played_at: Date | string;
 }
 
 interface BattleHistoryRow {
@@ -111,6 +128,11 @@ interface RecordGameSessionInput {
   rounds: number;
 }
 
+interface RegistrationMeta {
+  userAgent?: string | null;
+  countryCode?: string | null;
+}
+
 const MAX_HISTORY = 50;
 const MAX_SESSIONS = 10;
 const EMAIL_CODE_EXPIRES_IN_SECONDS = 10 * 60;
@@ -133,11 +155,37 @@ function toPublicPlayer(row: PlayerRow): PlayerProfile {
     }),
     avatarUrl: row.avatar_url ?? null,
     provider: row.provider ?? null,
+    countryCode: row.country_code ?? null,
     profileCompleted: row.profile_completed,
     soloHighScore: row.solo_high_score,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   };
+}
+
+function toLeaderboardEntry(
+  row: LeaderboardRow,
+  currentUserId?: string,
+): LeaderboardEntry {
+  return {
+    rank: row.rank,
+    userId: row.user_id,
+    name: row.name,
+    avatar: normalizeAvatar({
+      icon: row.avatar_icon,
+      color: row.avatar_color,
+    }),
+    avatarUrl: row.avatar_url,
+    countryCode: row.country_code,
+    score: row.score,
+    rounds: row.rounds,
+    playedAt: toIso(row.played_at),
+    isCurrentUser: row.user_id === currentUserId,
+  };
+}
+
+function normalizeOptionalCountryCode(value: string | null | undefined) {
+  return normalizeCountryCode(value);
 }
 
 function toHistoryRecord(row: BattleHistoryRow): BattleHistoryRecord {
@@ -331,6 +379,9 @@ async function getPlayerByToken(token: string): Promise<PlayerRow | null> {
       p.avatar_color,
       p.profile_completed,
       p.solo_high_score,
+      p.provider,
+      p.avatar_url,
+      p.country_code,
       p.created_at,
       p.updated_at
     from players p
@@ -476,6 +527,107 @@ export async function recordGameSession(
   return { ok: true };
 }
 
+export async function getAnimeLeaderboard(
+  input: {
+    token?: string;
+    limit?: number;
+  } = {},
+): Promise<LeaderboardResult> {
+  const limit = Math.min(Math.max(Math.round(input.limit ?? 20), 1), 50);
+  const currentUser = input.token
+    ? await requirePlayerByToken(input.token)
+    : null;
+  const currentUserId = currentUser?.id;
+
+  const rows = await sql<LeaderboardRow[]>`
+    with best_sessions as (
+      select
+        gs.user_id,
+        gs.score,
+        gs.rounds,
+        gs.played_at,
+        row_number() over (
+          partition by gs.user_id
+          order by gs.score desc, gs.played_at asc
+        ) as best_rank
+      from game_sessions gs
+      where gs.user_id is not null
+        and gs.mode = 'anime'
+    ),
+    ranked as (
+      select
+        (row_number() over (
+          order by bs.score desc, bs.played_at asc, p.id
+        ))::int as rank,
+        p.id as user_id,
+        p.name,
+        p.avatar_icon,
+        p.avatar_color,
+        p.avatar_url,
+        p.country_code,
+        bs.score,
+        bs.rounds,
+        bs.played_at
+      from best_sessions bs
+      inner join players p on p.id = bs.user_id
+      where bs.best_rank = 1
+    )
+    select *
+    from ranked
+    order by rank asc
+    limit ${limit}
+  `;
+
+  const entries = rows.map((row) => toLeaderboardEntry(row, currentUserId));
+  let currentUserEntry = entries.find(
+    (entry) => entry.userId === currentUserId,
+  );
+
+  if (currentUserId && !currentUserEntry) {
+    const [row] = await sql<LeaderboardRow[]>`
+      with best_sessions as (
+        select
+          gs.user_id,
+          gs.score,
+          gs.rounds,
+          gs.played_at,
+          row_number() over (
+            partition by gs.user_id
+            order by gs.score desc, gs.played_at asc
+          ) as best_rank
+        from game_sessions gs
+        where gs.user_id is not null
+          and gs.mode = 'anime'
+      ),
+      ranked as (
+        select
+          (row_number() over (
+            order by bs.score desc, bs.played_at asc, p.id
+          ))::int as rank,
+          p.id as user_id,
+          p.name,
+          p.avatar_icon,
+          p.avatar_color,
+          p.avatar_url,
+          p.country_code,
+          bs.score,
+          bs.rounds,
+          bs.played_at
+        from best_sessions bs
+        inner join players p on p.id = bs.user_id
+        where bs.best_rank = 1
+      )
+      select *
+      from ranked
+      where user_id = ${currentUserId}
+      limit 1
+    `;
+    currentUserEntry = row ? toLeaderboardEntry(row, currentUserId) : undefined;
+  }
+
+  return currentUserEntry ? { entries, currentUserEntry } : { entries };
+}
+
 export async function requestEmailLoginCode(
   emailInput: string,
   meta: { userAgent?: string | null } = {},
@@ -577,10 +729,11 @@ export async function requestPasswordResetCode(
 export async function verifyEmailLoginCode(
   emailInput: string,
   code: string,
-  meta: { userAgent?: string | null } = {},
+  meta: RegistrationMeta = {},
 ): Promise<PlayerSession> {
   const now = new Date();
   const email = normalizeEmail(emailInput);
+  const countryCode = normalizeOptionalCountryCode(meta.countryCode);
 
   await consumeEmailVerificationCode(email, code, now);
 
@@ -599,6 +752,7 @@ export async function verifyEmailLoginCode(
         profile_completed,
         solo_high_score,
         provider,
+        country_code,
         created_at,
         updated_at
       )
@@ -611,6 +765,7 @@ export async function verifyEmailLoginCode(
         true,
         0,
         'email',
+        ${countryCode},
         ${now},
         ${now}
       )
@@ -622,6 +777,7 @@ export async function verifyEmailLoginCode(
         end,
         profile_completed = true,
         provider = coalesce(players.provider, 'email'),
+        country_code = coalesce(players.country_code, excluded.country_code),
         updated_at = excluded.updated_at
       returning
         id,
@@ -633,6 +789,7 @@ export async function verifyEmailLoginCode(
         solo_high_score,
         provider,
         avatar_url,
+        country_code,
         created_at,
         updated_at
     `;
@@ -662,7 +819,7 @@ export async function registerPlayerWithPassword(
     username: string;
     password: string;
   },
-  meta: { userAgent?: string | null } = {},
+  meta: RegistrationMeta = {},
 ): Promise<PlayerSession> {
   const now = new Date();
   const id = randomUUID();
@@ -671,6 +828,7 @@ export async function registerPlayerWithPassword(
   const usernameKey = normalizeUsernameKey(username);
   const name = normalizeName(username);
   const avatar = normalizeAvatar();
+  const countryCode = normalizeOptionalCountryCode(meta.countryCode);
   const passwordHash = await hashPassword(input.password);
 
   try {
@@ -712,6 +870,7 @@ export async function registerPlayerWithPassword(
             solo_high_score = greatest(solo_high_score, 0),
             password_hash = ${passwordHash},
             provider = 'password',
+            country_code = coalesce(country_code, ${countryCode}),
             updated_at = ${now}
           where id = ${existingEmail.id}
           returning
@@ -724,6 +883,7 @@ export async function registerPlayerWithPassword(
             solo_high_score,
             provider,
             avatar_url,
+            country_code,
             created_at,
             updated_at
         `;
@@ -749,6 +909,7 @@ export async function registerPlayerWithPassword(
           solo_high_score,
           password_hash,
           provider,
+          country_code,
           created_at,
           updated_at
         )
@@ -764,6 +925,7 @@ export async function registerPlayerWithPassword(
           0,
           ${passwordHash},
           'password',
+          ${countryCode},
           ${now},
           ${now}
         )
@@ -777,6 +939,7 @@ export async function registerPlayerWithPassword(
           solo_high_score,
           provider,
           avatar_url,
+          country_code,
           created_at,
           updated_at
       `;
@@ -838,6 +1001,7 @@ export async function loginPlayerWithPassword(
       password_hash,
       provider,
       avatar_url,
+      country_code,
       created_at,
       updated_at
     from players
@@ -874,12 +1038,13 @@ export async function loginPlayerWithPassword(
 
 export async function loginPlayerWithGoogle(
   profile: GoogleProfile,
-  meta: { userAgent?: string | null } = {},
+  meta: RegistrationMeta = {},
 ): Promise<PlayerSession> {
   const now = new Date();
   const email = normalizeEmail(profile.email);
   const name = normalizeName(profile.name || displayNameFromEmail(email));
   const avatar = normalizeAvatar();
+  const countryCode = normalizeOptionalCountryCode(meta.countryCode);
 
   const { token, user } = await sql.begin(async (tx) => {
     const [existing] = await tx<PasswordPlayerRow[]>`
@@ -897,6 +1062,7 @@ export async function loginPlayerWithGoogle(
         google_sub,
         provider,
         avatar_url,
+        country_code,
         created_at,
         updated_at
       from players
@@ -925,6 +1091,7 @@ export async function loginPlayerWithGoogle(
             when profile_completed then players.avatar_color
             else ${avatar.color}
           end,
+          country_code = coalesce(country_code, ${countryCode}),
           profile_completed = true,
           updated_at = ${now}
         where id = ${existing.id}
@@ -938,6 +1105,7 @@ export async function loginPlayerWithGoogle(
           solo_high_score,
           provider,
           avatar_url,
+          country_code,
           created_at,
           updated_at
       `;
@@ -962,6 +1130,7 @@ export async function loginPlayerWithGoogle(
         google_sub,
         provider,
         avatar_url,
+        country_code,
         created_at,
         updated_at
       )
@@ -976,6 +1145,7 @@ export async function loginPlayerWithGoogle(
         ${profile.sub},
         'google',
         ${profile.picture ?? null},
+        ${countryCode},
         ${now},
         ${now}
       )
@@ -989,6 +1159,7 @@ export async function loginPlayerWithGoogle(
         solo_high_score,
         provider,
         avatar_url,
+        country_code,
         created_at,
         updated_at
     `;
@@ -1043,6 +1214,7 @@ export async function resetPlayerPasswordWithCode(
         solo_high_score,
         provider,
         avatar_url,
+        country_code,
         created_at,
         updated_at
     `;
@@ -1121,6 +1293,7 @@ export async function loginPlayerByWechatOpenId(
         solo_high_score,
         provider,
         avatar_url,
+        country_code,
         created_at,
         updated_at
     `;
@@ -1156,6 +1329,9 @@ export async function loginPlayer(input: {
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
+        avatar_url,
+        country_code,
         created_at,
         updated_at
       )
@@ -1167,6 +1343,9 @@ export async function loginPlayer(input: {
         ${avatar.color},
         true,
         0,
+        null,
+        null,
+        null,
         ${now},
         ${now}
       )
@@ -1185,6 +1364,9 @@ export async function loginPlayer(input: {
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
+        avatar_url,
+        country_code,
         created_at,
         updated_at
     `;
@@ -1208,15 +1390,15 @@ export async function updatePlayerProfile(input: {
   token: string;
   name: string;
   avatar: PlayerAvatar;
+  countryCode?: string | null;
 }): Promise<PlayerProfile> {
   const name = normalizeName(input.name);
   const usernameKey = normalizeUsernameKey(name);
   const avatar = normalizeAvatar(input.avatar);
+  const countryCode = normalizeOptionalCountryCode(input.countryCode);
 
-  const [currentPlayer] = await sql<
-    { id: string; username_key: string | null }[]
-  >`
-    select p.id, p.username_key
+  const [currentPlayer] = await sql<{ id: string }[]>`
+    select p.id
     from players p
     inner join player_sessions s on s.player_id = p.id
     where s.token = ${input.token}
@@ -1227,18 +1409,16 @@ export async function updatePlayerProfile(input: {
     throw new Error("Invalid player session");
   }
 
-  if (currentPlayer.username_key) {
-    const [existing] = await sql<{ id: string }[]>`
-      select id
-      from players
-      where username_key = ${usernameKey}
-        and id <> ${currentPlayer.id}
-      limit 1
-    `;
+  const [existing] = await sql<{ id: string }[]>`
+    select id
+    from players
+    where username_key = ${usernameKey}
+      and id <> ${currentPlayer.id}
+    limit 1
+  `;
 
-    if (existing) {
-      throw new Error("Username already registered");
-    }
+  if (existing) {
+    throw new Error("Username already registered");
   }
 
   try {
@@ -1246,16 +1426,11 @@ export async function updatePlayerProfile(input: {
       update players
       set
         name = ${name},
-        username = case
-          when username_key is not null then ${name}
-          else username
-        end,
-        username_key = case
-          when username_key is not null then ${usernameKey}
-          else username_key
-        end,
+        username = ${name},
+        username_key = ${usernameKey},
         avatar_icon = ${avatar.icon},
         avatar_color = ${avatar.color},
+        country_code = ${countryCode},
         profile_completed = true,
         updated_at = now()
       where id = ${currentPlayer.id}
@@ -1267,6 +1442,9 @@ export async function updatePlayerProfile(input: {
         avatar_color,
         profile_completed,
         solo_high_score,
+        provider,
+        avatar_url,
+        country_code,
         created_at,
         updated_at
     `;
@@ -1304,6 +1482,9 @@ export async function updateSoloHighScore(input: {
       avatar_color,
       profile_completed,
       solo_high_score,
+      provider,
+      avatar_url,
+      country_code,
       created_at,
       updated_at
   `;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
 import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
+import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
 import {
   ANIME_TUXUN_CLUE_INTERVAL_SECONDS,
   buildAnimeTuxunPlayState,
@@ -367,7 +368,13 @@ export default function AnimeTuxunPage() {
                     <span className="font-mono text-xs text-fuchsia-300">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <span>{clue}</span>
+                    <span>
+                      {redactAnswerTerms(clue, [
+                        playState.answerName,
+                        playState.location,
+                        playState.answerContext,
+                      ])}
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -425,7 +432,11 @@ export default function AnimeTuxunPage() {
                     <span className="mr-2 font-mono text-fuchsia-300">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    {clue}
+                    {redactAnswerTerms(clue, [
+                      playState.answerName,
+                      playState.location,
+                      playState.answerContext,
+                    ])}
                   </li>
                 ))}
               </ol>

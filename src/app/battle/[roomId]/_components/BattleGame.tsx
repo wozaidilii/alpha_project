@@ -31,7 +31,15 @@ import {
   type HistoryTuxunPlayState,
 } from "~/lib/history-tuxun-puzzle";
 import {
+  ANIME_TUXUN_CLUE_INTERVAL_SECONDS,
+  buildAnimeTuxunPlayState,
+  findAnimeTuxunScene,
+  getCachedAnimeTuxunScene,
+  type AnimeTuxunPlayState,
+} from "~/lib/anime-tuxun-puzzle";
+import {
   getBattleAnswerPoint,
+  isAnimeTuxunBattleQuestion,
   isForeignBattleQuestion,
   isHistoryTuxunBattleQuestion,
   isLocationOnlyBattleQuestion,
@@ -41,6 +49,7 @@ import {
 import {
   type BattlePhase,
   type BattleForeignQuestion,
+  type BattleAnimeTuxunQuestion,
   type BattlePlayer,
   type BattleQuestion,
   type BattleRoomSnapshot,
@@ -74,6 +83,7 @@ import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
 import { BaiduPanorama } from "~/app/game/tuxun/_components/BaiduPanorama";
 import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
 import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
+import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
 import { type PlayerAvatar } from "~/types/player";
 import { type CharacterConfig } from "~/types/character";
 import { api } from "~/trpc/react";
@@ -114,6 +124,36 @@ function buildBattleHistoryTuxunQuestion(
     type: "history-tuxun",
     title: playState.answerName,
     playState,
+  };
+}
+
+function buildBattleAnimeTuxunQuestion(
+  playState: AnimeTuxunPlayState,
+): BattleAnimeTuxunQuestion {
+  return {
+    id: `anime-tuxun:${playState.puzzleId}`,
+    type: "anime-tuxun",
+    title: playState.answerName,
+    playState,
+  };
+}
+
+function toAnimeTuxunBattleStreetViewLocation(
+  question: BattleAnimeTuxunQuestion,
+): TuxunLocation {
+  const { playState } = question;
+  return {
+    id: `${playState.puzzleId}:${playState.scenePanoId ?? `${playState.sceneLat}-${playState.sceneLng}`}`,
+    title: playState.answerName,
+    province: "日本",
+    city: playState.answerName,
+    lat: playState.sceneLat,
+    lng: playState.sceneLng,
+    panoId: playState.scenePanoId,
+    heading: playState.heading,
+    pitch: playState.pitch,
+    source: "google-random",
+    hint: playState.answerContext,
   };
 }
 
@@ -263,7 +303,8 @@ function calcDamage(
   const diff = Math.abs(scoreA - scoreB);
   return modeType === "tuxun" ||
     modeType === "foreign" ||
-    modeType === "history-tuxun"
+    modeType === "history-tuxun" ||
+    modeType === "anime-tuxun"
     ? Math.floor(diff / 5)
     : Math.floor(diff / 500);
 }
@@ -282,6 +323,7 @@ interface Props {
 
 const MY_ID_KEY = "histoguessr_player_id";
 const HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 8;
+const ANIME_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 12;
 
 interface BattleQuestionLoadResult {
   questions: BattleQuestion[];
@@ -354,6 +396,10 @@ export function BattleGame({
     api.locationTuxun.saveStreetViewScene.useMutation();
   const { mutateAsync: markStreetViewUnavailable } =
     api.locationTuxun.markStreetViewUnavailable.useMutation();
+  const { mutateAsync: saveAnimeStreetViewScene } =
+    api.animeTuxun.saveStreetViewScene.useMutation();
+  const { mutateAsync: markAnimeStreetViewUnavailable } =
+    api.animeTuxun.markStreetViewUnavailable.useMutation();
   const channel = `game-${roomId}`;
   const myId = useRef(getOrCreatePlayerId());
 
@@ -372,9 +418,9 @@ export function BattleGame({
   const [settings, setSettings] = useState<BattleSettings>(
     hostSettings ?? {
       rounds: 5,
-      timePerRound: 60,
+      timePerRound: 120,
       startingHp: 100,
-      questionType: "historical",
+      questionType: "anime-tuxun",
     },
   );
   const [questions, setQuestions] = useState<BattleQuestion[]>([]);
@@ -1099,6 +1145,64 @@ export function BattleGame({
     return { questions };
   }
 
+  async function loadAnimeTuxunBattleQuestions(
+    count: number,
+  ): Promise<BattleQuestionLoadResult> {
+    const questions: BattleAnimeTuxunQuestion[] = [];
+    const usedLocations = new Set<string>();
+    let excludeLocation: string | undefined;
+    const maxAttempts = Math.max(
+      count * ANIME_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND,
+      ANIME_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND,
+    );
+
+    for (
+      let attempts = 0;
+      attempts < maxAttempts && questions.length < count;
+      attempts += 1
+    ) {
+      const puzzle = await utils.animeTuxun.random.fetch({
+        excludeLocation,
+      });
+      if (!puzzle) break;
+
+      excludeLocation = puzzle.location;
+      if (usedLocations.has(puzzle.location)) continue;
+
+      const cachedScene = getCachedAnimeTuxunScene(puzzle);
+      const scene = cachedScene ?? (await findAnimeTuxunScene(puzzle));
+      if (!scene) {
+        await markAnimeStreetViewUnavailable({
+          location: puzzle.location,
+        }).catch(() => undefined);
+        continue;
+      }
+
+      if (!cachedScene) {
+        await saveAnimeStreetViewScene({
+          location: puzzle.location,
+          lat: scene.lat,
+          lng: scene.lng,
+          ...(scene.panoId ? { panoId: scene.panoId } : {}),
+        }).catch(() => undefined);
+      }
+
+      usedLocations.add(puzzle.location);
+      questions.push(
+        buildBattleAnimeTuxunQuestion(buildAnimeTuxunPlayState(puzzle, scene)),
+      );
+    }
+
+    if (questions.length < count) {
+      return {
+        questions: [],
+        error: `只匹配到 ${questions.length} / ${count} 道有 Google 街景的动漫题，未开始本局；请重新开始。`,
+      };
+    }
+
+    return { questions };
+  }
+
   async function loadBattleQuestions(
     nextSettings: BattleSettings,
   ): Promise<BattleQuestionLoadResult> {
@@ -1112,6 +1216,10 @@ export function BattleGame({
 
     if (nextSettings.questionType === "history-tuxun") {
       return loadHistoryTuxunBattleQuestions(nextSettings.rounds);
+    }
+
+    if (nextSettings.questionType === "anime-tuxun") {
+      return loadAnimeTuxunBattleQuestions(nextSettings.rounds);
     }
 
     if (!isQuestionType(nextSettings.questionType)) {
@@ -1401,22 +1509,25 @@ export function BattleGame({
     currentQuestion &&
     isLocationOnlyBattleQuestion(currentQuestion)
   ) {
-    const visibleHistoryClues = isHistoryTuxunBattleQuestion(currentQuestion)
-      ? currentQuestion.playState.clues.slice(
-          0,
-          Math.min(
-            currentQuestion.playState.clues.length,
-            Math.floor(
-              roundElapsedSeconds / HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
-            ) + 1,
-          ),
-        )
-      : [];
+    const isHistoryQuestion = isHistoryTuxunBattleQuestion(currentQuestion);
+    const isAnimeQuestion = isAnimeTuxunBattleQuestion(currentQuestion);
+    const timedClueInterval = isAnimeQuestion
+      ? ANIME_TUXUN_CLUE_INTERVAL_SECONDS
+      : HISTORY_TUXUN_CLUE_INTERVAL_SECONDS;
+    const timedClues =
+      isHistoryQuestion || isAnimeQuestion
+        ? currentQuestion.playState.clues.slice(
+            0,
+            Math.min(
+              currentQuestion.playState.clues.length,
+              Math.floor(roundElapsedSeconds / timedClueInterval) + 1,
+            ),
+          )
+        : [];
     const nextClueIn =
-      isHistoryTuxunBattleQuestion(currentQuestion) &&
-      visibleHistoryClues.length < currentQuestion.playState.clues.length
-        ? HISTORY_TUXUN_CLUE_INTERVAL_SECONDS -
-          (roundElapsedSeconds % HISTORY_TUXUN_CLUE_INTERVAL_SECONDS)
+      (isHistoryQuestion || isAnimeQuestion) &&
+      timedClues.length < currentQuestion.playState.clues.length
+        ? timedClueInterval - (roundElapsedSeconds % timedClueInterval)
         : null;
     const isForeignQuestion = isForeignBattleQuestion(currentQuestion);
 
@@ -1456,6 +1567,16 @@ export function BattleGame({
             <GoogleStreetView
               key={currentQuestion.id}
               location={currentQuestion.location}
+              onUnavailable={() =>
+                setStreetViewError(
+                  "当前 Google 街景渲染失败，请返回大厅重新开局。",
+                )
+              }
+            />
+          ) : isAnimeQuestion ? (
+            <GoogleStreetView
+              key={currentQuestion.id}
+              location={toAnimeTuxunBattleStreetViewLocation(currentQuestion)}
               onUnavailable={() =>
                 setStreetViewError(
                   "当前 Google 街景渲染失败，请返回大厅重新开局。",
@@ -1531,6 +1652,39 @@ export function BattleGame({
                   地图中点选位置。
                 </p>
               </div>
+            ) : isAnimeQuestion ? (
+              <div className="rounded-lg border border-pink-400/30 bg-pink-400/10 px-3 py-2">
+                <div className="flex items-center justify-between gap-3 text-sm font-semibold text-pink-100">
+                  <span>动漫线索</span>
+                  {nextClueIn ? (
+                    <span className="text-xs text-pink-100/70">
+                      下一条 {nextClueIn}s
+                    </span>
+                  ) : (
+                    <span className="text-xs text-pink-100/70">已全部给出</span>
+                  )}
+                </div>
+                <div className="mt-2 text-xs leading-5 text-pink-100/70">
+                  {currentQuestion.playState.animeTitles.join(" / ")}
+                </div>
+                <ol className="mt-3 space-y-2">
+                  {timedClues.map((clue, index) => (
+                    <li
+                      key={`${currentQuestion.id}-${index}`}
+                      className="text-sm leading-6 text-stone-100"
+                    >
+                      <span className="mr-2 font-mono text-pink-200">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      {redactAnswerTerms(clue, [
+                        currentQuestion.playState.answerName,
+                        currentQuestion.playState.location,
+                        currentQuestion.playState.answerContext,
+                      ])}
+                    </li>
+                  ))}
+                </ol>
+              </div>
             ) : (
               <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-amber-200">
@@ -1546,7 +1700,7 @@ export function BattleGame({
                   )}
                 </div>
                 <ol className="mt-3 space-y-2">
-                  {visibleHistoryClues.map((clue, index) => (
+                  {timedClues.map((clue, index) => (
                     <li
                       key={`${currentQuestion.id}-${index}`}
                       className="text-sm leading-6 text-stone-200"
@@ -1579,9 +1733,13 @@ export function BattleGame({
                 ? "图寻猜点"
                 : isForeignQuestion
                   ? "日本地图猜点"
-                  : "历史图寻猜点"
+                  : isAnimeQuestion
+                    ? "动漫对战猜点"
+                    : "历史图寻猜点"
             }
-            mapProvider={isForeignQuestion ? "google" : "baidu"}
+            mapProvider={
+              isForeignQuestion || isAnimeQuestion ? "google" : "baidu"
+            }
             country={DEFAULT_FOREIGN_COUNTRY}
           />
 

@@ -30,10 +30,17 @@
 - `player.recordActivity`
   - Input: `{ token: string, eventType: string, payload?: Record<string, string | number | boolean | null>, route?: string }`
   - Output: `{ ok: true }`
+- `player.updateProfile`
+  - Input: `{ token: string, name: string, avatar: PlayerAvatar, countryCode?: string | null }`
+  - Output: `PlayerProfile`
+- `player.leaderboard`
+  - Input: optional `{ token?: string, limit?: number }`
+  - Output: `{ entries: LeaderboardEntry[], currentUserEntry?: LeaderboardEntry }`
 - DB:
   - `players.username text` stores the display username for password accounts.
   - `players.username_key text` stores the normalized username lookup key and must have a unique index where non-null.
   - `players.password_hash text` stores password hashes for password accounts and remains nullable for code/WeChat-only accounts.
+  - `players.country_code text` stores the user-editable ISO 3166-1 alpha-2 country/region code used for profile and leaderboard display.
   - `player_email_verification_codes(id, email, code_hash, attempts, expires_at, consumed_at, created_at)`
   - `player_activity_events(id, player_id, email, event_type, event_payload, route, user_agent, created_at)`
 - Env:
@@ -47,6 +54,9 @@
 - Password registration uses email as the account identity and stores the unique display username in `players.username`, normalized lookup key in `players.username_key`, and canonical battle display name in `players.name`.
 - Password registration may claim an existing email-code-only account when that row has `password_hash = null`: set `username`, `username_key`, `name`, and `password_hash` on the existing player instead of returning a duplicate-email error.
 - `players.username_key` is case-insensitive unique for non-null values. Existing non-password or legacy players may have null username fields.
+- Profile updates must apply the same username uniqueness rule to all authenticated users, including Google/email-code users that initially have null `username_key`.
+- Registration and Google/email-code login may infer an initial `players.country_code` from trusted edge headers such as `x-vercel-ip-country` or `cf-ipcountry`, but external identity providers should not be treated as a reliable source of country/region.
+- Users must be able to override `players.country_code` from profile settings; leaderboard flag display must use the stored profile value, not the gameplay country field.
 - Passwords are never stored in plaintext; store only salted `scrypt` hashes in `players.password_hash`.
 - Existing email-code or WeChat users may have `password_hash = null`; password login must reject those rows without changing their account.
 - Verification codes are never stored in plaintext; store only an HMAC hash keyed by `EMAIL_VERIFICATION_SECRET`.
@@ -56,6 +66,7 @@
 - Password reset may use email verification codes, but the UI must present it as a separate "forgot password" flow and not as the default login path. Reset-code requests should send to any existing `players.email` account, including legacy rows without `password_hash`; if the email is unknown, return the same generic success shape without creating a usable code.
 - Game clients may record player behavior only with a valid session token. Invalid tokens must return unauthorized errors and must not write activity rows.
 - Event payloads must remain shallow JSON primitives to keep analytics queries predictable.
+- Anime leaderboard entries are derived from each authenticated user's best `game_sessions` row where `mode = 'anime'`, sorted by score descending and played time ascending as the tie-breaker. Guest sessions may be stored for analytics but must not appear as named leaderboard entries.
 
 ### 4. Validation & Error Matrix
 
@@ -70,12 +81,16 @@
 - Missing production `EMAIL_VERIFICATION_SECRET`, `RESEND_API_KEY`, or `EMAIL_FROM` -> `SERVICE_UNAVAILABLE`.
 - Resend API failure -> `BAD_GATEWAY`.
 - Invalid activity token -> `UNAUTHORIZED`.
+- Duplicate profile username -> `BAD_REQUEST` with "该用户名已被使用，请换一个".
+- Invalid leaderboard token -> `UNAUTHORIZED`; missing token should still return the public leaderboard.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: a user logs in with either `name@example.com` or `sakura` plus the same password; both resolve to the same account.
 - Good: a new user registers with email, unique username, and password; `players.name` is used later in battle mode display and `players.password_hash` contains only a salted hash.
 - Good: a legacy email-code-only player registers with the same email, unique username, and password; the existing player row is upgraded instead of creating a duplicate or blocking the user.
+- Good: a Google login creates a player with `provider = 'google'`, optional `avatar_url`, inferred `country_code` when a trusted edge header is present, and later lets the user change username and country from profile.
+- Good: a logged-in player completes an anime game; the leaderboard shows their best score, stored display name, and country flag from `players.country_code`.
 - Good: production has Resend credentials and a strong verification secret; a user requests a password reset code, enters it once, receives a session, and later gameplay records are linked by `player_id`.
 - Base: development lacks email credentials; the request returns `delivery: "debug"` and `debugCode`, allowing local testing without bypassing the verification-code path.
 - Bad: a tRPC procedure that accepts only an email and returns a `PlayerSession`; this bypasses code verification.

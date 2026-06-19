@@ -16,6 +16,7 @@ const DEMO_PLAYER_SESSION: PlayerSession = {
     avatar: DEFAULT_AVATAR,
     profileCompleted: true,
     soloHighScore: 0,
+    countryCode: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   },

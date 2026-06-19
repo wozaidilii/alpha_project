@@ -9,7 +9,7 @@
 ### 1. Scope / Trigger
 
 - Trigger: adding or changing battle lobby join, room start, Pusher synchronization, shared generated questions, or room cleanup behavior.
-- Applies to `/battle/[roomId]`, `/api/battle/rooms/[roomId]`, `src/server/data/battle-room-store.ts`, and battle Pusher events.
+- Applies to `/battle`, `/battle/[roomId]`, `/api/battle/rooms/[roomId]`, `src/server/data/battle-room-store.ts`, and battle Pusher events.
 
 ### 2. Signatures
 
@@ -30,10 +30,13 @@
 ### 3. Contracts
 
 - `BattleRoomSnapshot.phase` is `"lobby" | "starting" | "playing" | "closed"`.
+- `/battle` is a logged-in-only lobby. It must use the persisted `PlayerSession` to append `userId`, `name`, and avatar params before entering `/battle/[roomId]`.
+- `/battle/[roomId]` must reject direct entry without player profile params and redirect through login/lobby instead of creating anonymous battle players.
 - Lobby state stores authoritative `settings` and at most 2 `players`.
 - `starting` means the host has clicked start and may be generating third-party street-view questions; non-host clients should show a waiting state and keep polling.
 - `playing` must include either `questionIds` for DB-backed standard questions or full `questions` for generated street-view modes.
-- Generated street-view battle modes must share full generated `BattleQuestion[]` through room state so both players see the same panorama.
+- Generated street-view battle modes, including `anime-tuxun`, must share full generated `BattleQuestion[]` through room state so both players see the same panorama and timed clue state.
+- `anime-tuxun` battle questions use Google Street View, reveal anime clues over time, and score by distance to the real-world anime location center.
 - Pusher `game-started` is a fast notification, not the only source of truth; clients must be able to recover from `GET /api/battle/rooms/[roomId]`.
 - When all players leave, `leaveBattleRoom` deletes the room and returns `closed: true`.
 

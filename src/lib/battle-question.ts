@@ -1,4 +1,5 @@
 import {
+  type BattleAnimeTuxunQuestion,
   type BattleForeignQuestion,
   type BattleHistoryTuxunQuestion,
   type BattleQuestion,
@@ -40,16 +41,24 @@ export function isHistoryTuxunBattleQuestion(
   return question.type === "history-tuxun";
 }
 
+export function isAnimeTuxunBattleQuestion(
+  question: BattleQuestion,
+): question is BattleAnimeTuxunQuestion {
+  return question.type === "anime-tuxun";
+}
+
 export function isLocationOnlyBattleQuestion(
   question: BattleQuestion,
 ): question is
   | BattleTuxunQuestion
   | BattleForeignQuestion
-  | BattleHistoryTuxunQuestion {
+  | BattleHistoryTuxunQuestion
+  | BattleAnimeTuxunQuestion {
   return (
     isTuxunBattleQuestion(question) ||
     isForeignBattleQuestion(question) ||
-    isHistoryTuxunBattleQuestion(question)
+    isHistoryTuxunBattleQuestion(question) ||
+    isAnimeTuxunBattleQuestion(question)
   );
 }
 
@@ -59,6 +68,8 @@ export function getBattleQuestionTitle(question: BattleQuestion): string {
   if (isHistoryTuxunBattleQuestion(question)) {
     return question.playState.answerName;
   }
+  if (isAnimeTuxunBattleQuestion(question))
+    return question.playState.answerName;
   return question.title;
 }
 
@@ -70,6 +81,9 @@ export function getBattleQuestionSubtitle(question: BattleQuestion): string {
     return `${question.location.province} · ${question.location.city}`;
   }
   if (isHistoryTuxunBattleQuestion(question)) {
+    return question.playState.answerContext;
+  }
+  if (isAnimeTuxunBattleQuestion(question)) {
     return question.playState.answerContext;
   }
   return getQuestionResultSubtitle(question);
@@ -95,6 +109,13 @@ export function getBattleAnswerPoint(question: BattleQuestion): {
     };
   }
   if (isHistoryTuxunBattleQuestion(question)) {
+    return {
+      lat: question.playState.centerLat,
+      lng: question.playState.centerLng,
+      label: question.playState.answerName,
+    };
+  }
+  if (isAnimeTuxunBattleQuestion(question)) {
     return {
       lat: question.playState.centerLat,
       lng: question.playState.centerLng,

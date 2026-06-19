@@ -34,6 +34,7 @@ export interface PlayerProfile {
   avatar: PlayerAvatar;
   avatarUrl?: string | null;
   provider?: string | null;
+  countryCode?: string | null;
   profileCompleted: boolean;
   soloHighScore: number;
   createdAt: string;
@@ -43,6 +44,24 @@ export interface PlayerProfile {
 export interface PlayerSession {
   token: string;
   user: PlayerProfile;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  name: string;
+  avatar: PlayerAvatar;
+  avatarUrl?: string | null;
+  countryCode?: string | null;
+  score: number;
+  rounds: number;
+  playedAt: string;
+  isCurrentUser: boolean;
+}
+
+export interface LeaderboardResult {
+  entries: LeaderboardEntry[];
+  currentUserEntry?: LeaderboardEntry;
 }
 
 export interface AnimeRoundResultSummary {
@@ -113,6 +132,9 @@ export function isPlayerProfile(value: unknown): value is PlayerProfile {
     (value.provider === undefined ||
       typeof value.provider === "string" ||
       value.provider === null) &&
+    (value.countryCode === undefined ||
+      typeof value.countryCode === "string" ||
+      value.countryCode === null) &&
     typeof value.profileCompleted === "boolean" &&
     (value.soloHighScore === undefined ||
       typeof value.soloHighScore === "number") &&

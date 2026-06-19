@@ -13,6 +13,7 @@ create table if not exists players (
   google_sub text,
   provider text,
   avatar_url text,
+  country_code text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -46,6 +47,9 @@ alter table players
 
 alter table players
   add column if not exists avatar_url text;
+
+alter table players
+  add column if not exists country_code text;
 
 create unique index if not exists players_email_idx
   on players(email);

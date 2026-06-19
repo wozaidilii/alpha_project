@@ -1,6 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { normalizeCountryCode } from "~/lib/country";
 import {
+  getAnimeLeaderboard,
   getBattleHistory,
   getPlayerProfile,
   loginPlayer,
@@ -35,6 +37,18 @@ const emailSchema = z.string().trim().email().max(254);
 const identifierSchema = z.string().trim().min(1).max(254);
 const passwordSchema = z.string().min(8).max(128);
 const usernameSchema = z.string().trim().min(1).max(12);
+const countryCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-zA-Z]{2}$/)
+  .nullable()
+  .optional();
+
+function inferCountryCode(headers: Headers) {
+  return normalizeCountryCode(
+    headers.get("x-vercel-ip-country") ?? headers.get("cf-ipcountry"),
+  );
+}
 
 async function withSessionError<T>(fn: () => Promise<T>) {
   try {
@@ -156,6 +170,7 @@ export const playerRouter = createTRPCRouter({
       return withEmailLoginError(() =>
         verifyEmailLoginCode(input.email, input.code, {
           userAgent: ctx.headers.get("user-agent"),
+          countryCode: inferCountryCode(ctx.headers),
         }),
       );
     }),
@@ -172,6 +187,7 @@ export const playerRouter = createTRPCRouter({
       return withPasswordLoginError(() =>
         registerPlayerWithPassword(input, {
           userAgent: ctx.headers.get("user-agent"),
+          countryCode: inferCountryCode(ctx.headers),
         }),
       );
     }),
@@ -247,6 +263,7 @@ export const playerRouter = createTRPCRouter({
       tokenSchema.extend({
         name: usernameSchema,
         avatar: avatarSchema,
+        countryCode: countryCodeSchema,
       }),
     )
     .mutation(({ input }) => {
@@ -307,6 +324,19 @@ export const playerRouter = createTRPCRouter({
     )
     .mutation(({ input }) => {
       return withSessionError(() => recordGameSession(input));
+    }),
+
+  leaderboard: publicProcedure
+    .input(
+      z
+        .object({
+          token: z.string().min(1).optional(),
+          limit: z.number().int().min(1).max(50).optional(),
+        })
+        .optional(),
+    )
+    .query(({ input }) => {
+      return withSessionError(() => getAnimeLeaderboard(input ?? {}));
     }),
 
   recordBattle: publicProcedure

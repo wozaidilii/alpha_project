@@ -4,6 +4,7 @@ import { type GameQuestion } from "~/types/question";
 import { type GameModeSlug } from "~/lib/game-mode";
 import { type TuxunLocation } from "~/lib/tuxun-locations";
 import { type HistoryTuxunPlayState } from "~/lib/history-tuxun-puzzle";
+import { type AnimeTuxunPlayState } from "~/lib/anime-tuxun-puzzle";
 
 export interface BattleTuxunQuestion {
   id: string;
@@ -26,11 +27,19 @@ export interface BattleHistoryTuxunQuestion {
   playState: HistoryTuxunPlayState;
 }
 
+export interface BattleAnimeTuxunQuestion {
+  id: string;
+  type: "anime-tuxun";
+  title: string;
+  playState: AnimeTuxunPlayState;
+}
+
 export type BattleQuestion =
   | GameQuestion
   | BattleTuxunQuestion
   | BattleForeignQuestion
-  | BattleHistoryTuxunQuestion;
+  | BattleHistoryTuxunQuestion
+  | BattleAnimeTuxunQuestion;
 
 export type BattleRoomPhase = "lobby" | "starting" | "playing" | "closed";
 

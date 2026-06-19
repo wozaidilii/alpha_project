@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "~/env";
+import { normalizeCountryCode } from "~/lib/country";
 import {
   GOOGLE_OAUTH_NEXT_COOKIE,
   GOOGLE_OAUTH_STATE_COOKIE,
@@ -11,6 +12,12 @@ import {
   sanitizeNextPath,
 } from "~/server/auth/google-oauth";
 import { loginPlayerWithGoogle } from "~/server/data/player-store";
+
+function inferCountryCode(headers: Headers) {
+  return normalizeCountryCode(
+    headers.get("x-vercel-ip-country") ?? headers.get("cf-ipcountry"),
+  );
+}
 
 async function exchangeCodeForAccessToken(input: {
   code: string;
@@ -131,6 +138,7 @@ export async function GET(request: NextRequest) {
     const profile = await fetchGoogleProfile(accessToken);
     const session = await loginPlayerWithGoogle(profile, {
       userAgent: request.headers.get("user-agent"),
+      countryCode: inferCountryCode(request.headers),
     }).catch((error: unknown) => {
       throw new GoogleOAuthCallbackError(
         "database",

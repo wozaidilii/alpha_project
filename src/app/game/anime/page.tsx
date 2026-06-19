@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
 import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
+import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
 import {
   ANIME_GUESSR_IMAGE_BASE_URL,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
@@ -187,7 +188,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     leaderboard: "查看排行榜",
     saveHistory: "保存历史成绩",
     playAgain: "再来一局",
-    leaderboardSaved: "排行榜即将开放，当前成绩已保存。",
+    leaderboardSaved: "排行榜已更新，正在打开首页。",
     historySaved: "历史成绩已保存到账号。",
     shareOpened: "分享面板已打开。",
     shareCopied: "成绩文案已复制。",
@@ -276,7 +277,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     leaderboard: "ランキングを見る",
     saveHistory: "履歴を保存",
     playAgain: "もう一度",
-    leaderboardSaved: "ランキングは準備中です。現在の成績は保存済みです。",
+    leaderboardSaved: "ランキングを更新しました。ホームを開きます。",
     historySaved: "履歴をアカウントに保存しました。",
     shareOpened: "共有パネルを開きました。",
     shareCopied: "成績テキストをコピーしました。",
@@ -367,7 +368,7 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
     leaderboard: "View leaderboard",
     saveHistory: "Save history",
     playAgain: "Play again",
-    leaderboardSaved: "Leaderboards are coming soon. This score is saved.",
+    leaderboardSaved: "Leaderboard updated. Opening home.",
     historySaved: "History saved to your account.",
     shareOpened: "Share sheet opened.",
     shareCopied: "Score text copied.",
@@ -1157,11 +1158,14 @@ export default function AnimeGuessrPage() {
             </button>
             <button
               type="button"
-              onClick={() =>
-                session
-                  ? setShareMessage(copy.leaderboardSaved)
-                  : setAuthPromptReason("leaderboard")
-              }
+              onClick={() => {
+                if (session) {
+                  setShareMessage(copy.leaderboardSaved);
+                  window.location.href = withAnimeLocale("/", locale);
+                  return;
+                }
+                setAuthPromptReason("leaderboard");
+              }}
               className="anime-button-secondary"
             >
               {copy.leaderboard}
@@ -1257,18 +1261,25 @@ export default function AnimeGuessrPage() {
               <h2 className="mt-1 text-2xl font-black text-pink-100">
                 {currentText.animeTitle}
               </h2>
-              <div className="mt-1 text-sm text-pink-50/60">
-                {current.year} · {currentText.location}
-              </div>
+              <div className="mt-1 text-sm text-pink-50/60">{current.year}</div>
             </div>
 
             <div className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50">
-              {currentText.description}
+              {redactAnswerTerms(currentText.description, [
+                currentText.location,
+                currentText.answerName,
+                current.location,
+              ])}
             </div>
 
             {currentText.aspect && (
               <div className="text-sm leading-6 text-pink-50/70">
-                {copy.scene}: {currentText.aspect}
+                {copy.scene}:{" "}
+                {redactAnswerTerms(currentText.aspect, [
+                  currentText.location,
+                  currentText.answerName,
+                  current.location,
+                ])}
               </div>
             )}
 
