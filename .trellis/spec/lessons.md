@@ -109,3 +109,10 @@
 - 根因：实现时把“题目会有配图”理解成主视觉，而没有回到图寻/GeoGuessr 类模式的核心契约：玩家主要观察现实街景，再结合线索判断地点。
 - 修复：`/game/anime` 主区域改为复用 `GoogleStreetView`，把动漫图和文字收进左上角线索卡，猜点和结果地图继续复用 Google Maps。
 - 预防：以后新增带图片、文字、视频等线索的街景模式时，先判定核心观察媒介；如果模式是 street-view-first，任何额外素材都只能作为 overlay clue，不能替代主 panorama viewport。
+
+## 全仓库格式检查失败时不要扩大无关 diff
+
+- 问题：账号登录改动后补跑 `npm run format:check`，检查失败列出 11 个既有未格式化文件，但这些文件均不属于本次改动。
+- 根因：项目 `format:check` 扫全仓库 TS/TSX/JS/MDX，历史格式漂移会让一次局部任务的验证结果变红；若直接运行全仓库 `format:write` 会引入大量无关 diff。
+- 修复：仅对本次触达文件运行 Prettier，并继续以 `npm run check`、`npm test`、`npm run build` 和浏览器烟测作为本次功能验证依据。
+- 预防：局部任务收尾时先格式化触达文件；若全仓库 `format:check` 因无关文件失败，在最终说明中标注失败文件属于既有漂移，不为通过格式检查而重排无关模块。

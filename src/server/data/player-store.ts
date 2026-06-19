@@ -4,6 +4,7 @@ import { createHmac, randomInt, randomUUID, timingSafeEqual } from "crypto";
 import { type TransactionSql } from "postgres";
 import { displayNameFromEmail } from "~/lib/email-login-code";
 import { env } from "~/env";
+import { hashPassword, verifyPassword } from "~/server/auth/password";
 import { sendEmailVerificationCode } from "~/server/email/verification-code";
 import { sql } from "~/server/db/client";
 import {
@@ -25,6 +26,10 @@ interface PlayerRow {
   solo_high_score: number;
   created_at: Date | string;
   updated_at: Date | string;
+}
+
+interface PasswordPlayerRow extends PlayerRow {
+  password_hash: string | null;
 }
 
 interface BattleHistoryRow {
@@ -465,6 +470,133 @@ export async function verifyEmailLoginCode(
     email,
     eventType: "email_login_completed",
     payload: { method: "email_code" },
+    userAgent: meta.userAgent,
+  });
+
+  return { token, user };
+}
+
+export async function registerPlayerWithPassword(
+  input: {
+    email: string;
+    name: string;
+    password: string;
+  },
+  meta: { userAgent?: string | null } = {},
+): Promise<PlayerSession> {
+  const now = new Date();
+  const id = randomUUID();
+  const email = normalizeEmail(input.email);
+  const name = normalizeName(input.name);
+  const avatar = normalizeAvatar();
+  const passwordHash = await hashPassword(input.password);
+
+  const { token, user } = await sql.begin(async (tx) => {
+    const [player] = await tx<PlayerRow[]>`
+      insert into players (
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        password_hash,
+        created_at,
+        updated_at
+      )
+      values (
+        ${id},
+        ${email},
+        ${name},
+        ${avatar.icon},
+        ${avatar.color},
+        true,
+        0,
+        ${passwordHash},
+        ${now},
+        ${now}
+      )
+      on conflict (email) do nothing
+      returning
+        id,
+        email,
+        name,
+        avatar_icon,
+        avatar_color,
+        profile_completed,
+        solo_high_score,
+        created_at,
+        updated_at
+    `;
+
+    if (!player) {
+      throw new Error("Email already registered");
+    }
+
+    const token = await createSessionForPlayer(tx, player.id, now);
+
+    return {
+      token,
+      user: toPublicPlayer(player),
+    };
+  });
+
+  await recordPlayerActivity({
+    playerId: user.id,
+    email,
+    eventType: "password_registration_completed",
+    payload: { method: "password" },
+    userAgent: meta.userAgent,
+  });
+
+  return { token, user };
+}
+
+export async function loginPlayerWithPassword(
+  input: {
+    email: string;
+    password: string;
+  },
+  meta: { userAgent?: string | null } = {},
+): Promise<PlayerSession> {
+  const now = new Date();
+  const email = normalizeEmail(input.email);
+
+  const [player] = await sql<PasswordPlayerRow[]>`
+    select
+      id,
+      email,
+      name,
+      avatar_icon,
+      avatar_color,
+      profile_completed,
+      solo_high_score,
+      password_hash,
+      created_at,
+      updated_at
+    from players
+    where email = ${email}
+    limit 1
+  `;
+
+  if (
+    !player ||
+    !(await verifyPassword(input.password, player.password_hash))
+  ) {
+    throw new Error("Invalid email or password");
+  }
+
+  const token = await sql.begin((tx) =>
+    createSessionForPlayer(tx, player.id, now),
+  );
+  const user = toPublicPlayer(player);
+
+  await recordPlayerActivity({
+    playerId: user.id,
+    email,
+    eventType: "password_login_completed",
+    payload: { method: "password" },
     userAgent: meta.userAgent,
   });
 

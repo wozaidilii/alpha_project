@@ -7,6 +7,7 @@ create table if not exists players (
   profile_completed boolean not null default false,
   solo_high_score integer not null default 0 check (solo_high_score >= 0),
   wechat_openid text,
+  password_hash text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -22,6 +23,9 @@ alter table players
 
 alter table players
   add column if not exists wechat_openid text;
+
+alter table players
+  add column if not exists password_hash text;
 
 create unique index if not exists players_email_idx
   on players(email);

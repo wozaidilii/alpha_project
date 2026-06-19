@@ -4,8 +4,10 @@ import {
   getBattleHistory,
   getPlayerProfile,
   loginPlayer,
+  loginPlayerWithPassword,
   recordBattleHistory,
   recordPlayerActivity,
+  registerPlayerWithPassword,
   requestEmailLoginCode,
   updatePlayerProfile,
   updateSoloHighScore,
@@ -25,6 +27,9 @@ const avatarSchema = z.object({
 const tokenSchema = z.object({
   token: z.string().min(1),
 });
+
+const emailSchema = z.string().trim().email().max(254);
+const passwordSchema = z.string().min(8).max(128);
 
 async function withSessionError<T>(fn: () => Promise<T>) {
   try {
@@ -83,11 +88,33 @@ async function withEmailLoginError<T>(fn: () => Promise<T>) {
   }
 }
 
+async function withPasswordLoginError<T>(fn: () => Promise<T>) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "Email already registered") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "该邮箱已注册，请直接登录",
+        });
+      }
+      if (error.message === "Invalid email or password") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "邮箱或密码不正确",
+        });
+      }
+    }
+    throw error;
+  }
+}
+
 export const playerRouter = createTRPCRouter({
   requestEmailLoginCode: publicProcedure
     .input(
       z.object({
-        email: z.string().trim().email().max(254),
+        email: emailSchema,
       }),
     )
     .mutation(({ input, ctx }) => {
@@ -101,7 +128,7 @@ export const playerRouter = createTRPCRouter({
   verifyEmailLoginCode: publicProcedure
     .input(
       z.object({
-        email: z.string().trim().email().max(254),
+        email: emailSchema,
         code: z
           .string()
           .trim()
@@ -111,6 +138,37 @@ export const playerRouter = createTRPCRouter({
     .mutation(({ input, ctx }) => {
       return withEmailLoginError(() =>
         verifyEmailLoginCode(input.email, input.code, {
+          userAgent: ctx.headers.get("user-agent"),
+        }),
+      );
+    }),
+
+  registerWithPassword: publicProcedure
+    .input(
+      z.object({
+        email: emailSchema,
+        name: z.string().trim().min(1).max(12),
+        password: passwordSchema,
+      }),
+    )
+    .mutation(({ input, ctx }) => {
+      return withPasswordLoginError(() =>
+        registerPlayerWithPassword(input, {
+          userAgent: ctx.headers.get("user-agent"),
+        }),
+      );
+    }),
+
+  loginWithPassword: publicProcedure
+    .input(
+      z.object({
+        email: emailSchema,
+        password: passwordSchema,
+      }),
+    )
+    .mutation(({ input, ctx }) => {
+      return withPasswordLoginError(() =>
+        loginPlayerWithPassword(input, {
           userAgent: ctx.headers.get("user-agent"),
         }),
       );
