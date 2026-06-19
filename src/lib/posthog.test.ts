@@ -32,6 +32,13 @@ async function importPostHogWithKey() {
   return import("./posthog");
 }
 
+async function importPostHogWithProjectToken() {
+  vi.resetModules();
+  vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "");
+  vi.stubEnv("NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN", "phc_project_test");
+  return import("./posthog");
+}
+
 function player(overrides: Partial<PlayerProfile> = {}): PlayerProfile {
   return {
     id: "player-1",
@@ -80,6 +87,41 @@ describe("posthog helpers", () => {
         guest_id: "guest-test",
         locale: "zh",
       }),
+    );
+  });
+
+  it("accepts the official PostHog project token environment variable", async () => {
+    const posthog = posthogBrowser();
+    vi.stubGlobal("window", { posthog });
+    const { capturePostHogEvent, POSTHOG_EVENTS } =
+      await importPostHogWithProjectToken();
+
+    capturePostHogEvent(POSTHOG_EVENTS.homeStartClicked);
+
+    expect(posthog.capture).toHaveBeenCalledWith(
+      "home_start_clicked",
+      expect.objectContaining({
+        app: "aniguessr",
+        guest_id: "guest-test",
+      }),
+    );
+  });
+
+  it("uses the official ingestion endpoint when the SDK is not ready", async () => {
+    const sendBeacon = vi.fn(() => true);
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://us.i.posthog.com/");
+    vi.stubGlobal("navigator", { sendBeacon });
+    vi.stubGlobal("window", {});
+    const { capturePostHogEvent, POSTHOG_EVENTS } =
+      await importPostHogWithKey();
+
+    capturePostHogEvent(POSTHOG_EVENTS.pageViewed, {
+      $current_url: "https://anime.loamly.net/",
+    });
+
+    expect(sendBeacon).toHaveBeenCalledWith(
+      "https://us.i.posthog.com/i/v0/e/",
+      expect.any(Blob),
     );
   });
 

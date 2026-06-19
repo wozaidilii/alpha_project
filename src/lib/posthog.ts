@@ -1,9 +1,10 @@
 import { loadGuestProgress, storeGuestProgress } from "~/lib/guest-progress";
+import {
+  buildPostHogCaptureUrl,
+  POSTHOG_PROJECT_TOKEN,
+} from "~/lib/posthog-config";
 import { type PlayerProfile } from "~/types/player";
 
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const POSTHOG_HOST =
-  process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 let lastIdentifiedUserId: string | null = null;
 
 export const POSTHOG_EVENTS = {
@@ -49,10 +50,6 @@ declare global {
   }
 }
 
-function getCaptureUrl() {
-  return `${POSTHOG_HOST.replace(/\/$/, "")}/capture/`;
-}
-
 function getAnalyticsGuestId() {
   const progress = loadGuestProgress();
   if (typeof window !== "undefined") storeGuestProgress(progress);
@@ -96,7 +93,7 @@ export function capturePostHogEvent(
   properties: PostHogProperties = {},
   distinctId?: string | null,
 ) {
-  if (!POSTHOG_KEY || typeof window === "undefined") return;
+  if (!POSTHOG_PROJECT_TOKEN || typeof window === "undefined") return;
 
   const eventProperties = withBaseProperties(properties, distinctId);
 
@@ -110,7 +107,7 @@ export function capturePostHogEvent(
   }
 
   const payload = JSON.stringify({
-    api_key: POSTHOG_KEY,
+    api_key: POSTHOG_PROJECT_TOKEN,
     event,
     distinct_id: getAnalyticsDistinctId(distinctId),
     properties: eventProperties,
@@ -118,10 +115,10 @@ export function capturePostHogEvent(
 
   if (navigator.sendBeacon) {
     const blob = new Blob([payload], { type: "application/json" });
-    if (navigator.sendBeacon(getCaptureUrl(), blob)) return;
+    if (navigator.sendBeacon(buildPostHogCaptureUrl(), blob)) return;
   }
 
-  void fetch(getCaptureUrl(), {
+  void fetch(buildPostHogCaptureUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: payload,
@@ -132,7 +129,7 @@ export function capturePostHogEvent(
 }
 
 export function identifyPostHogUser(user: PlayerProfile) {
-  if (!POSTHOG_KEY || typeof window === "undefined") return;
+  if (!POSTHOG_PROJECT_TOKEN || typeof window === "undefined") return;
 
   const personProperties = compactProperties({
     email: user.email ?? undefined,
@@ -160,7 +157,7 @@ export function identifyPostHogUser(user: PlayerProfile) {
 }
 
 export function registerPostHogGuest() {
-  if (!POSTHOG_KEY || typeof window === "undefined") return;
+  if (!POSTHOG_PROJECT_TOKEN || typeof window === "undefined") return;
 
   try {
     window.posthog?.register({ guest_id: getAnalyticsGuestId() });
@@ -170,7 +167,7 @@ export function registerPostHogGuest() {
 }
 
 export function resetPostHogUser() {
-  if (!POSTHOG_KEY || typeof window === "undefined") return;
+  if (!POSTHOG_PROJECT_TOKEN || typeof window === "undefined") return;
 
   try {
     lastIdentifiedUserId = null;

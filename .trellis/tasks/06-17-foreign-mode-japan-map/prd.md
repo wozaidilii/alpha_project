@@ -83,7 +83,7 @@
 - 未登录为游客模式：每天免费玩 3 局，局数、最高分和最近历史成绩存 LocalStorage。
 - 第一留存点：获得新纪录、想查看排行榜、想保存历史成绩、游客局数用完时，才提示邮箱登录或 Google 登录。
 - 登录方式增加 Google OAuth；成功后复用现有 `PlayerSession`，并写入 `players.provider='google'`、`players.google_sub`、`players.avatar_url`。
-- 增加 PostHog 可选埋点：无配置时 no-op；配置 `NEXT_PUBLIC_POSTHOG_KEY` 后采集首页开始、游戏开始、回合提交、游戏完成、分享等事件。
+- 增加 PostHog 可选埋点：无配置时 no-op；优先配置官方变量名 `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`，并兼容旧变量名 `NEXT_PUBLIC_POSTHOG_KEY`，配置后采集首页开始、游戏开始、回合提交、游戏完成、分享等事件。
 - 增加 `game_sessions` 表，用现有 `players` 作为用户表参考结构：`user_id` 对应 `players.id`，同时允许 `guest_id` 记录匿名游客局。
 
 ## Scope Update: Google 登录诊断与动漫模式多语言

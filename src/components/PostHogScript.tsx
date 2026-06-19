@@ -1,9 +1,9 @@
 import Script from "next/script";
-
-const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const POSTHOG_HOST =
-  process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
-const POSTHOG_DEFAULTS_DATE = "2026-05-30";
+import {
+  POSTHOG_DEFAULTS_DATE,
+  POSTHOG_HOST,
+  POSTHOG_PROJECT_TOKEN,
+} from "~/lib/posthog-config";
 
 function buildPostHogSnippet(projectToken: string, apiHost: string) {
   return `
@@ -19,14 +19,14 @@ posthog.init(${JSON.stringify(projectToken)}, {
 }
 
 export function PostHogScript() {
-  if (!POSTHOG_KEY) return null;
+  if (!POSTHOG_PROJECT_TOKEN) return null;
 
   return (
     <Script
       id="posthog-js"
       strategy="afterInteractive"
       dangerouslySetInnerHTML={{
-        __html: buildPostHogSnippet(POSTHOG_KEY, POSTHOG_HOST),
+        __html: buildPostHogSnippet(POSTHOG_PROJECT_TOKEN, POSTHOG_HOST),
       }}
     />
   );

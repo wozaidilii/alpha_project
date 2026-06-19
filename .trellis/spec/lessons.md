@@ -158,3 +158,10 @@
 - 根因：UI 把结果页需要的 `location` / `answerName` 字段复用到了 clue 面板；题库线索文本也可能意外包含答案地名。
 - 修复：进行中线索不再显示地点字段，并新增共享 `redactAnswerTerms` 工具，在单人、动漫寻图和对战动漫线索渲染时遮盖答案地点词。
 - 预防：所有街景猜点玩法的 clue overlay 只能展示观察线索，不能渲染答案地点、答案名或答案上下文；答案字段只允许在提交后结果页显示。
+
+## PostHog 前端 token 名称要兼容官方文档
+
+- 问题：PostHog 控制台仍提示未收到 `$pageview`，即使项目代码里已经挂了埋点组件。
+- 根因：代码只读取 `NEXT_PUBLIC_POSTHOG_KEY`，而官方 Next.js 文档和用户配置更容易使用 `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`；前端构建拿不到 token 时脚本直接不渲染，所有 capture helper 也 no-op。早期直连 fallback 还使用了旧的 `/capture/` 路径，而当前 API 文档示例使用 `/i/v0/e/`。
+- 修复：集中 PostHog 配置，兼容 `NEXT_PUBLIC_POSTHOG_KEY`、`NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` 和 `NEXT_PUBLIC_POSTHOG_TOKEN`，并把直接 fallback 改为 `${POSTHOG_HOST}/i/v0/e/`。
+- 预防：接入第三方分析 SDK 时，公开环境变量名要对齐官方文档并保留旧部署 alias；如果实现 SDK 外的直接采集 fallback，endpoint 必须用当前官方 API 文档和回归测试锁定。

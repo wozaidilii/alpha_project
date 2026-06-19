@@ -180,7 +180,9 @@ recordActivity({
   - `players.avatar_url text` stores profile image URLs from external identity providers.
   - `game_sessions(id, user_id, guest_id, score, country, mode, rounds, played_at)`.
 - Client env:
-  - `NEXT_PUBLIC_POSTHOG_KEY` enables client capture.
+  - `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` is the preferred PostHog project token env key, matching the official Next.js docs.
+  - `NEXT_PUBLIC_POSTHOG_KEY` remains a legacy-compatible alias for existing deployments.
+  - `NEXT_PUBLIC_POSTHOG_TOKEN` is accepted as a compatibility alias when a host labels the public write-only token generically.
   - `NEXT_PUBLIC_POSTHOG_HOST` optionally overrides the capture host.
 - Server env:
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and optional `GOOGLE_REDIRECT_URI` enable Google login.
@@ -193,9 +195,9 @@ recordActivity({
 - Guest completion should save the score locally and may write an anonymous `game_sessions.guest_id` row for aggregate analytics.
 - Logged-in completion must write `game_sessions.user_id` and may also record `player_activity_events`.
 - Retention prompts should appear only at retention points: new local record, leaderboard intent, history-save intent, or daily guest quota exhausted.
-- PostHog capture is optional and must be no-op when `NEXT_PUBLIC_POSTHOG_KEY` is missing; analytics failures must never block gameplay.
-- PostHog browser setup must initialize the official JS snippet once from the root layout when `NEXT_PUBLIC_POSTHOG_KEY` is present. Keep `person_profiles = 'identified_only'`, disable automatic pageview/autocapture, and track only the project-owned events from `POSTHOG_EVENTS`.
-- Client events must go through `capturePostHogEvent`; do not call `window.posthog.capture` directly from pages or components. The helper must prefer the browser SDK and keep the direct `/capture/` fallback for early-load events.
+- PostHog capture is optional and must be no-op when none of the supported public token env keys are present; analytics failures must never block gameplay.
+- PostHog browser setup must initialize the official JS snippet once from the root layout when a supported public token env key is present. Keep `person_profiles = 'identified_only'`, disable automatic pageview/autocapture, and track only the project-owned events from `POSTHOG_EVENTS`.
+- Client events must go through `capturePostHogEvent`; do not call `window.posthog.capture` directly from pages or components. The helper must prefer the browser SDK and keep a direct early-load fallback to PostHog's ingestion endpoint `${NEXT_PUBLIC_POSTHOG_HOST}/i/v0/e/`.
 - After a user session is created or restored, call `identifyPostHogUser` so PostHog links future events to `players.id`. On logout, call `resetPostHogUser` and restore guest registration.
 - Do not include passwords, verification codes, room invite codes, raw OAuth tokens, or nested objects in PostHog event properties. Email/name/provider/country may be sent only as PostHog identify person properties, not as arbitrary event payloads.
 - Google OAuth must sanitize `next` paths and reject external redirects.
@@ -221,6 +223,7 @@ recordActivity({
 
 - Unit tests for guest daily reset, remaining quota, and new-record local history behavior.
 - Unit tests for Google OAuth URL/state helper behavior and `next` path sanitization.
+- Unit tests for PostHog public token env aliases and the direct ingestion fallback URL.
 - Project checks:
   - `npm run check`
   - `npm test`
