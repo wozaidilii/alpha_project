@@ -9,6 +9,7 @@ import {
   toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
 } from "~/lib/anime-guessr";
+import { DEFAULT_ANIME_LOCALE } from "~/lib/anime-locale";
 
 const sampleQuestion: AnimeGuessrQuestion = {
   id: "anitabi_51_5c4dgq9pm",
@@ -53,6 +54,10 @@ const sampleQuestion: AnimeGuessrQuestion = {
 };
 
 describe("anime-guessr", () => {
+  it("defaults the public site language to English", () => {
+    expect(DEFAULT_ANIME_LOCALE).toBe("en");
+  });
+
   it("accepts valid anime pilgrimage questions", () => {
     expect(isAnimeGuessrQuestion(sampleQuestion)).toBe(true);
   });
@@ -111,6 +116,11 @@ describe("anime-guessr", () => {
   });
 
   it("returns localized question text with base-field fallback", () => {
+    expect(getAnimeGuessrQuestionText(sampleQuestion)).toMatchObject({
+      title: "Sunset Meeting Slope",
+      description: "The slope from the CLANNAD opening.",
+      answerName: "Slope near Lake Tama",
+    });
     expect(getAnimeGuessrQuestionText(sampleQuestion, "en")).toMatchObject({
       title: "Sunset Meeting Slope",
       description: "The slope from the CLANNAD opening.",

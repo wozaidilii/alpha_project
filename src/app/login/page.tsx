@@ -16,33 +16,33 @@ type AuthMode = "password" | "register" | "reset";
 type ResetStep = "email" | "code";
 
 const MODE_LABELS: Record<AuthMode, string> = {
-  password: "登录",
-  register: "注册",
-  reset: "重置密码",
+  password: "Log in",
+  register: "Register",
+  reset: "Reset password",
 };
 
 const DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE =
-  "Google 登录失败，请稍后再试或使用邮箱登录。";
+  "Google login failed. Try again later or use email login.";
 
 const GOOGLE_LOGIN_ERROR_MESSAGES: Record<string, string> = {
   google: DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
   google_unknown: DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
   google_state:
-    "Google 登录状态已过期，请从登录页重新点击 Google 登录。无痕窗口中不要阻止本站 Cookie。",
+    "The Google login state expired. Start Google login again from this page, and make sure this site can use cookies in private browsing.",
   google_config:
-    "Google 登录服务端配置缺失，请检查 Vercel 的 GOOGLE_CLIENT_ID、GOOGLE_CLIENT_SECRET 和 GOOGLE_REDIRECT_URI。",
+    "Google login is missing server configuration. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in Vercel.",
   google_token:
-    "Google 授权码交换失败，请确认 Vercel 的 GOOGLE_CLIENT_SECRET 与 Google Cloud 当前 OAuth Client Secret 匹配。",
+    "Google authorization code exchange failed. Make sure the Vercel GOOGLE_CLIENT_SECRET matches the current Google Cloud OAuth client secret.",
   google_profile:
-    "Google 授权成功，但账号资料读取失败，请稍后再试或使用邮箱登录。",
+    "Google authorization succeeded, but profile lookup failed. Try again later or use email login.",
   google_database:
-    "Google 授权成功，但写入用户数据失败。请确认线上数据库已执行迁移并包含 Google 登录字段。",
+    "Google authorization succeeded, but user data could not be saved. Confirm the production database migration includes the Google login fields.",
 };
 
 function getNextUrl() {
-  if (typeof window === "undefined") return "/game/anime";
+  if (typeof window === "undefined") return "/";
   const next = new URLSearchParams(window.location.search).get("next");
-  if (!next?.startsWith("/") || next.startsWith("//")) return "/game/anime";
+  if (!next?.startsWith("/") || next.startsWith("//")) return "/";
   return next;
 }
 
@@ -116,8 +116,8 @@ export default function LoginPage() {
         setResetStep("code");
         setMessage(
           result.delivery === "debug"
-            ? "开发环境未配置邮件服务，请使用下方调试验证码重置密码。"
-            : "如果这个邮箱已有账号，重置验证码会发送到邮箱。",
+            ? "Email delivery is not configured in development. Use the debug code below to reset your password."
+            : "If this email is registered, a reset code will be sent to it.",
         );
         setDebugCode(result.debugCode ?? null);
       },
@@ -199,7 +199,7 @@ export default function LoginPage() {
             href="/"
             className="text-sm font-bold text-cyan-100/70 transition hover:text-cyan-100 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
           >
-            返回主页
+            Back home
           </Link>
         </header>
 
@@ -207,10 +207,11 @@ export default function LoginPage() {
           <div>
             <div className="anime-chip mb-5 w-fit">{MODE_LABELS[mode]}</div>
             <h1 className="text-5xl leading-none font-black text-white sm:text-6xl">
-              进入巡礼档案
+              Enter the pilgrimage archive
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-pink-50/70">
-              使用邮箱或用户名配合密码登录。注册时用户名会被去重，并作为对战模式、排行榜和历史记录中的展示名称。
+              Log in with an email or username and password. Usernames are
+              unique and appear in battles, leaderboards, and saved history.
             </p>
           </div>
 
@@ -218,7 +219,7 @@ export default function LoginPage() {
             <div
               className="mb-5 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/25 p-1"
               role="tablist"
-              aria-label="账号操作"
+              aria-label="Account actions"
             >
               {(Object.keys(MODE_LABELS) as AuthMode[]).map((item) => (
                 <button
@@ -247,7 +248,7 @@ export default function LoginPage() {
               }
               className="mb-5 flex min-h-12 w-full items-center justify-center rounded-xl border border-white/15 bg-white px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
             >
-              使用 Google 继续
+              Continue with Google
             </a>
 
             {mode === "password" && (
@@ -257,7 +258,7 @@ export default function LoginPage() {
                     htmlFor="identifier"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    邮箱或用户名
+                    Email or username
                   </label>
                   <input
                     id="identifier"
@@ -275,7 +276,7 @@ export default function LoginPage() {
                     htmlFor="password"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    密码
+                    Password
                   </label>
                   <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
                     <input
@@ -288,15 +289,17 @@ export default function LoginPage() {
                       minLength={8}
                       maxLength={128}
                       className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
-                      placeholder="至少 8 位"
+                      placeholder="At least 8 characters"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
                       className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
-                      aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                     >
-                      {showPassword ? "隐藏" : "显示"}
+                      {showPassword ? "Hide" : "Show"}
                     </button>
                   </div>
                 </div>
@@ -316,14 +319,14 @@ export default function LoginPage() {
                     disabled={loginWithPassword.isPending}
                     className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {loginWithPassword.isPending ? "登录中..." : "登录"}
+                    {loginWithPassword.isPending ? "Logging in..." : "Log in"}
                   </button>
                   <button
                     type="button"
                     onClick={() => switchMode("reset")}
                     className="min-h-11 w-full rounded-xl text-sm font-bold text-cyan-100/70 transition hover:bg-white/10 hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                   >
-                    忘记密码？
+                    Forgot password?
                   </button>
                 </div>
               </form>
@@ -336,7 +339,7 @@ export default function LoginPage() {
                     htmlFor="register-username"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    用户名
+                    Username
                   </label>
                   <input
                     id="register-username"
@@ -348,10 +351,10 @@ export default function LoginPage() {
                     required
                     maxLength={12}
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="对战中显示的名字"
+                    placeholder="Display name for battles"
                   />
                   <p className="mt-2 text-xs leading-5 text-cyan-100/55">
-                    最多 12 个字符；大小写不敏感去重。
+                    Up to 12 characters. Uniqueness is case-insensitive.
                   </p>
                 </div>
 
@@ -360,7 +363,7 @@ export default function LoginPage() {
                     htmlFor="register-email"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    邮箱
+                    Email
                   </label>
                   <input
                     id="register-email"
@@ -379,7 +382,7 @@ export default function LoginPage() {
                     htmlFor="register-password"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    密码
+                    Password
                   </label>
                   <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
                     <input
@@ -394,17 +397,17 @@ export default function LoginPage() {
                       minLength={8}
                       maxLength={128}
                       className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
-                      placeholder="至少 8 位"
+                      placeholder="At least 8 characters"
                     />
                     <button
                       type="button"
                       onClick={() => setShowRegisterPassword((value) => !value)}
                       className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                       aria-label={
-                        showRegisterPassword ? "隐藏密码" : "显示密码"
+                        showRegisterPassword ? "Hide password" : "Show password"
                       }
                     >
-                      {showRegisterPassword ? "隐藏" : "显示"}
+                      {showRegisterPassword ? "Hide" : "Show"}
                     </button>
                   </div>
                 </div>
@@ -427,8 +430,8 @@ export default function LoginPage() {
                   className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {registerWithPassword.isPending
-                    ? "创建中..."
-                    : "注册并进入游戏"}
+                    ? "Creating..."
+                    : "Create account"}
                 </button>
               </form>
             )}
@@ -443,7 +446,7 @@ export default function LoginPage() {
                     htmlFor="reset-email"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    注册邮箱
+                    Registered email
                   </label>
                   <input
                     id="reset-email"
@@ -472,8 +475,8 @@ export default function LoginPage() {
                   className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {requestPasswordResetCode.isPending
-                    ? "发送中..."
-                    : "发送重置验证码"}
+                    ? "Sending..."
+                    : "Send reset code"}
                 </button>
               </form>
             )}
@@ -482,13 +485,14 @@ export default function LoginPage() {
               <form onSubmit={handleResetPassword} className="space-y-5">
                 <div>
                   <div className="text-sm font-bold text-cyan-100/80">
-                    检查这个邮箱中的验证码
+                    Check this email for the code
                   </div>
                   <div className="mt-1 text-lg font-black break-all text-pink-100">
                     {resetEmail}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-cyan-100/60">
-                    只有这个邮箱已经注册过账号时，才会收到重置验证码。
+                    A reset code is sent only when this email belongs to an
+                    existing account.
                   </p>
                 </div>
 
@@ -497,7 +501,7 @@ export default function LoginPage() {
                     htmlFor="reset-code"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    6 位验证码
+                    6-digit code
                   </label>
                   <input
                     id="reset-code"
@@ -520,7 +524,7 @@ export default function LoginPage() {
                     htmlFor="reset-password"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    新密码
+                    New password
                   </label>
                   <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
                     <input
@@ -533,22 +537,24 @@ export default function LoginPage() {
                       minLength={8}
                       maxLength={128}
                       className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
-                      placeholder="至少 8 位"
+                      placeholder="At least 8 characters"
                     />
                     <button
                       type="button"
                       onClick={() => setShowResetPassword((value) => !value)}
                       className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
-                      aria-label={showResetPassword ? "隐藏密码" : "显示密码"}
+                      aria-label={
+                        showResetPassword ? "Hide password" : "Show password"
+                      }
                     >
-                      {showResetPassword ? "隐藏" : "显示"}
+                      {showResetPassword ? "Hide" : "Show"}
                     </button>
                   </div>
                 </div>
 
                 {debugCode && (
                   <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm leading-6 text-cyan-50">
-                    调试验证码：<span className="font-black">{debugCode}</span>
+                    Debug code: <span className="font-black">{debugCode}</span>
                   </div>
                 )}
 
@@ -573,7 +579,7 @@ export default function LoginPage() {
                     }}
                     className="anime-button-secondary flex-1"
                   >
-                    更换邮箱
+                    Change email
                   </button>
                   <button
                     type="submit"
@@ -585,8 +591,8 @@ export default function LoginPage() {
                     className="anime-button flex-1 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {resetPasswordWithCode.isPending
-                      ? "重置中..."
-                      : "重置并登录"}
+                      ? "Resetting..."
+                      : "Reset and log in"}
                   </button>
                 </div>
               </form>

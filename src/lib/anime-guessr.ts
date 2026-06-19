@@ -202,7 +202,7 @@ export function getAnimeGuessrQuestionText(
   };
   const localized =
     question.locales?.[locale] ??
-    question.locales?.[DEFAULT_ANIME_LOCALE] ??
+    (locale === "zh" ? undefined : question.locales?.[DEFAULT_ANIME_LOCALE]) ??
     {};
 
   return {

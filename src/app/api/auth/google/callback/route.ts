@@ -96,11 +96,11 @@ async function fetchGoogleProfile(accessToken: string) {
 
 function createSessionBridgeHtml(sessionJson: string, next: string) {
   return `<!doctype html>
-<html lang="zh">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="robots" content="noindex" />
-    <title>Google 登录完成</title>
+    <title>Google login complete</title>
   </head>
   <body>
     <script>

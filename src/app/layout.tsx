@@ -7,12 +7,33 @@ import { Geist } from "next/font/google";
 
 import { PostHogRouteTracker } from "~/components/PostHogRouteTracker";
 import { PostHogScript } from "~/components/PostHogScript";
+import { DEFAULT_ANIME_LOCALE } from "~/lib/anime-locale";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
   title: "AniGuessr",
   description: "Anime street-view guessing game",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  icons: [
+    {
+      rel: "icon",
+      url: "/icon-192.png?v=20260619",
+      type: "image/png",
+      sizes: "192x192",
+    },
+    {
+      rel: "icon",
+      url: "/icon-512.png?v=20260619",
+      type: "image/png",
+      sizes: "512x512",
+    },
+    {
+      rel: "apple-touch-icon",
+      url: "/apple-touch-icon.png?v=20260619",
+      type: "image/png",
+      sizes: "180x180",
+    },
+    { rel: "shortcut icon", url: "/favicon.ico?v=20260619" },
+  ],
 };
 
 const geist = Geist({
@@ -24,7 +45,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh" className={`${geist.variable}`}>
+    <html lang={DEFAULT_ANIME_LOCALE} className={`${geist.variable}`}>
       <body>
         <PostHogScript />
         <TRPCReactProvider>

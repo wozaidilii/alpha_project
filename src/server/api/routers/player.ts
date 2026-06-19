@@ -57,7 +57,7 @@ async function withSessionError<T>(fn: () => Promise<T>) {
     if (error instanceof Error && error.message === "Invalid player session") {
       throw new TRPCError({
         code: "UNAUTHORIZED",
-        message: "登录已失效，请重新登录",
+        message: "Your session has expired. Please log in again.",
       });
     }
     throw error;
@@ -77,14 +77,14 @@ async function withEmailLoginError<T>(fn: () => Promise<T>) {
           code: "BAD_REQUEST",
           message:
             error.message === "Email verification code expired"
-              ? "验证码已过期，请重新获取"
-              : "验证码不正确",
+              ? "The code has expired. Request a new one."
+              : "The code is incorrect.",
         });
       }
       if (error.message === "Too many email verification attempts") {
         throw new TRPCError({
           code: "TOO_MANY_REQUESTS",
-          message: "验证码错误次数过多，请重新获取",
+          message: "Too many incorrect attempts. Request a new code.",
         });
       }
       if (
@@ -93,13 +93,13 @@ async function withEmailLoginError<T>(fn: () => Promise<T>) {
       ) {
         throw new TRPCError({
           code: "SERVICE_UNAVAILABLE",
-          message: "邮件验证码服务未配置，请稍后再试",
+          message: "Email verification is not configured. Try again later.",
         });
       }
       if (error.message === "Email verification delivery failed") {
         throw new TRPCError({
           code: "BAD_GATEWAY",
-          message: "验证码邮件发送失败，请稍后再试",
+          message: "Verification email failed to send. Try again later.",
         });
       }
     }
@@ -115,25 +115,25 @@ async function withPasswordLoginError<T>(fn: () => Promise<T>) {
       if (error.message === "Email already registered") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "该邮箱已注册，请直接登录",
+          message: "This email is already registered. Log in instead.",
         });
       }
       if (error.message === "Username already registered") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "该用户名已被使用，请换一个",
+          message: "This username is already taken. Try another one.",
         });
       }
       if (error.message === "Invalid account or password") {
         throw new TRPCError({
           code: "UNAUTHORIZED",
-          message: "账号或密码不正确",
+          message: "Incorrect account or password.",
         });
       }
       if (error.message === "Invalid password reset account") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "无法重置该账号的密码",
+          message: "This account cannot reset a password.",
         });
       }
     }

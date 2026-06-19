@@ -112,6 +112,97 @@ Correct:
 </body>
 ```
 
+### Scenario: Site Icon / Favicon Updates
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing the browser tab icon, app icon, touch icon, or social/site favicon assets.
+- Applies to `src/app/layout.tsx`, `public/favicon.ico`, `public/icon-*.png`, `public/apple-touch-icon.png`, and any future Next App Router icon metadata files.
+
+#### 2. Signatures
+
+- Root metadata should declare explicit modern PNG icons and a legacy fallback:
+
+```tsx
+export const metadata: Metadata = {
+  icons: [
+    {
+      rel: "icon",
+      url: "/icon-192.png?v=<asset-version>",
+      type: "image/png",
+      sizes: "192x192",
+    },
+    {
+      rel: "icon",
+      url: "/icon-512.png?v=<asset-version>",
+      type: "image/png",
+      sizes: "512x512",
+    },
+    {
+      rel: "apple-touch-icon",
+      url: "/apple-touch-icon.png?v=<asset-version>",
+      type: "image/png",
+      sizes: "180x180",
+    },
+    { rel: "shortcut icon", url: "/favicon.ico?v=<asset-version>" },
+  ],
+};
+```
+
+- Legacy `/favicon.ico` should contain multiple sizes such as 16, 32, and 48 px.
+
+#### 3. Contracts
+
+- Do not rely only on `/favicon.ico`; browsers cache it aggressively and some platforms prefer PNG or touch icon metadata.
+- Use a versioned query string when replacing an existing icon asset so deployed HTML points browsers at a fresh URL.
+- Generate square icons from the chosen source image and verify the small-size crop is still recognizable.
+- Keep icon files in `public/` unless using Next's special `app/icon.*` files intentionally.
+
+#### 4. Validation & Error Matrix
+
+- Live HTML lacks the new icon link -> browser may keep showing the old icon.
+- `/favicon.ico` changes but URL is unchanged -> some browsers may keep a stale cached icon.
+- Only a wide source image is resized without square cropping -> icon becomes illegible at 16-32 px.
+- Missing PNG/touch icon -> mobile home-screen and some browsers may ignore the intended image.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: square-crop source art, generate 192/512 PNG, apple-touch PNG, multi-size ICO, update metadata with versioned URLs, then verify live HTML and icon file hashes after deployment.
+- Base: update `public/favicon.ico` and metadata with a cache-busting query.
+- Bad: replace only `public/favicon.ico` and assume every deployed domain and browser cache will refresh immediately.
+
+#### 6. Tests Required
+
+- `npm run check` for metadata typing.
+- `npm run build` for production HTML metadata generation.
+- Focused smoke: fetch the deployed page HTML and confirm it includes the new icon URL; fetch the icon URL and compare hash/format when diagnosing production icon reports.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```tsx
+export const metadata: Metadata = {
+  icons: [{ rel: "icon", url: "/favicon.ico" }],
+};
+```
+
+Correct:
+
+```tsx
+export const metadata: Metadata = {
+  icons: [
+    {
+      rel: "icon",
+      url: "/icon-192.png?v=20260619",
+      type: "image/png",
+      sizes: "192x192",
+    },
+    { rel: "shortcut icon", url: "/favicon.ico?v=20260619" },
+  ],
+};
+```
+
 ### Scenario: Third-Party Browser Map / Street View Integrations
 
 #### 1. Scope / Trigger

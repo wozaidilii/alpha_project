@@ -33,7 +33,7 @@ export interface GoogleProfile {
 }
 
 export function sanitizeNextPath(value: string | null | undefined) {
-  if (!value?.startsWith("/") || value.startsWith("//")) return "/game/anime";
+  if (!value?.startsWith("/") || value.startsWith("//")) return "/";
   return value;
 }
 
