@@ -19,9 +19,14 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 export function GoogleStreetView({ location, onUnavailable }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const panoramaRef = useRef<GoogleStreetViewPanoramaInstance | null>(null);
+  const onUnavailableRef = useRef(onUnavailable);
   const [state, setState] = useState<LoadState>(
     GOOGLE_MAP_AK ? "idle" : "error",
   );
+
+  useEffect(() => {
+    onUnavailableRef.current = onUnavailable;
+  }, [onUnavailable]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -56,7 +61,7 @@ export function GoogleStreetView({ location, onUnavailable }: Props) {
       .catch(() => {
         if (!active) return;
         setState("error");
-        onUnavailable?.();
+        onUnavailableRef.current?.();
       });
 
     return () => {
@@ -69,7 +74,13 @@ export function GoogleStreetView({ location, onUnavailable }: Props) {
       }
       panoramaRef.current = null;
     };
-  }, [location, onUnavailable]);
+  }, [
+    location.heading,
+    location.lat,
+    location.lng,
+    location.panoId,
+    location.pitch,
+  ]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-stone-950">

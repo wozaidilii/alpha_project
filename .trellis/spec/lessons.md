@@ -88,3 +88,10 @@
 - 根因：`server-only` 是 Next 的运行边界 marker 包，不是普通业务依赖；Vitest 直接导入服务端模块时不会自动按 Next Server Component 语义处理它。
 - 修复：在对应测试文件顶部使用 `vi.mock("server-only", () => ({}))`，只在测试环境替换 marker 包，保留生产代码的服务端边界。
 - 预防：后续给服务端 data/store 模块补测试时，先检查模块是否导入 `server-only`；如果有，测试入口要显式 mock marker 包，避免把框架边界误判成业务失败。
+
+## 街景组件生命周期不要依赖易变回调
+
+- 问题：对战模式进入国外街景回合后，双方画面会随着倒计时和状态重渲染不断刷新、重置视角。
+- 根因：`GoogleStreetView` 创建/销毁第三方 `StreetViewPanorama` 的 effect 依赖了父组件传入的内联 `onUnavailable` 回调；对战页频繁重渲染会生成新函数引用，触发 cleanup 并重建街景实例。
+- 修复：将最新 `onUnavailable` 保存到 ref，街景实例 effect 只依赖 `lat`、`lng`、`panoId`、`heading`、`pitch` 等真实场景参数。
+- 预防：第三方地图、全景、播放器等昂贵实例的生命周期 effect 不应依赖每次 render 都可能变化的回调或对象 props；回调用 ref 保鲜，实例只在实际资源参数变化时重建。
