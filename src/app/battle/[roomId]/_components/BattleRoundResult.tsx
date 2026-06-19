@@ -29,6 +29,8 @@ import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
 import { BaiduGuessMap } from "~/app/game/_components/BaiduGuessMap";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
+import { type AnimeLocale } from "~/lib/anime-locale";
+import { formatBattleDistance, getBattleCopy } from "~/lib/battle-copy";
 
 interface Props {
   result: BattleRoundResult;
@@ -37,12 +39,8 @@ interface Props {
   questionType: GameModeSlug;
   roundReady: Record<string, boolean>;
   isLastRound: boolean;
+  locale: AnimeLocale;
   onReady: () => void;
-}
-
-function formatDistance(distanceKm: number) {
-  if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
-  return `${Math.round(distanceKm).toLocaleString()} 公里`;
 }
 
 export function BattleRoundResultView({
@@ -52,8 +50,10 @@ export function BattleRoundResultView({
   questionType,
   roundReady,
   isLastRound,
+  locale,
   onReady,
 }: Props) {
+  const copy = getBattleCopy(locale);
   const mapRef = useRef<ChinaResultMapHandle | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { question } = result;
@@ -93,7 +93,7 @@ export function BattleRoundResultView({
       {
         point: { lat: historicalQuestion.lat, lng: historicalQuestion.lng },
         color: "#22c55e",
-        label: "实际地点",
+        label: copy.actualLocation,
         radius: 12,
       },
     ];
@@ -133,19 +133,28 @@ export function BattleRoundResultView({
       mapRef.current?.destroy();
       mapRef.current = null;
     };
-  }, [showMap, result.roundIndex, historicalQuestion, players, result.guesses]);
+  }, [
+    copy.actualLocation,
+    showMap,
+    result.roundIndex,
+    historicalQuestion,
+    players,
+    result.guesses,
+  ]);
 
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
     if (standardQuestion && isFunfactQuestion(standardQuestion)) {
       return (
         <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
           <div className="flex justify-between gap-2">
-            <span>答题分</span>
+            <span>{copy.quizScore}</span>
             <span className="font-bold text-white">
               {guess.quizPts.toLocaleString()}
             </span>
           </div>
-          <div className="mt-1">{guess.isCorrect ? "答对" : "答错"}</div>
+          <div className="mt-1">
+            {guess.isCorrect ? copy.correct : copy.incorrect}
+          </div>
         </div>
       );
     }
@@ -153,7 +162,7 @@ export function BattleRoundResultView({
       if (!guess.submitted) {
         return (
           <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
-            本轮未提交答案
+            {copy.noSubmission}
           </div>
         );
       }
@@ -161,23 +170,23 @@ export function BattleRoundResultView({
       return (
         <div className="mt-3 space-y-2 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
           <div className="flex justify-between gap-2">
-            <span>距离分</span>
+            <span>{copy.distanceScore}</span>
             <span className="font-bold text-white">
               {guess.locationPts.toLocaleString()}
             </span>
           </div>
           <div className="flex justify-between gap-2">
-            <span>速度补偿</span>
+            <span>{copy.speedBonus}</span>
             <span className="font-bold text-white">
               +{(guess.speedCompensationPts ?? 0).toLocaleString()}
             </span>
           </div>
           <div>
-            偏差 {formatDistance(guess.distanceKm)}
-            {guess.elapsedSeconds != null && (
-              <span className="ml-2">
-                用时 {Math.round(guess.elapsedSeconds)} 秒
-              </span>
+            {copy.distanceAndElapsed(
+              formatBattleDistance(guess.distanceKm, locale),
+              guess.elapsedSeconds == null
+                ? undefined
+                : Math.round(guess.elapsedSeconds),
             )}
           </div>
         </div>
@@ -187,19 +196,19 @@ export function BattleRoundResultView({
       return (
         <div className="mt-3 space-y-2 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
           <div className="flex justify-between gap-2">
-            <span>地点分</span>
+            <span>{copy.locationScore}</span>
             <span className="font-bold text-white">
               {guess.locationPts.toLocaleString()}
             </span>
           </div>
           <div className="flex justify-between gap-2">
-            <span>年份分</span>
+            <span>{copy.yearScore}</span>
             <span className="font-bold text-white">
               {guess.yearPts.toLocaleString()}
             </span>
           </div>
           <div>
-            选择年份：{formatYear(guess.year)}
+            {copy.selectedYear}: {formatYear(guess.year)}
             {guess.speedMultiplier > 1.01 && (
               <span className="ml-2 font-bold text-amber-400">
                 ⚡×{guess.speedMultiplier.toFixed(2)}
@@ -212,13 +221,13 @@ export function BattleRoundResultView({
     return (
       <div className="mt-3 rounded-lg bg-stone-950/30 px-3 py-2 text-xs text-stone-400">
         <div className="flex justify-between gap-2">
-          <span>年份分</span>
+          <span>{copy.yearScore}</span>
           <span className="font-bold text-white">
             {guess.yearPts.toLocaleString()}
           </span>
         </div>
         <div className="mt-1">
-          选择年份：{formatYear(guess.year)}
+          {copy.selectedYear}: {formatYear(guess.year)}
           {guess.speedMultiplier > 1.01 && (
             <span className="ml-2 font-bold text-amber-400">
               ⚡×{guess.speedMultiplier.toFixed(2)}
@@ -232,9 +241,9 @@ export function BattleRoundResultView({
   return (
     <div className="anime-shell flex h-screen flex-col text-white">
       <div className="flex items-center justify-between border-b border-white/10 bg-[#0d081a]/90 px-6 py-3 backdrop-blur">
-        <h1 className="font-bold text-pink-100">对战结算</h1>
+        <h1 className="font-bold text-pink-100">{copy.roundResultTitle}</h1>
         <span className="text-pink-100/60">
-          第 {result.roundIndex + 1} 轮结果
+          {copy.roundResultSubtitle(result.roundIndex + 1)}
         </span>
       </div>
 
@@ -285,7 +294,11 @@ export function BattleRoundResultView({
             {standardQuestion &&
               !isFunfactQuestion(standardQuestion) &&
               standardQuestion.year !== 0 && (
-                <> · 实际 {formatAnswerYear(standardQuestion.year, yearEnd)}</>
+                <>
+                  {" "}
+                  · {copy.actualYear}{" "}
+                  {formatAnswerYear(standardQuestion.year, yearEnd)}
+                </>
               )}
           </p>
 
@@ -305,10 +318,14 @@ export function BattleRoundResultView({
                   <div className="mb-2 flex items-center gap-2">
                     <span className="font-semibold">{player.name}</span>
                     {isMe && (
-                      <span className="text-xs text-amber-400">(你)</span>
+                      <span className="text-xs text-amber-400">
+                        ({copy.me})
+                      </span>
                     )}
                   </div>
-                  <div className="text-xs text-pink-100/50">本轮总分</div>
+                  <div className="text-xs text-pink-100/50">
+                    {copy.roundTotalScore}
+                  </div>
                   <div className="text-3xl font-extrabold text-white">
                     {guess?.total.toLocaleString() ?? 0}
                   </div>
@@ -358,13 +375,13 @@ export function BattleRoundResultView({
             if (damagedPlayers.length === 0) {
               return (
                 <p className="mb-4 text-center text-sm text-pink-100/60">
-                  本轮无人扣血
+                  {copy.noDamage}
                 </p>
               );
             }
             return (
               <div className="anime-panel mb-4 flex flex-wrap justify-center gap-2 px-4 py-3 text-sm text-pink-100/70">
-                <span>本轮最高分 {topScore.toLocaleString()}</span>
+                <span>{copy.topScore(topScore.toLocaleString())}</span>
                 {damagedPlayers.map((pid) => (
                   <span
                     key={pid}
@@ -388,7 +405,7 @@ export function BattleRoundResultView({
                 }`}
               >
                 {players[pid]?.name}
-                {roundReady[pid] ? " ✓ 已准备" : " · 未准备"}
+                {roundReady[pid] ? ` ✓ ${copy.ready}` : ` · ${copy.notReady}`}
               </span>
             ))}
           </div>
@@ -403,15 +420,15 @@ export function BattleRoundResultView({
             }`}
           >
             {iAmReady
-              ? "✓ 已准备，等待其他玩家…"
+              ? copy.readyWaiting
               : isLastRound
-                ? "准备 · 查看最终结果"
-                : "准备 · 下一轮"}
+                ? copy.readyFinal
+                : copy.readyNext}
           </button>
 
           {allReady && (
             <p className="mt-3 text-center text-sm text-cyan-100">
-              所有玩家已准备，即将继续…
+              {copy.allReady}
             </p>
           )}
         </div>

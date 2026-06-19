@@ -356,6 +356,80 @@ const imageUrl = buildQuestionImageUrl(
 );
 ```
 
+### Scenario: Anime Battle Mode Parity And Round Monotonicity
+
+#### 1. Scope / Trigger
+
+- Trigger: adding or changing multiplayer battle modes, room state transitions, Pusher room events, battle HTTP polling, or Anime Guessr battle question loading.
+- Applies to `src/lib/game-mode.ts`, `src/types/battle.ts`, `src/app/battle/**`, `src/app/api/battle/rooms/**`, and `src/server/data/battle-room-store.ts`.
+
+#### 2. Signatures
+
+- Battle mode list must expose the current solo Anime Guessr mode via `BATTLE_GAME_MODE_LIST`, with `GameModeSlug` set to `"anime"` for the active anime battle flow.
+- Anime battle questions should wrap solo Anime Guessr records as `BattleAnimeQuestion`:
+
+```typescript
+interface BattleAnimeQuestion {
+  id: string;
+  type: "anime";
+  question: AnimeGuessrQuestion;
+}
+```
+
+- Room snapshots carry monotonic round state:
+
+```typescript
+roundIndex?: number;
+roundStatus?: "playing" | "round-result" | "game-over";
+```
+
+#### 3. Contracts
+
+- Multiplayer Anime battle must reuse the solo Anime Guessr question bank, street-view location helper, answer point, and image clue rendering contract. Do not silently switch back to the legacy `anime-tuxun` puzzle flow.
+- Battle language comes from the same `lang` URL parameter and `aniguessr_locale` localStorage contract as the homepage and solo Anime Guessr.
+- Room state is monotonic. A lower `roundIndex` must never replace a newer local or server round. For the same round, `playing < round-result < game-over`; lower-status snapshots must be ignored after a higher status is reached.
+- Pusher is the fast path and HTTP polling is recovery only. Late HTTP responses must be treated as potentially stale.
+
+#### 4. Validation & Error Matrix
+
+- `BATTLE_GAME_MODE_LIST` lacks `"anime"` -> battle lobby can launch a mode that does not match solo gameplay.
+- Legacy `"anime-tuxun"` remains battle-enabled -> users see timed text clues instead of solo-mode image clues.
+- `startBattleRoomRound` accepts `roundIndex <= currentRoundIndex` -> duplicate/stale requests can rewind the room.
+- Client applies a snapshot with lower `roundIndex` -> users can finish round N and be sent back to round N-1.
+- Client applies same-round `playing` after local `round-result` -> result screens can disappear.
+
+#### 5. Good/Base/Bad Cases
+
+- Good: battle host loads Anime Guessr JSON, sends identical wrapped questions to every player, and both server and client reject stale round transitions.
+- Base: battle mode list has one enabled anime mode and round-state store tests cover stale lower rounds.
+- Bad: battle UI has a separate anime data source from solo mode, or trusts every polling response after a Pusher transition.
+
+#### 6. Tests Required
+
+- Unit test that `BATTLE_GAME_MODE_LIST` contains `"anime"` and excludes `"anime-tuxun"`.
+- Store test that `startBattleRoomRound` cannot move to the same or lower round.
+- Store test that old `round-result` payloads cannot overwrite a newer round.
+- `npm run check`, full unit tests, and production build after changing battle state or mode contracts.
+
+#### 7. Wrong vs Correct
+
+Wrong:
+
+```typescript
+// Allows stale polling or duplicate ready handling to rewind the match.
+snapshot.roundStatus = "playing";
+snapshot.roundIndex = input.roundIndex;
+```
+
+Correct:
+
+```typescript
+if (snapshot.roundIndex != null && input.roundIndex <= snapshot.roundIndex) {
+  return cloneSnapshot(snapshot);
+}
+if (snapshot.roundStatus !== "round-result") return cloneSnapshot(snapshot);
+```
+
 ---
 
 ## Testing Requirements

@@ -302,9 +302,13 @@ export default function Home() {
     locale,
   );
   const loginUrl = withAnimeLocale("/login", locale);
+  const localizedBattleUrl = withAnimeLocale("/battle", locale);
   const battleUrl = session
-    ? "/battle"
-    : `/login?next=${encodeURIComponent("/battle")}`;
+    ? localizedBattleUrl
+    : withAnimeLocale(
+        `/login?next=${encodeURIComponent(localizedBattleUrl)}`,
+        locale,
+      );
   const meQuery = api.player.me.useQuery(
     { token: session?.token ?? "" },
     { enabled: Boolean(session?.token), retry: false },

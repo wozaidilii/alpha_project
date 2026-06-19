@@ -254,6 +254,16 @@ describe("battle-room-store", () => {
       })?.guesses,
     ).toEqual({});
     expect(
+      startBattleRoomRound({
+        roomId: "ROOM06",
+        roundIndex: 0,
+        startTime: 12900,
+      })?.roundIndex,
+    ).toBe(1);
+    expect(
+      recordBattleRoomRoundResult({ roomId: "ROOM06", result })?.roundIndex,
+    ).toBe(1);
+    expect(
       finishBattleRoom({
         roomId: "ROOM06",
         results: [result],

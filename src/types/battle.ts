@@ -5,6 +5,7 @@ import { type GameModeSlug } from "~/lib/game-mode";
 import { type TuxunLocation } from "~/lib/tuxun-locations";
 import { type HistoryTuxunPlayState } from "~/lib/history-tuxun-puzzle";
 import { type AnimeTuxunPlayState } from "~/lib/anime-tuxun-puzzle";
+import { type AnimeGuessrQuestion } from "~/lib/anime-guessr";
 
 export const BATTLE_MAX_PLAYERS = 8;
 
@@ -36,12 +37,20 @@ export interface BattleAnimeTuxunQuestion {
   playState: AnimeTuxunPlayState;
 }
 
+export interface BattleAnimeQuestion {
+  id: string;
+  type: "anime";
+  title: string;
+  question: AnimeGuessrQuestion;
+}
+
 export type BattleQuestion =
   | GameQuestion
   | BattleTuxunQuestion
   | BattleForeignQuestion
   | BattleHistoryTuxunQuestion
-  | BattleAnimeTuxunQuestion;
+  | BattleAnimeTuxunQuestion
+  | BattleAnimeQuestion;
 
 export type BattleRoomPhase = "lobby" | "starting" | "playing" | "closed";
 export type BattleRoundStatus = "playing" | "round-result" | "game-over";

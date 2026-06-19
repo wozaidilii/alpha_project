@@ -200,3 +200,10 @@
 - 根因：题库里存的是 `anime/...` 相对 key，前端依赖 `NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL` 拼接；如果 base URL 填到 `/anime` 层会生成重复 `/anime/anime/...`，而开发环境还会默认强制走本地 rawdata proxy，导致已配置 R2 时仍不请求远程图片。
 - 修复：抽出共享图片 URL helper，统一规范 `anime-gussr/anime/...` 和 `anime/...` key，兼容 bucket root、bucket path 和已到 `/anime` 层的 public base；配置了 public base 时优先直接加载 R2，未配置时开发环境才走本地 proxy。
 - 预防：所有客户端题图 URL 都必须通过共享 helper 拼接，并用测试覆盖 bucket-root、path-prefix、`/anime` 结尾和 bucket-name pasted key；R2 base 必须是无需 Authorization 的 public URL，不要使用 catalog 地址。
+
+## 对战回合状态必须单调前进
+
+- 问题：多人对战完成后可能从第 4 题回到第 3 题，且对战动漫玩法仍在使用旧的 `anime-tuxun` 文本线索流程，没有和个人猜动漫模式对齐。
+- 根因：battle 同时依赖 Pusher 事件和 HTTP 轮询恢复状态，旧的 `round-result` 快照晚于新一轮 `round-started` 抵达时会覆盖本地新回合；服务端 `startBattleRoomRound` 也没有拒绝同轮或更低轮次请求。另一个根因是 battle mode 列表仍暴露旧动漫寻图模式，而不是个人模式使用的 Anime Guessr 静态题库。
+- 修复：battle 只启用 `anime` 模式，加载个人 Anime Guessr 题库并渲染同款街景 + 图片线索；服务端拒绝同轮/低轮次 round-started 和旧 round-result，客户端忽略低轮次或同轮低状态的迟到快照。
+- 预防：所有 battle round 状态必须按 `roundIndex` 和 `playing < round-result < game-over` 单调应用；更改 battle mode 列表时用测试锁住 `anime` enabled、`anime-tuxun` disabled，并覆盖 stale round 请求。

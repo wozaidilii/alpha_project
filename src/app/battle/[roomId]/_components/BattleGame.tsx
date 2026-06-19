@@ -38,7 +38,18 @@ import {
   type AnimeTuxunPlayState,
 } from "~/lib/anime-tuxun-puzzle";
 import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
+  buildAnimeGuessrImageUrl,
+  fetchAnimeGuessrQuestions,
+  getAnimeGuessrQuestionText,
+  pickAnimeGuessrQuestions,
+  toAnimeStreetViewLocation,
+  type AnimeGuessrQuestion,
+} from "~/lib/anime-guessr";
+import {
   getBattleAnswerPoint,
+  isAnimeBattleQuestion,
   isAnimeTuxunBattleQuestion,
   isForeignBattleQuestion,
   isHistoryTuxunBattleQuestion,
@@ -49,6 +60,8 @@ import {
 import {
   BATTLE_MAX_PLAYERS,
   type BattlePhase,
+  type BattleRoundStatus,
+  type BattleAnimeQuestion,
   type BattleForeignQuestion,
   type BattleAnimeTuxunQuestion,
   type BattlePlayer,
@@ -92,6 +105,8 @@ import { playCountdownTick } from "~/lib/countdown-audio";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
 import { GameOverView } from "./GameOver";
+import { type AnimeLocale, withAnimeLocale } from "~/lib/anime-locale";
+import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +154,17 @@ function buildBattleAnimeTuxunQuestion(
   };
 }
 
+function buildBattleAnimeQuestion(
+  question: AnimeGuessrQuestion,
+): BattleAnimeQuestion {
+  return {
+    id: `anime:${question.id}`,
+    type: "anime",
+    title: question.answerName,
+    question,
+  };
+}
+
 function toAnimeTuxunBattleStreetViewLocation(
   question: BattleAnimeTuxunQuestion,
 ): TuxunLocation {
@@ -156,6 +182,35 @@ function toAnimeTuxunBattleStreetViewLocation(
     source: "google-random",
     hint: playState.answerContext,
   };
+}
+
+function BattleAnimeClueImage({
+  question,
+  alt,
+}: {
+  question: AnimeGuessrQuestion;
+  alt: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const imageUrl = buildAnimeGuessrImageUrl(question.imagePath);
+  const displayImageUrl =
+    !imageUrl || failed ? ANIME_GUESSR_PLACEHOLDER_IMAGE_URL : imageUrl;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [question.id]);
+
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-black/40">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={displayImageUrl}
+        alt={alt}
+        className="h-full w-full object-cover"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
 }
 
 function calcStandardPlayerGuess(
@@ -320,11 +375,17 @@ interface Props {
   playerAvatar: PlayerAvatar;
   playerCharacter?: CharacterConfig;
   hostSettings: BattleSettings | null;
+  locale: AnimeLocale;
 }
 
 const MY_ID_KEY = "histoguessr_player_id";
 const HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 8;
 const ANIME_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 12;
+const ROUND_STATUS_ORDER: Record<BattleRoundStatus, number> = {
+  playing: 1,
+  "round-result": 2,
+  "game-over": 3,
+};
 
 interface BattleQuestionLoadResult {
   questions: BattleQuestion[];
@@ -355,7 +416,9 @@ async function postBattleRoomAction(
     | { closed?: boolean; snapshot?: BattleRoomSnapshot | null };
   if (!response.ok) {
     const message =
-      "error" in payload && payload.error ? payload.error : "房间状态同步失败";
+      "error" in payload && payload.error
+        ? payload.error
+        : getBattleCopy("en").roomSyncFailed;
     throw new Error(message);
   }
   if ("room" in payload) return payload.room ?? null;
@@ -368,7 +431,7 @@ async function fetchBattleRoomSnapshot(
 ): Promise<BattleRoomSnapshot | null> {
   const response = await fetch(battleRoomUrl(roomId), { cache: "no-store" });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error("房间状态同步失败");
+  if (!response.ok) throw new Error(getBattleCopy("en").roomSyncFailed);
   const payload = (await response.json()) as BattleRoomApiResponse;
   return payload.room ?? null;
 }
@@ -391,6 +454,7 @@ export function BattleGame({
   playerAvatar,
   playerCharacter,
   hostSettings,
+  locale,
 }: Props) {
   const utils = api.useUtils();
   const { mutateAsync: saveStreetViewScene } =
@@ -421,7 +485,7 @@ export function BattleGame({
       rounds: 5,
       timePerRound: 120,
       startingHp: 100,
-      questionType: "anime-tuxun",
+      questionType: "anime",
     },
   );
   const [questions, setQuestions] = useState<BattleQuestion[]>([]);
@@ -486,7 +550,10 @@ export function BattleGame({
     resultsRef.current = results;
   }, [results]);
 
+  const copy = getBattleCopy(locale);
   const gameMode = getGameMode(settings.questionType);
+  const gameModeText = gameMode ? getBattleModeText(gameMode, locale) : null;
+  const battleLobbyUrl = withAnimeLocale("/battle", locale);
   const currentQuestion = questions[currentRound];
   // 与个人模式一致：整局题型由房间设置决定，而非单题字段
   const needsMap = settings.questionType === "historical";
@@ -647,6 +714,31 @@ export function BattleGame({
     }
   }
 
+  function getLocalRoundStatus(): BattleRoundStatus | null {
+    if (phaseRef.current === "playing") return "playing";
+    if (phaseRef.current === "round-result") return "round-result";
+    if (phaseRef.current === "game-over") return "game-over";
+    return null;
+  }
+
+  function isStaleRoomSnapshot(snapshot: BattleRoomSnapshot) {
+    if (snapshot.phase !== "playing" || snapshot.roundIndex == null) {
+      return false;
+    }
+    if (phaseRef.current === "lobby" && questionsRef.current.length === 0) {
+      return false;
+    }
+
+    const currentRoundIndex = currentRoundRef.current;
+    if (snapshot.roundIndex < currentRoundIndex) return true;
+    if (snapshot.roundIndex > currentRoundIndex) return false;
+
+    const localStatus = getLocalRoundStatus();
+    if (!localStatus) return false;
+    const snapshotStatus = snapshot.roundStatus ?? "playing";
+    return ROUND_STATUS_ORDER[snapshotStatus] < ROUND_STATUS_ORDER[localStatus];
+  }
+
   async function handleRemoteGameStarted(data: PusherGameStarted) {
     setLobbyError("");
     setGameSyncing(true);
@@ -658,7 +750,7 @@ export function BattleGame({
       }
 
       if (!isQuestionType(data.settings.questionType) || !data.questionIds) {
-        setLobbyError("同步题目失败，请让房主重新开始");
+        setLobbyError(copy.syncQuestionFailedRestart);
         return;
       }
 
@@ -671,14 +763,14 @@ export function BattleGame({
         },
       );
       if (loaded.error || loaded.questions.length < data.questionIds.length) {
-        setLobbyError(loaded.error ?? "同步题目失败，请让房主重新开始");
+        setLobbyError(loaded.error ?? copy.syncQuestionFailedRestart);
         return;
       }
 
       applyGameStarted(data.settings, data.players, loaded.questions);
       beginRound(data.roundIndex, data.startTime);
     } catch {
-      setLobbyError("同步题目失败，请检查网络连接");
+      setLobbyError(copy.syncQuestionFailedNetwork);
     } finally {
       setGameSyncing(false);
     }
@@ -686,6 +778,7 @@ export function BattleGame({
 
   async function applyRoomSnapshot(snapshot: BattleRoomSnapshot) {
     if (snapshot.phase === "closed") return;
+    if (isStaleRoomSnapshot(snapshot)) return;
 
     if (snapshot.phase === "lobby" || snapshot.phase === "starting") {
       applyRoomLobbyState(snapshot);
@@ -697,7 +790,7 @@ export function BattleGame({
     if (snapshot.phase !== "playing") return;
 
     if (snapshot.roundIndex == null || snapshot.startTime == null) {
-      setLobbyError("房间已开局，但题目状态不完整，请重新创建房间");
+      setLobbyError(copy.incompleteRoomState);
       return;
     }
 
@@ -1048,7 +1141,7 @@ export function BattleGame({
       } catch (error) {
         if (!active) return;
         setLobbyError(
-          error instanceof Error ? error.message : "加入房间状态同步失败",
+          error instanceof Error ? error.message : copy.joinRoomSyncFailed,
         );
       }
     }
@@ -1182,7 +1275,7 @@ export function BattleGame({
         questions: [],
         error:
           result.message ??
-          `只匹配到 ${streetViewLocations.length} / ${count} 个百度 JS 街景点，未开始本局；请重新生成。`,
+          copy.insufficientBaiduScenes(streetViewLocations.length, count),
       };
     }
 
@@ -1209,7 +1302,7 @@ export function BattleGame({
         questions: [],
         error:
           result.message ??
-          `只匹配到 ${streetViewLocations.length} / ${count} 个 Google 日本街景点，未开始本局；请重新生成。`,
+          copy.insufficientGoogleScenes(streetViewLocations.length, count),
       };
     }
 
@@ -1273,11 +1366,33 @@ export function BattleGame({
     if (questions.length < count) {
       return {
         questions: [],
-        error: `只匹配到 ${questions.length} / ${count} 道有百度街景的历史图寻题，未开始本局；请重新开始。`,
+        error: copy.insufficientHistoryScenes(questions.length, count),
       };
     }
 
     return { questions };
+  }
+
+  async function loadAnimeBattleQuestions(
+    count: number,
+  ): Promise<BattleQuestionLoadResult> {
+    const questions = await fetchAnimeGuessrQuestions();
+    const picked = pickAnimeGuessrQuestions(
+      questions,
+      count,
+      ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+    );
+
+    if (picked.length < count) {
+      return {
+        questions: [],
+        error: copy.insufficientQuestions,
+      };
+    }
+
+    return {
+      questions: picked.map(buildBattleAnimeQuestion),
+    };
   }
 
   async function loadAnimeTuxunBattleQuestions(
@@ -1331,7 +1446,7 @@ export function BattleGame({
     if (questions.length < count) {
       return {
         questions: [],
-        error: `只匹配到 ${questions.length} / ${count} 道有 Google 街景的动漫题，未开始本局；请重新开始。`,
+        error: copy.insufficientAnimeScenes(questions.length, count),
       };
     }
 
@@ -1341,6 +1456,10 @@ export function BattleGame({
   async function loadBattleQuestions(
     nextSettings: BattleSettings,
   ): Promise<BattleQuestionLoadResult> {
+    if (nextSettings.questionType === "anime") {
+      return loadAnimeBattleQuestions(nextSettings.rounds);
+    }
+
     if (nextSettings.questionType === "tuxun") {
       return loadTuxunBattleQuestions(nextSettings.rounds);
     }
@@ -1358,7 +1477,7 @@ export function BattleGame({
     }
 
     if (!isQuestionType(nextSettings.questionType)) {
-      return { questions: [], error: "暂不支持该对战模式" };
+      return { questions: [], error: copy.unsupportedMode };
     }
 
     const loaded = await fetchQuestionsByType(
@@ -1403,7 +1522,7 @@ export function BattleGame({
 
       const loaded = await loadBattleQuestions(nextSettings);
       if (loaded.error || loaded.questions.length < nextSettings.rounds) {
-        setLobbyError(loaded.error ?? "题库题目不足");
+        setLobbyError(loaded.error ?? copy.insufficientQuestions);
         setGameSyncing(false);
         setIsStarting(false);
         await postBattleRoomAction(roomId, { action: "cancel-start" }).catch(
@@ -1440,7 +1559,7 @@ export function BattleGame({
       setLobbyError(
         error instanceof Error
           ? error.message
-          : "题库加载失败，请检查数据库连接",
+          : copy.questionLoadFailed,
       );
     }
   }
@@ -1489,7 +1608,10 @@ export function BattleGame({
   const lastResult = results[results.length - 1];
   const playerList = Object.values(players);
   const submittedCount = Object.keys(submittedPlayers).length;
-  const submittedSummary = `${submittedCount} / ${playerList.length} 已提交`;
+  const submittedSummary = copy.submittedSummary(
+    submittedCount,
+    playerList.length,
+  );
 
   const speedPreview =
     roundStartTime && phase === "playing"
@@ -1506,14 +1628,14 @@ export function BattleGame({
       : true;
 
   const submitLabel = submitted
-    ? "✓ 已提交，等待结算…"
+    ? `✓ ${copy.submitted}`
     : needsQuiz
       ? guessIndex === null
-        ? "请先选择答案"
-        : "提交答案"
+        ? copy.selectAnswerFirst
+        : copy.submitAnswer
       : (needsMap || needsLocationOnlyGuess) && guessLat === null
-        ? "先在地图上选地点"
-        : "提交猜测";
+        ? copy.selectMapFirst
+        : copy.submitGuess;
 
   function renderBattleHeader() {
     return (
@@ -1521,10 +1643,11 @@ export function BattleGame({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#0d081a]/90 px-4 py-3 backdrop-blur">
           <div>
             <div className="text-sm font-bold text-pink-100">
-              对战 · {gameMode?.emoji} {gameMode?.title}
+              {copy.battlePrefix} · {gameMode?.emoji} {gameModeText?.title}
             </div>
             <div className="text-xs text-pink-100/55">
-              第 {currentRound + 1} / {settings.rounds} 轮 · {submittedSummary}
+              {copy.roundCount(currentRound + 1, settings.rounds)} ·{" "}
+              {submittedSummary}
             </div>
           </div>
           <div className="flex max-w-full flex-wrap justify-end gap-2">
@@ -1555,13 +1678,15 @@ export function BattleGame({
       <div className="anime-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-white">
         <div className="w-full max-w-2xl">
           <Link
-            href="/battle"
+            href={battleLobbyUrl}
             className="mb-6 inline-block text-sm text-pink-100/70 hover:text-pink-50"
           >
-            ← 返回大厅
+            ← {copy.backLobby}
           </Link>
           <div className="anime-panel mb-6 p-6 text-center">
-            <div className="mb-1 text-sm text-pink-100/60">房间号</div>
+            <div className="mb-1 text-sm text-pink-100/60">
+              {copy.roomCode}
+            </div>
             <div className="mb-3 font-mono text-5xl font-extrabold tracking-widest text-cyan-100">
               {roomId}
             </div>
@@ -1569,13 +1694,13 @@ export function BattleGame({
               onClick={() => void navigator.clipboard.writeText(roomId)}
               className="text-xs text-pink-100/55 hover:text-pink-50"
             >
-              点击复制
+              {copy.copyRoom}
             </button>
           </div>
 
           <div className="mb-6 space-y-2">
             <div className="flex items-center justify-between text-sm text-pink-100/65">
-              <span>房间人数</span>
+              <span>{copy.players}</span>
               <span>
                 {playerList.length} / {BATTLE_MAX_PLAYERS}
               </span>
@@ -1593,13 +1718,15 @@ export function BattleGame({
                     {p.avatar.icon}
                   </span>
                   <span className="font-medium text-pink-50">{p.name}</span>
-                  {p.isHost && <span className="anime-chip ml-auto">房主</span>}
+                  {p.isHost && (
+                    <span className="anime-chip ml-auto">{copy.host}</span>
+                  )}
                 </div>
               ))}
             </div>
             {playerList.length < 2 && (
               <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-center text-sm text-pink-100/55">
-                至少 2 人即可开局；更多玩家可继续加入同一房间。
+                {copy.minPlayersHint}
               </div>
             )}
           </div>
@@ -1607,21 +1734,22 @@ export function BattleGame({
           {(isHost || lobbySynced) && (
             <div className="anime-panel mb-4 space-y-1 p-4 text-sm text-pink-100/65">
               <div className="flex justify-between">
-                <span>游戏类型</span>
+                <span>{copy.gameType}</span>
                 <span className="text-pink-50">
-                  {gameMode?.emoji} {gameMode?.title ?? settings.questionType}
+                  {gameMode?.emoji}{" "}
+                  {gameModeText?.title ?? settings.questionType}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>轮数</span>
+                <span>{copy.rounds}</span>
                 <span className="text-pink-50">{settings.rounds}</span>
               </div>
               <div className="flex justify-between">
-                <span>每轮时间</span>
+                <span>{copy.timePerRound}</span>
                 <span className="text-pink-50">{settings.timePerRound}s</span>
               </div>
               <div className="flex justify-between">
-                <span>初始血量</span>
+                <span>{copy.startingHp}</span>
                 <span className="text-pink-50">{settings.startingHp}</span>
               </div>
             </div>
@@ -1629,7 +1757,7 @@ export function BattleGame({
 
           {!isHost && !lobbySynced && (
             <div className="anime-panel mb-4 p-4 text-center text-sm text-pink-100/65">
-              正在同步房间设置…
+              {copy.syncingSettings}
             </div>
           )}
 
@@ -1640,14 +1768,14 @@ export function BattleGame({
               className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {playerList.length < 2
-                ? "等待玩家…"
+                ? copy.waitPlayers
                 : isStarting
-                  ? "正在生成题目…"
-                  : "开始对战"}
+                  ? copy.generatingQuestions
+                  : copy.startBattle}
             </button>
           ) : (
             <p className="text-center text-pink-100/65">
-              {gameSyncing ? "房主正在生成题目，请稍候…" : "等待房主开始游戏…"}
+              {gameSyncing ? copy.hostGenerating : copy.waitHostStart}
             </p>
           )}
           {lobbyError && (
@@ -1672,6 +1800,7 @@ export function BattleGame({
         questionType={settings.questionType}
         roundReady={roundReady}
         isLastRound={isLastRound}
+        locale={locale}
         onReady={handleRoundReady}
       />
     );
@@ -1684,6 +1813,7 @@ export function BattleGame({
         players={players}
         results={results}
         myId={myId.current}
+        locale={locale}
       />
     );
   }
@@ -1703,12 +1833,13 @@ export function BattleGame({
     isLocationOnlyBattleQuestion(currentQuestion)
   ) {
     const isHistoryQuestion = isHistoryTuxunBattleQuestion(currentQuestion);
-    const isAnimeQuestion = isAnimeTuxunBattleQuestion(currentQuestion);
-    const timedClueInterval = isAnimeQuestion
+    const isAnimeQuestion = isAnimeBattleQuestion(currentQuestion);
+    const isLegacyAnimeQuestion = isAnimeTuxunBattleQuestion(currentQuestion);
+    const timedClueInterval = isLegacyAnimeQuestion
       ? ANIME_TUXUN_CLUE_INTERVAL_SECONDS
       : HISTORY_TUXUN_CLUE_INTERVAL_SECONDS;
     const timedClues =
-      isHistoryQuestion || isAnimeQuestion
+      isHistoryQuestion || isLegacyAnimeQuestion
         ? currentQuestion.playState.clues.slice(
             0,
             Math.min(
@@ -1718,11 +1849,14 @@ export function BattleGame({
           )
         : [];
     const nextClueIn =
-      (isHistoryQuestion || isAnimeQuestion) &&
+      (isHistoryQuestion || isLegacyAnimeQuestion) &&
       timedClues.length < currentQuestion.playState.clues.length
         ? timedClueInterval - (roundElapsedSeconds % timedClueInterval)
         : null;
     const isForeignQuestion = isForeignBattleQuestion(currentQuestion);
+    const animeQuestionText = isAnimeQuestion
+      ? getAnimeGuessrQuestionText(currentQuestion.question, locale)
+      : null;
 
     return (
       <div className="flex h-screen flex-col bg-[#0a0612] text-white">
@@ -1734,7 +1868,7 @@ export function BattleGame({
               key={currentQuestion.id}
               location={currentQuestion.location}
               onUnavailable={() =>
-                setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
+                setStreetViewError(copy.baiduStreetViewFailed)
               }
             />
           ) : isForeignQuestion ? (
@@ -1742,19 +1876,26 @@ export function BattleGame({
               key={currentQuestion.id}
               location={currentQuestion.location}
               onUnavailable={() =>
-                setStreetViewError(
-                  "当前 Google 街景渲染失败，请返回大厅重新开局。",
-                )
+                setStreetViewError(copy.googleStreetViewFailed)
               }
             />
           ) : isAnimeQuestion ? (
             <GoogleStreetView
               key={currentQuestion.id}
+              location={toAnimeStreetViewLocation(
+                currentQuestion.question,
+                locale,
+              )}
+              onUnavailable={() =>
+                setStreetViewError(copy.googleStreetViewFailed)
+              }
+            />
+          ) : isLegacyAnimeQuestion ? (
+            <GoogleStreetView
+              key={currentQuestion.id}
               location={toAnimeTuxunBattleStreetViewLocation(currentQuestion)}
               onUnavailable={() =>
-                setStreetViewError(
-                  "当前 Google 街景渲染失败，请返回大厅重新开局。",
-                )
+                setStreetViewError(copy.googleStreetViewFailed)
               }
             />
           ) : (
@@ -1768,7 +1909,7 @@ export function BattleGame({
               heading={currentQuestion.playState.heading}
               pitch={currentQuestion.playState.pitch}
               onUnavailable={() =>
-                setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
+                setStreetViewError(copy.baiduStreetViewFailed)
               }
             />
           )}
@@ -1776,9 +1917,9 @@ export function BattleGame({
           <aside className="anime-panel absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 p-4">
             <div className="flex items-center justify-between rounded-lg bg-white/8 px-3 py-2">
               <div>
-                <div className="text-xs text-pink-100/50">剩余时间</div>
+                <div className="text-xs text-pink-100/50">{copy.timeLeft}</div>
                 <div className="text-sm text-cyan-100">
-                  提交越快，速度补偿越高
+                  {copy.speedCompensationHint}
                 </div>
               </div>
               <span
@@ -1791,7 +1932,9 @@ export function BattleGame({
             </div>
 
             <div className="flex items-center justify-between gap-2 rounded-lg bg-white/8 px-3 py-2">
-              <span className="text-sm text-pink-100/60">提交进度</span>
+              <span className="text-sm text-pink-100/60">
+                {copy.submitProgress}
+              </span>
               <span className="text-sm font-medium text-green-300">
                 {submittedSummary}
               </span>
@@ -1806,32 +1949,67 @@ export function BattleGame({
             {isTuxunBattleQuestion(currentQuestion) ? (
               <div className="rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2">
                 <div className="text-sm font-semibold text-sky-200">
-                  观察全景，猜它在中国哪里
+                  {copy.tuxunInstructionTitle}
                 </div>
                 <p className="mt-1 text-sm leading-6 text-stone-300">
-                  从道路、建筑、招牌和地形里找线索，在右下角百度地图中点选位置。
+                  {copy.tuxunInstructionBody}
                 </p>
               </div>
             ) : isForeignQuestion ? (
               <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2">
                 <div className="text-sm font-semibold text-emerald-200">
-                  观察街景，猜它在日本哪里
+                  {copy.foreignInstructionTitle}
                 </div>
                 <p className="mt-1 text-sm leading-6 text-stone-300">
-                  从道路、建筑、招牌和地形里找线索，在右下角 Google
-                  地图中点选位置。
+                  {copy.foreignInstructionBody}
                 </p>
               </div>
-            ) : isAnimeQuestion ? (
+            ) : isAnimeQuestion && animeQuestionText ? (
+              <div className="rounded-lg border border-pink-400/30 bg-pink-400/10 px-3 py-2">
+                <BattleAnimeClueImage
+                  question={currentQuestion.question}
+                  alt={animeQuestionText.title}
+                />
+                <div className="mt-3 text-sm font-semibold text-pink-100">
+                  {copy.animeClue}
+                </div>
+                <div className="mt-1 text-xl font-black text-pink-50">
+                  {animeQuestionText.animeTitle}
+                </div>
+                {currentQuestion.question.year != null && (
+                  <div className="mt-1 text-xs text-pink-100/60">
+                    {currentQuestion.question.year}
+                  </div>
+                )}
+                <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm leading-6 text-pink-50">
+                  {redactAnswerTerms(animeQuestionText.description, [
+                    animeQuestionText.location,
+                    animeQuestionText.answerName,
+                    currentQuestion.question.location,
+                  ])}
+                </div>
+                {animeQuestionText.aspect && (
+                  <div className="mt-2 text-xs leading-5 text-pink-100/70">
+                    {redactAnswerTerms(animeQuestionText.aspect, [
+                      animeQuestionText.location,
+                      animeQuestionText.answerName,
+                      currentQuestion.question.location,
+                    ])}
+                  </div>
+                )}
+              </div>
+            ) : isLegacyAnimeQuestion ? (
               <div className="rounded-lg border border-pink-400/30 bg-pink-400/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-pink-100">
-                  <span>动漫线索</span>
+                  <span>{copy.animeClue}</span>
                   {nextClueIn ? (
                     <span className="text-xs text-pink-100/70">
-                      下一条 {nextClueIn}s
+                      {copy.nextClueIn(nextClueIn)}
                     </span>
                   ) : (
-                    <span className="text-xs text-pink-100/70">已全部给出</span>
+                    <span className="text-xs text-pink-100/70">
+                      {copy.allCluesShown}
+                    </span>
                   )}
                 </div>
                 <div className="mt-2 text-xs leading-5 text-pink-100/70">
@@ -1858,14 +2036,14 @@ export function BattleGame({
             ) : (
               <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-amber-200">
-                  <span>历史线索</span>
+                  <span>{copy.historyClue}</span>
                   {nextClueIn ? (
                     <span className="text-xs text-amber-100/70">
-                      下一条 {nextClueIn}s
+                      {copy.nextClueIn(nextClueIn)}
                     </span>
                   ) : (
                     <span className="text-xs text-amber-100/70">
-                      已全部给出
+                      {copy.allCluesShown}
                     </span>
                   )}
                 </div>
@@ -1900,15 +2078,17 @@ export function BattleGame({
             submitLabel={submitLabel}
             title={
               isTuxunBattleQuestion(currentQuestion)
-                ? "图寻猜点"
+                ? copy.tuxunGuessTitle
                 : isForeignQuestion
-                  ? "日本地图猜点"
+                  ? copy.foreignGuessTitle
                   : isAnimeQuestion
-                    ? "动漫对战猜点"
-                    : "历史图寻猜点"
+                    ? copy.animeGuessTitle
+                    : copy.historyGuessTitle
             }
             mapProvider={
-              isForeignQuestion || isAnimeQuestion ? "google" : "baidu"
+              isForeignQuestion || isAnimeQuestion || isLegacyAnimeQuestion
+                ? "google"
+                : "baidu"
             }
             country={DEFAULT_FOREIGN_COUNTRY}
           />
@@ -1916,9 +2096,11 @@ export function BattleGame({
           {submitted && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20">
               <div className="rounded-xl bg-green-800/85 px-6 py-3 text-center shadow-lg shadow-black/30 backdrop-blur-sm">
-                <div className="text-lg font-bold text-green-200">✓ 已锁定</div>
+                <div className="text-lg font-bold text-green-200">
+                  ✓ {copy.lockedTitle}
+                </div>
                 <div className="text-sm text-green-100/80">
-                  等待其他玩家或计时结束…
+                  {copy.lockedBody}
                 </div>
               </div>
             </div>
@@ -1946,10 +2128,10 @@ export function BattleGame({
         >
           <div className="anime-panel flex items-center justify-between rounded-lg px-4 py-2">
             <div>
-              <div className="text-sm text-pink-100/60">剩余时间</div>
+              <div className="text-sm text-pink-100/60">{copy.timeLeft}</div>
               {!submitted && speedPreview && (
                 <div className="text-xs text-cyan-100">
-                  现在提交 ×{speedPreview.toFixed(2)}
+                  {copy.submitNowMultiplier(speedPreview.toFixed(2))}
                 </div>
               )}
             </div>
@@ -1961,7 +2143,9 @@ export function BattleGame({
           </div>
 
           <div className="anime-panel flex items-center justify-between gap-2 rounded-lg px-4 py-2">
-            <span className="text-sm text-pink-100/60">提交进度</span>
+            <span className="text-sm text-pink-100/60">
+              {copy.submitProgress}
+            </span>
             <span className="text-sm font-medium text-green-300">
               {submittedSummary}
             </span>
@@ -2028,10 +2212,10 @@ export function BattleGame({
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
                 <div className="rounded-xl bg-green-800/80 px-6 py-3 text-center backdrop-blur-sm">
                   <div className="text-lg font-bold text-green-300">
-                    ✓ 已锁定
+                    ✓ {copy.lockedTitle}
                   </div>
                   <div className="text-sm text-green-400">
-                    等待其他玩家或计时结束…
+                    {copy.lockedBody}
                   </div>
                 </div>
               </div>
