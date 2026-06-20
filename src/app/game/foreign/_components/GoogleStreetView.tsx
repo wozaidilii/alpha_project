@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   GOOGLE_MAP_AK,
+  confirmGoogleStreetViewLocation,
   getGoogleMapsApi,
   loadGoogleMapsScript,
   type GoogleMapsLanguage,
@@ -25,6 +26,7 @@ export function GoogleStreetView({
   googleMapsLanguage,
   onUnavailable,
 }: Props) {
+  const { heading, lat, lng, panoId, pitch } = location;
   const containerRef = useRef<HTMLDivElement>(null);
   const panoramaRef = useRef<GoogleStreetViewPanoramaInstance | null>(null);
   const onUnavailableRef = useRef(onUnavailable);
@@ -44,18 +46,30 @@ export function GoogleStreetView({
     setState("loading");
 
     void loadGoogleMapsScript(GOOGLE_MAP_AK, { language: googleMapsLanguage })
-      .then(() => {
+      .then(async () => {
         if (!active || !containerRef.current) return;
         const api = getGoogleMapsApi();
-        if (!api?.StreetViewPanorama) {
+        if (!api?.StreetViewPanorama || !api.StreetViewService) {
           throw new Error("Google Street View API 未加载");
         }
 
+        const renderTarget = await confirmGoogleStreetViewLocation(api, {
+          lat,
+          lng,
+          ...(panoId ? { panoId } : {}),
+        });
+        if (!active || !containerRef.current) return;
+        if (!renderTarget) {
+          setState("error");
+          onUnavailableRef.current?.();
+          return;
+        }
+
         const panorama = new api.StreetViewPanorama(containerRef.current, {
-          ...(location.panoId
-            ? { pano: location.panoId }
-            : { position: { lat: location.lat, lng: location.lng } }),
-          pov: { heading: location.heading, pitch: location.pitch },
+          ...(renderTarget.panoId
+            ? { pano: renderTarget.panoId }
+            : { position: renderTarget.point }),
+          pov: { heading, pitch },
           zoom: 1,
           visible: true,
           addressControl: false,
@@ -87,15 +101,7 @@ export function GoogleStreetView({
       }
       panoramaRef.current = null;
     };
-  }, [
-    location.heading,
-    location.lat,
-    location.lng,
-    location.panoId,
-    location.pitch,
-    allowMovement,
-    googleMapsLanguage,
-  ]);
+  }, [heading, lat, lng, panoId, pitch, allowMovement, googleMapsLanguage]);
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-stone-950">

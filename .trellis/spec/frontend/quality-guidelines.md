@@ -220,6 +220,7 @@ export const metadata: Metadata = {
 
 - Missing public API key -> visible user-facing setup/error state, not a thrown render error.
 - Script load success does not imply service availability; construct service clients and issue SDK calls inside `try/catch` or null-returning boundaries.
+- Browser Street View render components must confirm the requested pano/coordinate through the provider's service API before switching to `ready`; constructing a panorama widget can still produce a black, unusable view.
 - Street-view gameplay must only start after point generation confirms enough usable panoramas for the configured round count.
 - Guess-map click handlers must clamp or reject points outside the active country/region bounds.
 - Global street-view modes are an explicit exception to country clamping: pass a prop such as `restrictToCountry={false}`, initialize the map at a world zoom, and validate only global latitude/longitude ranges.
@@ -235,6 +236,7 @@ export const metadata: Metadata = {
 - Missing key -> show configuration message and allow returning to mode selection.
 - Script load timeout/failure -> show retryable load/generation error.
 - Street-view service unavailable -> fail generation with retry, not a non-street-view fallback.
+- Street-view render precheck returns `ZERO_RESULTS`, invalid data, or times out -> call the mode's unavailable handler so solo modes skip the bad question and multiplayer modes avoid marking a black panorama as playable.
 - Insufficient confirmed panoramas -> do not start the round; show how many were found when useful.
 - Component unmount during SDK loading -> ignore late results and clean listeners/overlays.
 - Google Maps continuation URL -> opens a Street View panorama via `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=<lat>,<lng>`.
@@ -248,6 +250,7 @@ export const metadata: Metadata = {
 #### 6. Tests Required
 
 - Unit tests for country bounds, clamping, and country lookup.
+- Unit tests for browser Street View render prechecks: `OK` with pano/latLng returns a render target; `ZERO_RESULTS` and timeout return null.
 - Unit tests for persistent guess-map viewport synchronization: result state fits to guess/answer, next-round empty state resets to the active overview, and guess-only state does not recenter the player unexpectedly.
 - Unit tests for Google Maps continuation URL helpers when adding or changing external Street View links.
 - Type-check/lint after adding SDK wrapper types.

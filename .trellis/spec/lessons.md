@@ -228,3 +228,10 @@
 - 根因：客户端轮询和 Pusher 事件顺序不稳定，旧 `round-result` 快照会直接覆盖本地 `roundReady` 和 `players.hp`；battle 的位置题计分没有传 `soloAnimeScoring: true`，与个人 anime 模式产生规则漂移。
 - 修复：同一结果轮的 ready 状态只合并不缩减，active battle HP 只允许降低不允许被旧快照抬高；battle anime 位置题改用共享 `calcBattleLocationScore`，内部复用个人模式的 solo anime 计分参数。
 - 预防：battle 客户端应用恢复快照时要按字段判断单调性：guesses/ready 可追加不可删除，HP 可降不可升，新回合才清空；玩法计分规则必须放进可测 helper，不要在个人模式和 battle 组件里分别手写参数。
+
+## Google 街景组件不能把构造成功当作可播放
+
+- 问题：猜动漫过程中偶尔出现 Google Street View 黑屏，玩家会卡在当前题。
+- 根因：`StreetViewPanorama` widget 构造成功不代表该坐标或 pano 有可渲染街景；没有先调用 `StreetViewService.getPanorama` 确认 `OK`，因此 `ZERO_RESULTS`、无效 pano 或服务超时会被误判成 ready。
+- 修复：抽出 `confirmGoogleStreetViewLocation`，渲染前用 Street View service 带超时预检，只有拿到可用 pano/latLng 才创建 panorama；失败时触发 `onUnavailable`，个人模式复用已有跳题逻辑。
+- 预防：所有浏览器街景组件都要把 provider service 预检作为 ready 前置条件，并用测试覆盖 OK、ZERO_RESULTS 和 timeout；生成阶段确认过的点位也不能替代渲染阶段的可用性检查。
