@@ -76,6 +76,11 @@ const COPY: Record<
     difficultyLabel: string;
     difficultyOption: (tier: AnimeGuessrDifficultyTier) => string;
     difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
+    contactTitle: string;
+    contactPartnershipHint: string;
+    contactBugHint: string;
+    contactPartnership: string;
+    contactBug: string;
   }
 > = {
   zh: {
@@ -140,6 +145,11 @@ const COPY: Record<
         master: "包含难度 1、2、3 的题目。",
         miracle: "包含全部难度题目。",
       })[tier],
+    contactTitle: "联系我们",
+    contactPartnershipHint: "合作与方向建议",
+    contactBugHint: "技术问题、宕机与 Bug 报告",
+    contactPartnership: "kris@loamly.net",
+    contactBug: "lewis@loamly.net",
   },
   ja: {
     lang: "日本語",
@@ -206,6 +216,11 @@ const COPY: Record<
         master: "難易度 1、2、3 の問題。",
         miracle: "すべての難易度の問題。",
       })[tier],
+    contactTitle: "お問い合わせ",
+    contactPartnershipHint: "提携・方向性のご提案",
+    contactBugHint: "技術不具合・障害・バグ報告",
+    contactPartnership: "kris@loamly.net",
+    contactBug: "lewis@loamly.net",
   },
   en: {
     lang: "English",
@@ -273,6 +288,11 @@ const COPY: Record<
         master: "Difficulty 1, 2, and 3 questions.",
         miracle: "All difficulty levels.",
       })[tier],
+    contactTitle: "Contact",
+    contactPartnershipHint: "Partnerships and product direction",
+    contactBugHint: "Technical issues, outages, and bug reports",
+    contactPartnership: "kris@loamly.net",
+    contactBug: "lewis@loamly.net",
   },
 };
 
@@ -651,6 +671,36 @@ export default function Home() {
               >
                 {copy.battle}
               </Link>
+              </div>
+            </div>
+
+            <div className="mt-6 max-w-2xl rounded-2xl border border-white/10 bg-black/25 p-4">
+              <h2 className="text-sm font-black tracking-[0.18em] text-pink-100/70 uppercase">
+                {copy.contactTitle}
+              </h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <a
+                  href={`mailto:${copy.contactPartnership}`}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-pink-200/40 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+                >
+                  <span className="block text-xs font-bold text-pink-100/60">
+                    {copy.contactPartnershipHint}
+                  </span>
+                  <span className="mt-1 block text-sm font-black text-white">
+                    {copy.contactPartnership}
+                  </span>
+                </a>
+                <a
+                  href={`mailto:${copy.contactBug}`}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 transition hover:border-cyan-200/35 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+                >
+                  <span className="block text-xs font-bold text-pink-100/60">
+                    {copy.contactBugHint}
+                  </span>
+                  <span className="mt-1 block text-sm font-black text-white">
+                    {copy.contactBug}
+                  </span>
+                </a>
               </div>
             </div>
 

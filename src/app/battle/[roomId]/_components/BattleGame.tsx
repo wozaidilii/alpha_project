@@ -5,7 +5,6 @@ import Link from "next/link";
 import { getPusherClient, sendPusherEvent } from "~/lib/pusher-client";
 import {
   fetchQuestionsByType,
-  fetchQuestionsByIds,
 } from "~/lib/load-questions";
 import { getGameMode, isQuestionType } from "~/lib/game-mode";
 import { getTimelineBounds } from "~/lib/question-utils";
@@ -94,6 +93,7 @@ import { type AnimeLocale, withAnimeLocale } from "~/lib/anime-locale";
 import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
 import {
   getBattleSubmittedPlayers,
+  mergeBattleLobbyPlayers,
   mergeBattleRoundReady,
   mergeBattleSubmittedGuesses,
 } from "~/lib/battle-room-sync";
@@ -510,6 +510,8 @@ export function BattleGame({
   const lastCountdownTickRef = useRef<number | null>(null);
   const roundReadyRef = useRef<Record<string, boolean>>({});
   const phaseRef = useRef(phase);
+  const hasJoinedLobbyRef = useRef(false);
+  const pusherPendingPlayersRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -578,23 +580,40 @@ export function BattleGame({
 
   function upsertPlayer(data: PusherPlayerJoined) {
     if (data.playerId === myId.current) return;
+    pusherPendingPlayersRef.current[data.playerId] = Date.now();
     setPlayers((prev) => {
       const existing = prev[data.playerId];
-      const nextPlayers = {
-        ...prev,
-        [data.playerId]: {
-          id: data.playerId,
-          userId: data.userId,
-          name: data.name,
-          avatar: data.avatar,
-          character: data.character,
-          hp: existing?.hp ?? settingsRef.current.startingHp,
-          isHost: data.isHost ?? false,
+      const nextPlayers = mergeBattleLobbyPlayers(
+        prev,
+        {
+          [data.playerId]: {
+            id: data.playerId,
+            userId: data.userId,
+            name: data.name,
+            avatar: data.avatar,
+            character: data.character,
+            hp: existing?.hp ?? settingsRef.current.startingHp,
+            isHost: data.isHost ?? false,
+          },
         },
-      };
+        getLocalPlayer(),
+        pusherPendingPlayersRef.current,
+      );
       playersRef.current = nextPlayers;
       return nextPlayers;
     });
+  }
+
+  async function refreshLobbySnapshot() {
+    if (phaseRef.current !== "lobby") return;
+    try {
+      const snapshot = await fetchBattleRoomSnapshot(roomId);
+      if (snapshot && phaseRef.current === "lobby") {
+        await applyRoomSnapshot(snapshot);
+      }
+    } catch {
+      // Pusher remains primary; polling/refresh is a recovery path.
+    }
   }
 
   function getLocalPlayer(): BattlePlayer {
@@ -613,8 +632,19 @@ export function BattleGame({
   function applyRoomLobbyState(snapshot: BattleRoomSnapshot) {
     setSettings(snapshot.settings);
     settingsRef.current = snapshot.settings;
-    setPlayers(snapshot.players);
-    playersRef.current = snapshot.players;
+
+    for (const id of Object.keys(snapshot.players)) {
+      delete pusherPendingPlayersRef.current[id];
+    }
+
+    const mergedPlayers = mergeBattleLobbyPlayers(
+      playersRef.current,
+      snapshot.players,
+      getLocalPlayer(),
+      pusherPendingPlayersRef.current,
+    );
+    setPlayers(mergedPlayers);
+    playersRef.current = mergedPlayers;
     setLobbySynced(true);
   }
 
@@ -731,26 +761,7 @@ export function BattleGame({
         return;
       }
 
-      if (!isQuestionType(data.settings.questionType) || !data.questionIds) {
-        setLobbyError(copy.syncQuestionFailedRestart);
-        return;
-      }
-
-      const loaded = await fetchQuestionsByIds(
-        data.settings.questionType,
-        data.questionIds,
-        {
-          fetchHistoricalByIds: (ids) => utils.event.byIds.fetch({ ids }),
-          fetchFunfactByIds: (ids) => utils.funfact.byIds.fetch({ ids }),
-        },
-      );
-      if (loaded.error || loaded.questions.length < data.questionIds.length) {
-        setLobbyError(loaded.error ?? copy.syncQuestionFailedRestart);
-        return;
-      }
-
-      applyGameStarted(data.settings, data.players, loaded.questions);
-      beginRound(data.roundIndex, data.startTime);
+      setLobbyError(copy.syncQuestionFailedRestart);
     } catch {
       setLobbyError(copy.syncQuestionFailedNetwork);
     } finally {
@@ -1084,7 +1095,7 @@ export function BattleGame({
       upsertPlayer(data);
       if (isHost) {
         broadcastRoomSettings();
-        announcePresence();
+        void refreshLobbySnapshot();
       }
     });
 
@@ -1188,7 +1199,18 @@ export function BattleGame({
           player: getLocalPlayer(),
           settings: isHost ? settingsRef.current : undefined,
         });
-        if (active && snapshot) await applyRoomSnapshot(snapshot);
+        if (!active || !snapshot) return;
+
+        hasJoinedLobbyRef.current = true;
+        await applyRoomSnapshot(snapshot);
+        announcePresence();
+        if (isHost) {
+          broadcastRoomSettings();
+        } else {
+          void sendPusherEvent(channel, "request-room-settings", {
+            playerId: myId.current,
+          } satisfies PusherRequestRoomSettings);
+        }
       } catch (error) {
         if (!active) return;
         setLobbyError(
@@ -1218,15 +1240,16 @@ export function BattleGame({
     }
 
     void syncRoom();
+    const intervalMs = phase === "lobby" ? 3000 : 1000;
     const interval = window.setInterval(() => {
       void syncRoom();
-    }, 1000);
+    }, intervalMs);
     return () => {
       active = false;
       window.clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+  }, [roomId, phase]);
 
   useEffect(() => {
     const url = battleRoomUrl(roomId);
@@ -1259,20 +1282,10 @@ export function BattleGame({
   }, [roomId]);
 
   useEffect(() => {
-    if (phase !== "lobby") return;
-    if (isHost) broadcastRoomSettings();
-    announcePresence();
+    if (phase !== "lobby" || !hasJoinedLobbyRef.current || !isHost) return;
+    broadcastRoomSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
-
-  useEffect(() => {
-    if (isHost) return;
-    announcePresence();
-    void sendPusherEvent(channel, "request-room-settings", {
-      playerId: myId.current,
-    } satisfies PusherRequestRoomSettings);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [phase, isHost]);
 
   useEffect(() => {
     if (phase !== "playing" || !roundStartTime) return;
@@ -1341,13 +1354,11 @@ export function BattleGame({
 
   async function loadAnimeBattleQuestions(
     count: number,
+    difficultyTier = settingsRef.current.difficultyTier ??
+      ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   ): Promise<BattleQuestionLoadResult> {
     const questions = await fetchAnimeGuessrQuestions();
-    const picked = pickAnimeGuessrQuestions(
-      questions,
-      count,
-      settingsRef.current.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
-    );
+    const picked = pickAnimeGuessrQuestions(questions, count, difficultyTier);
 
     if (picked.length < count) {
       return {
@@ -1423,7 +1434,10 @@ export function BattleGame({
     nextSettings: BattleSettings,
   ): Promise<BattleQuestionLoadResult> {
     if (nextSettings.questionType === "anime") {
-      return loadAnimeBattleQuestions(nextSettings.rounds);
+      return loadAnimeBattleQuestions(
+        nextSettings.rounds,
+        nextSettings.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+      );
     }
 
     if (nextSettings.questionType === "foreign") {
@@ -1449,7 +1463,6 @@ export function BattleGame({
 
     return {
       questions: loaded.questions,
-      questionIds: loaded.questions.map((q) => q.id),
       error: loaded.error,
     };
   }
@@ -1457,16 +1470,25 @@ export function BattleGame({
   async function handleStartGame() {
     if (isStarting || playerList.length < 2) return;
 
-    const nextSettings = settingsRef.current;
-    const initialPlayers: Record<string, BattlePlayer> = {};
-    for (const [pid, p] of Object.entries(playersRef.current)) {
-      initialPlayers[pid] = { ...p, hp: nextSettings.startingHp };
-    }
-
     try {
       setIsStarting(true);
       setGameSyncing(true);
       setLobbyError("");
+
+      await refreshLobbySnapshot();
+      const syncedPlayers = playersRef.current;
+      if (Object.keys(syncedPlayers).length < 2) {
+        setLobbyError(copy.minPlayersHint);
+        setGameSyncing(false);
+        setIsStarting(false);
+        return;
+      }
+
+      const nextSettings = settingsRef.current;
+      const initialPlayers: Record<string, BattlePlayer> = {};
+      for (const [pid, p] of Object.entries(syncedPlayers)) {
+        initialPlayers[pid] = { ...p, hp: nextSettings.startingHp };
+      }
 
       await postBattleRoomAction(roomId, {
         action: "starting",
@@ -1493,8 +1515,7 @@ export function BattleGame({
       const payload = {
         settings: nextSettings,
         players: initialPlayers,
-        questionIds: loaded.questionIds,
-        questions: loaded.questionIds ? undefined : loaded.questions,
+        questions: loaded.questions,
         roundIndex: 0,
         startTime,
       } satisfies PusherGameStarted;

@@ -1,60 +1,63 @@
 import { describe, expect, it } from "vitest";
 import {
-  getBattleSubmittedPlayers,
-  mergeBattleRoundReady,
-  mergeBattleSubmittedGuesses,
+  BATTLE_LOBBY_PUSHER_PENDING_MS,
+  mergeBattleLobbyPlayers,
 } from "./battle-room-sync";
-import { type PusherGuessSubmitted } from "~/types/battle";
+import { type BattlePlayer } from "~/types/battle";
 
-function guess(
-  playerId: string,
-  roundIndex: number,
-  submittedAt: number,
-): PusherGuessSubmitted {
+function player(id: string, name = id): BattlePlayer {
   return {
-    playerId,
-    roundIndex,
-    lat: 35,
-    lng: 139,
-    year: 0,
-    submittedAt,
+    id,
+    name,
+    avatar: { icon: "🎮", color: "#ec4899" },
+    hp: 100,
+    isHost: id === "host",
   };
 }
 
-describe("battle room sync helpers", () => {
-  it("keeps local submitted guesses when an older same-round snapshot arrives", () => {
-    const hostGuess = guess("host", 3, 1000);
-    const guestGuess = guess("guest", 3, 1100);
-
-    const merged = mergeBattleSubmittedGuesses(
-      { host: hostGuess, guest: guestGuess },
-      { host: hostGuess },
-      3,
-    );
-
-    expect(Object.keys(merged).sort()).toEqual(["guest", "host"]);
-    expect(getBattleSubmittedPlayers(merged)).toEqual({
-      host: true,
-      guest: true,
+describe("mergeBattleLobbyPlayers", () => {
+  it("always keeps the local player even if the server snapshot is stale", () => {
+    expect(
+      mergeBattleLobbyPlayers(
+        { guest: player("guest") },
+        { host: player("host") },
+        player("guest"),
+        {},
+      ),
+    ).toMatchObject({
+      host: { id: "host" },
+      guest: { id: "guest" },
     });
   });
 
-  it("drops guesses from other rounds while merging", () => {
-    const merged = mergeBattleSubmittedGuesses(
-      { host: guess("host", 2, 1000) },
-      { guest: guess("guest", 3, 1100) },
-      3,
-    );
-
-    expect(Object.keys(merged)).toEqual(["guest"]);
+  it("keeps recent pusher-only players until the server catches up", () => {
+    const now = Date.now();
+    expect(
+      mergeBattleLobbyPlayers(
+        { host: player("host"), guest: player("guest") },
+        { host: player("host") },
+        player("host"),
+        { guest: now - 1_000 },
+        now,
+      ),
+    ).toMatchObject({
+      host: { id: "host" },
+      guest: { id: "guest" },
+    });
   });
 
-  it("keeps local ready players when an older result snapshot arrives", () => {
+  it("drops stale pusher-only players after the grace window", () => {
+    const now = Date.now();
     expect(
-      mergeBattleRoundReady({ host: true, guest: true }, { host: true }),
+      mergeBattleLobbyPlayers(
+        { host: player("host"), guest: player("guest") },
+        { host: player("host") },
+        player("host"),
+        { guest: now - BATTLE_LOBBY_PUSHER_PENDING_MS - 1 },
+        now,
+      ),
     ).toEqual({
-      host: true,
-      guest: true,
+      host: expect.objectContaining({ id: "host" }),
     });
   });
 });

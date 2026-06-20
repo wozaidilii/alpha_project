@@ -1,4 +1,9 @@
-import { type PusherGuessSubmitted } from "~/types/battle";
+import {
+  type BattlePlayer,
+  type PusherGuessSubmitted,
+} from "~/types/battle";
+
+export const BATTLE_LOBBY_PUSHER_PENDING_MS = 15_000;
 
 export function mergeBattleSubmittedGuesses(
   current: Record<string, PusherGuessSubmitted>,
@@ -34,4 +39,33 @@ export function mergeBattleRoundReady(
     ...(incoming ?? {}),
     ...current,
   };
+}
+
+export function mergeBattleLobbyPlayers(
+  current: Record<string, BattlePlayer>,
+  server: Record<string, BattlePlayer>,
+  localPlayer: BattlePlayer,
+  pendingPusherAt: Record<string, number>,
+  now = Date.now(),
+): Record<string, BattlePlayer> {
+  const next: Record<string, BattlePlayer> = {
+    ...server,
+    [localPlayer.id]: {
+      ...(server[localPlayer.id] ?? current[localPlayer.id] ?? localPlayer),
+      ...localPlayer,
+    },
+  };
+
+  for (const [id, player] of Object.entries(current)) {
+    if (next[id]) continue;
+    const pendingAt = pendingPusherAt[id];
+    if (
+      pendingAt != null &&
+      now - pendingAt < BATTLE_LOBBY_PUSHER_PENDING_MS
+    ) {
+      next[id] = player;
+    }
+  }
+
+  return next;
 }
