@@ -105,6 +105,10 @@ type GameCopy = {
   difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
   animeClue: string;
   scene: string;
+  openMap: string;
+  mapGuessTitle: string;
+  closePanel: string;
+  guessSelected: string;
   answer: string;
   roundScore: string;
   distancePts: string;
@@ -213,6 +217,10 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
       )[tier],
     animeClue: "动漫线索",
     scene: "场景",
+    openMap: "打开地图",
+    mapGuessTitle: "选择你猜测的位置",
+    closePanel: "关闭",
+    guessSelected: "已选地点",
     answer: "答案",
     roundScore: "本轮得分",
     distancePts: "距离分",
@@ -322,6 +330,10 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
       )[tier],
     animeClue: "アニメヒント",
     scene: "シーン",
+    openMap: "地図を開く",
+    mapGuessTitle: "予想地点を選ぶ",
+    closePanel: "閉じる",
+    guessSelected: "地点を選択済み",
     answer: "答え",
     roundScore: "ラウンド得点",
     distancePts: "距離点",
@@ -436,6 +448,10 @@ const GAME_COPY: Record<AnimeLocale, GameCopy> = {
       )[tier],
     animeClue: "Anime clue",
     scene: "Scene",
+    openMap: "Open map",
+    mapGuessTitle: "Pick your guess",
+    closePanel: "Close",
+    guessSelected: "Place selected",
     answer: "Answer",
     roundScore: "Round score",
     distancePts: "Distance",
@@ -610,6 +626,103 @@ function AnimeClueImage({
   );
 }
 
+function useCompactViewport() {
+  const [matches, setMatches] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setMatches(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return matches;
+}
+
+function AnimeCluePanel({
+  question,
+  text,
+  copy,
+  loadMessage,
+  className,
+  onClose,
+}: {
+  question: AnimeGuessrQuestion;
+  text: AnimeGuessrQuestionText;
+  copy: GameCopy;
+  loadMessage: string;
+  className: string;
+  onClose?: () => void;
+}) {
+  return (
+    <aside
+      className={`anime-panel flex flex-col gap-3 overflow-y-auto ${className}`}
+    >
+      {onClose && (
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-bold text-cyan-100/70">
+            {copy.animeClue}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 rounded-lg border border-white/10 px-3 text-sm font-bold text-pink-50/80 transition hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+          >
+            {copy.closePanel}
+          </button>
+        </div>
+      )}
+
+      <AnimeClueImage
+        question={question}
+        text={text}
+        imageUnavailable={copy.imageUnavailable}
+        imageMissingBase={copy.imageMissingBase}
+      />
+
+      <div>
+        {!onClose && (
+          <div className="text-sm font-bold text-cyan-100/70">
+            {copy.animeClue}
+          </div>
+        )}
+        <h2 className="mt-1 text-xl font-black text-pink-100 sm:text-2xl">
+          {text.animeTitle}
+        </h2>
+        {question.year != null && (
+          <div className="mt-1 text-sm text-pink-50/60">{question.year}</div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50">
+        {redactAnswerTerms(text.description, [
+          text.location,
+          text.answerName,
+          question.location,
+        ])}
+      </div>
+
+      {text.aspect && (
+        <div className="text-sm leading-6 text-pink-50/70">
+          {copy.scene}:{" "}
+          {redactAnswerTerms(text.aspect, [
+            text.location,
+            text.answerName,
+            question.location,
+          ])}
+        </div>
+      )}
+
+      {loadMessage && (
+        <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-xs leading-5 text-cyan-50">
+          {loadMessage}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 export default function AnimeGuessrPage() {
   const { ready, session } = useEmailSession();
   const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
@@ -628,6 +741,8 @@ export default function AnimeGuessrPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [round, setRound] = useState(0);
   const [phase, setPhase] = useState<Phase>("playing");
+  const [mobileClueOpen, setMobileClueOpen] = useState(false);
+  const [mobileMapOpen, setMobileMapOpen] = useState(false);
   const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
   const [results, setResults] = useState<AnimeRoundResult[]>([]);
   const [roundCount, setRoundCount] =
@@ -642,6 +757,7 @@ export default function AnimeGuessrPage() {
   const copy = GAME_COPY[locale];
   const googleMapLabels = getGoogleGuessMapLabels(locale);
   const googleMapsLanguage = getGoogleMapsLanguage(locale);
+  const isCompactViewport = useCompactViewport();
   const gameNextUrl = useMemo(
     () => withAnimeLocale("/game/anime", locale),
     [locale],
@@ -682,6 +798,17 @@ export default function AnimeGuessrPage() {
     loadState === "ready" && phase !== "final" && !guestBlocked,
     gameTimerKey,
   );
+
+  useEffect(() => {
+    setMobileClueOpen(false);
+    setMobileMapOpen(false);
+  }, [current?.id]);
+
+  useEffect(() => {
+    if (!roundResult) return;
+    setMobileClueOpen(false);
+    setMobileMapOpen(false);
+  }, [roundResult]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1339,10 +1466,12 @@ export default function AnimeGuessrPage() {
   }
 
   return (
-    <main className="anime-shell flex h-screen flex-col text-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-950/60 px-4 py-3 backdrop-blur sm:px-6">
+    <main className="anime-shell flex h-dvh flex-col overflow-hidden text-white">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-slate-950/70 px-3 py-2 backdrop-blur sm:gap-3 sm:px-6 sm:py-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-black text-pink-200">AniGuessr</h1>
+          <h1 className="text-lg font-black text-pink-200 sm:text-xl">
+            AniGuessr
+          </h1>
           <Link
             href="/"
             className="text-xs font-bold text-cyan-100/60 transition hover:text-cyan-100 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
@@ -1350,9 +1479,9 @@ export default function AnimeGuessrPage() {
             {copy.home}
           </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           {!session && guestProgress && (
-            <span className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-3 py-1 text-xs font-bold text-cyan-50">
+            <span className="hidden rounded-full border border-cyan-200/20 bg-cyan-200/10 px-3 py-1 text-xs font-bold text-cyan-50 min-[390px]:inline-flex">
               {copy.guestRemainingShort(getGuestGamesRemaining(guestProgress))}
             </span>
           )}
@@ -1386,55 +1515,58 @@ export default function AnimeGuessrPage() {
           )}
         </section>
 
-        {!roundResult && current && currentText && (
-          <aside className="anime-panel absolute top-4 left-4 z-20 flex max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] flex-col gap-3 overflow-y-auto p-4">
-            <AnimeClueImage
+        {!roundResult &&
+          current &&
+          currentText &&
+          isCompactViewport === false && (
+            <AnimeCluePanel
               question={current}
               text={currentText}
-              imageUnavailable={copy.imageUnavailable}
-              imageMissingBase={copy.imageMissingBase}
+              copy={copy}
+              loadMessage={loadMessage}
+              className="absolute top-4 left-4 z-20 max-h-[calc(100dvh-7rem)] w-[min(calc(100vw-2rem),400px)] p-4"
             />
+          )}
 
-            <div>
-              <div className="text-sm font-bold text-cyan-100/70">
-                {copy.animeClue}
-              </div>
-              <h2 className="mt-1 text-2xl font-black text-pink-100">
-                {currentText.animeTitle}
-              </h2>
-              {current.year != null && (
-                <div className="mt-1 text-sm text-pink-50/60">
-                  {current.year}
-                </div>
-              )}
-            </div>
+        {!roundResult &&
+          current &&
+          currentText &&
+          isCompactViewport === true &&
+          !mobileClueOpen && (
+            <button
+              type="button"
+              onClick={() => {
+                setMobileClueOpen(true);
+                setMobileMapOpen(false);
+              }}
+              className="anime-panel absolute top-3 left-3 z-30 min-h-11 max-w-[calc(100vw-1.5rem)] rounded-xl px-3 text-sm font-black text-pink-50 shadow-lg shadow-black/35"
+            >
+              {copy.animeClue}
+            </button>
+          )}
 
-            <div className="rounded-xl border border-pink-300/20 bg-pink-300/10 px-3 py-2 text-sm leading-6 text-pink-50">
-              {redactAnswerTerms(currentText.description, [
-                currentText.location,
-                currentText.answerName,
-                current.location,
-              ])}
-            </div>
-
-            {currentText.aspect && (
-              <div className="text-sm leading-6 text-pink-50/70">
-                {copy.scene}:{" "}
-                {redactAnswerTerms(currentText.aspect, [
-                  currentText.location,
-                  currentText.answerName,
-                  current.location,
-                ])}
-              </div>
-            )}
-
-            {loadMessage && (
-              <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-xs leading-5 text-cyan-50">
-                {loadMessage}
-              </div>
-            )}
-          </aside>
-        )}
+        {!roundResult &&
+          current &&
+          currentText &&
+          isCompactViewport === true &&
+          mobileClueOpen && (
+            <>
+              <button
+                type="button"
+                aria-label={copy.closePanel}
+                className="absolute inset-0 z-40 bg-black/45"
+                onClick={() => setMobileClueOpen(false)}
+              />
+              <AnimeCluePanel
+                question={current}
+                text={currentText}
+                copy={copy}
+                loadMessage={loadMessage}
+                onClose={() => setMobileClueOpen(false)}
+                className="absolute inset-x-3 top-3 z-50 max-h-[min(72dvh,560px)] p-3"
+              />
+            </>
+          )}
 
         {roundResult && roundResultText && (
           <aside className="absolute top-[42%] right-0 bottom-0 left-0 z-30 flex flex-col gap-4 overflow-y-auto border-t border-white/10 bg-slate-950/95 p-5 backdrop-blur lg:top-0 lg:left-auto lg:w-[400px] lg:border-t-0 lg:border-l">
@@ -1534,39 +1666,49 @@ export default function AnimeGuessrPage() {
           </aside>
         )}
 
-        <div
-          className={
-            roundResult
-              ? "absolute inset-x-0 top-0 z-10 h-[42%] lg:inset-y-0 lg:right-[400px] lg:left-0 lg:h-auto"
-              : "group fixed right-3 bottom-3 z-40 h-44 w-56 transition-all duration-200 ease-out focus-within:h-[min(72dvh,640px)] focus-within:w-[min(calc(100vw-1.5rem),920px)] hover:h-[min(72dvh,640px)] hover:w-[min(calc(100vw-1.5rem),920px)] focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-300 sm:right-5 sm:bottom-5 sm:h-48 sm:w-64"
-          }
-        >
-          <section
-            className={`flex h-full min-h-0 flex-col overflow-hidden bg-slate-950 shadow-lg shadow-black/40 ${
-              roundResult
-                ? "border-b border-white/10 lg:border-r lg:border-b-0"
-                : "rounded-xl border border-white/15"
-            }`}
-          >
-            <div className="min-h-0 flex-1 bg-stone-900">
-              <GoogleGuessMap
-                country={DEFAULT_FOREIGN_COUNTRY}
-                guess={mapGuess}
-                answer={mapAnswer}
-                answerLabel={roundResultText?.answerName}
-                distanceKm={roundResult?.distanceKm}
-                disabled={Boolean(roundResult)}
-                labels={googleMapLabels}
-                googleMapsLanguage={googleMapsLanguage}
-                formatDistance={(distanceKm) =>
-                  formatDistance(distanceKm, locale)
-                }
-                minHeightClass="min-h-0"
-                onGuess={setGuess}
-              />
-            </div>
+        {roundResult && (
+          <div className="absolute inset-x-0 top-0 z-10 h-[42%] lg:inset-y-0 lg:right-[400px] lg:left-0 lg:h-auto">
+            <section className="flex h-full min-h-0 flex-col overflow-hidden border-b border-white/10 bg-slate-950 shadow-lg shadow-black/40 lg:border-r lg:border-b-0">
+              <div className="min-h-0 flex-1 bg-stone-900">
+                <GoogleGuessMap
+                  country={DEFAULT_FOREIGN_COUNTRY}
+                  guess={mapGuess}
+                  answer={mapAnswer}
+                  answerLabel={roundResultText?.answerName}
+                  distanceKm={roundResult.distanceKm}
+                  disabled
+                  labels={googleMapLabels}
+                  googleMapsLanguage={googleMapsLanguage}
+                  formatDistance={(distanceKm) =>
+                    formatDistance(distanceKm, locale)
+                  }
+                  minHeightClass="min-h-0"
+                  onGuess={setGuess}
+                />
+              </div>
+            </section>
+          </div>
+        )}
 
-            {!roundResult && (
+        {!roundResult && isCompactViewport === false && (
+          <div className="group fixed right-3 bottom-3 z-40 h-44 w-56 transition-all duration-200 ease-out focus-within:h-[min(72dvh,640px)] focus-within:w-[min(calc(100vw-1.5rem),920px)] hover:h-[min(72dvh,640px)] hover:w-[min(calc(100vw-1.5rem),920px)] focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-300 sm:right-5 sm:bottom-5 sm:h-48 sm:w-64">
+            <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-white/15 bg-slate-950 shadow-lg shadow-black/40">
+              <div className="min-h-0 flex-1 bg-stone-900">
+                <GoogleGuessMap
+                  country={DEFAULT_FOREIGN_COUNTRY}
+                  guess={guess}
+                  answer={null}
+                  disabled={false}
+                  labels={googleMapLabels}
+                  googleMapsLanguage={googleMapsLanguage}
+                  formatDistance={(distanceKm) =>
+                    formatDistance(distanceKm, locale)
+                  }
+                  minHeightClass="min-h-0"
+                  onGuess={setGuess}
+                />
+              </div>
+
               <div className="hidden border-t border-white/10 bg-slate-950/95 p-2 transition group-focus-within:block group-hover:block">
                 <button
                   type="button"
@@ -1577,9 +1719,81 @@ export default function AnimeGuessrPage() {
                   {copy.submitGuess}
                 </button>
               </div>
-            )}
-          </section>
-        </div>
+            </section>
+          </div>
+        )}
+
+        {!roundResult && isCompactViewport === true && !mobileMapOpen && (
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMapOpen(true);
+              setMobileClueOpen(false);
+            }}
+            className="anime-button fixed right-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-40 min-h-12 rounded-xl px-4 shadow-lg shadow-black/35"
+          >
+            {guess ? copy.guessSelected : copy.openMap}
+          </button>
+        )}
+
+        {!roundResult && isCompactViewport === true && mobileMapOpen && (
+          <>
+            <button
+              type="button"
+              aria-label={copy.closePanel}
+              className="fixed inset-0 z-40 bg-black/55"
+              onClick={() => setMobileMapOpen(false)}
+            />
+            <section className="fixed inset-x-0 bottom-0 z-50 flex max-h-[calc(100dvh-0.75rem)] flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/50">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                <div>
+                  <div className="text-sm font-black text-pink-100">
+                    {copy.mapGuessTitle}
+                  </div>
+                  {guess && (
+                    <div className="mt-0.5 text-xs font-bold text-cyan-100/70">
+                      {copy.guessSelected}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMapOpen(false)}
+                  className="min-h-11 rounded-lg border border-white/10 px-3 text-sm font-bold text-pink-50/80 transition hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+                >
+                  {copy.closePanel}
+                </button>
+              </div>
+
+              <div className="h-[min(52dvh,440px)] min-h-[300px] bg-stone-900">
+                <GoogleGuessMap
+                  country={DEFAULT_FOREIGN_COUNTRY}
+                  guess={guess}
+                  answer={null}
+                  disabled={false}
+                  labels={googleMapLabels}
+                  googleMapsLanguage={googleMapsLanguage}
+                  formatDistance={(distanceKm) =>
+                    formatDistance(distanceKm, locale)
+                  }
+                  minHeightClass="min-h-0"
+                  onGuess={setGuess}
+                />
+              </div>
+
+              <div className="shrink-0 border-t border-white/10 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!guess}
+                  className="anime-button w-full text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {copy.submitGuess}
+                </button>
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </main>
   );

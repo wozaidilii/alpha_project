@@ -226,6 +226,7 @@ export const metadata: Metadata = {
 - Gameplay/result phase transitions should preserve expensive third-party map instances when the same map surface is reused. Update markers, lines, disabled state, and layout classes through props instead of unmounting a guess map and mounting a separate result map.
 - Persistent guess maps must also reset their viewport when a new round starts with no guess and no answer. Result states may `fitBounds` to the guess/answer pair, but clearing the result for the next round must restore the active country/world overview instead of inheriting the previous answer-area viewport.
 - If a mode is street-view-first but has extra image/text clues, keep the panorama as the primary viewport and render clues as an overlay panel instead of replacing the panorama.
+- Touch layouts for street-view-first modes must expose clue and guess-map controls as explicit tap targets. Do not rely on hover/focus expansion for critical mobile gameplay controls; use compact buttons plus a bottom sheet or similar touch-native panel.
 - Result-page continuation links for Google Street View should use Google Maps URLs with `api=1`, `map_action=pano`, and answer coordinates as the `viewpoint`. Keep crawl/source URLs internal for traceability; do not expose third-party source links such as Anitabi as user-facing CTAs.
 - Google Maps JavaScript API loaders in localized anime flows must pass the selected site locale as the SDK `language` parameter (`zh -> zh-CN`, `ja -> ja`, `en -> en`) so map controls, result maps, and Street View UI align with the user's language selection.
 
@@ -251,6 +252,7 @@ export const metadata: Metadata = {
 - Unit tests for Google Maps continuation URL helpers when adding or changing external Street View links.
 - Type-check/lint after adding SDK wrapper types.
 - Browser smoke for mode entry and provider error/loading/ready states when credentials are available.
+- Mobile viewport smoke for street-view-first answer screens when changing clue/map overlays, especially 375px-wide portrait layouts where hover is unavailable.
 
 #### 7. Wrong vs Correct
 
