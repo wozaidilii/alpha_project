@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatYear } from "~/lib/scoring";
 import {
   MIN_YEAR,
@@ -34,11 +34,13 @@ export function TimelineSlider({
   const [editing, setEditing] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
 
-  function clamp(y: number) {
-    return isModernRange
-      ? clampYearInRange(y, minYear, maxYear)
-      : clampYear(y);
-  }
+  const clamp = useCallback(
+    (y: number) =>
+      isModernRange
+        ? clampYearInRange(y, minYear, maxYear)
+        : clampYear(y),
+    [isModernRange, minYear, maxYear],
+  );
 
   function toSlider(y: number) {
     return isModernRange
@@ -67,7 +69,7 @@ export function TimelineSlider({
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-  }, [value, onChange, minYear, maxYear, isModernRange]);
+  }, [value, onChange, clamp]);
 
   const percent = isModernRange
     ? ((clamp(value) - minYear) / (maxYear - minYear)) * 100

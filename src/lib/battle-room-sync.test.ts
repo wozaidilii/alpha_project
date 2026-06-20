@@ -48,16 +48,16 @@ describe("mergeBattleLobbyPlayers", () => {
 
   it("drops stale pusher-only players after the grace window", () => {
     const now = Date.now();
-    expect(
-      mergeBattleLobbyPlayers(
-        { host: player("host"), guest: player("guest") },
-        { host: player("host") },
-        player("host"),
-        { guest: now - BATTLE_LOBBY_PUSHER_PENDING_MS - 1 },
-        now,
-      ),
-    ).toEqual({
-      host: expect.objectContaining({ id: "host" }),
-    });
+    const result = mergeBattleLobbyPlayers(
+      { host: player("host"), guest: player("guest") },
+      { host: player("host") },
+      player("host"),
+      { guest: now - BATTLE_LOBBY_PUSHER_PENDING_MS - 1 },
+      now,
+    );
+
+    expect(Object.keys(result).sort()).toEqual(["host"]);
+    expect(result.host?.id).toBe("host");
+    expect(result.guest).toBeUndefined();
   });
 });

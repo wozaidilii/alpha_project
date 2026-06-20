@@ -18,6 +18,7 @@ import {
   updateSoloHighScore,
   verifyEmailLoginCode,
 } from "~/server/data/player-store";
+import { ANIME_GUESSR_DIFFICULTY_TIERS } from "~/lib/anime-guessr";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
 
 const activityPayloadSchema = z.record(
@@ -320,6 +321,7 @@ export const playerRouter = createTRPCRouter({
         country: z.string().trim().min(1).max(80),
         mode: z.string().trim().min(1).max(40),
         rounds: z.number().int().nonnegative().max(20),
+        difficultyTier: z.enum(ANIME_GUESSR_DIFFICULTY_TIERS).optional(),
       }),
     )
     .mutation(({ input }) => {
@@ -333,6 +335,7 @@ export const playerRouter = createTRPCRouter({
           token: z.string().min(1).optional(),
           limit: z.number().int().min(1).max(50).optional(),
           rounds: z.union([z.literal(5), z.literal(10)]).optional(),
+          difficultyTier: z.enum(ANIME_GUESSR_DIFFICULTY_TIERS).optional(),
         })
         .optional(),
     )

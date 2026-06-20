@@ -1125,6 +1125,7 @@ export default function AnimeGuessrPage() {
         country: "japan",
         mode: "anime",
         rounds: roundCount,
+        difficultyTier,
       });
       capturePostHogEvent(
         POSTHOG_EVENTS.animeGameCompleted,
@@ -1149,6 +1150,7 @@ export default function AnimeGuessrPage() {
       country: "japan",
       mode: "anime",
       rounds: roundCount,
+      difficultyTier,
     });
     capturePostHogEvent(POSTHOG_EVENTS.animeGameCompleted, {
       score: totalScore,
@@ -1169,6 +1171,7 @@ export default function AnimeGuessrPage() {
     reloadKey,
     results,
     roundCount,
+    difficultyTier,
     session,
     totalElapsedSeconds,
     totalScore,

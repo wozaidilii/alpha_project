@@ -46,6 +46,8 @@ async function loadLeaflet() {
   return import("leaflet");
 }
 
+type LeafletModule = Awaited<ReturnType<typeof loadLeaflet>>;
+
 /** 仅销毁仍拥有容器的地图实例，避免 Strict Mode 竞态报错 */
 function safeRemoveMap(map: LeafletMap) {
   const container = map.getContainer() as LeafletContainer;
@@ -59,7 +61,7 @@ function safeRemoveMap(map: LeafletMap) {
   }
 }
 
-function addGeoqTileLayer(map: LeafletMap, L: typeof import("leaflet")) {
+function addGeoqTileLayer(map: LeafletMap, L: LeafletModule) {
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution:
       '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -77,7 +79,7 @@ function addGeoqTileLayer(map: LeafletMap, L: typeof import("leaflet")) {
 
 function createChinaMap(
   container: HTMLElement,
-  L: typeof import("leaflet"),
+  L: LeafletModule,
   options?: { scrollWheelZoom?: boolean },
 ) {
   const map = L.map(container, {
@@ -102,7 +104,7 @@ function createChinaMap(
 
 function fitMapToChinaPoints(
   map: LeafletMap,
-  L: typeof import("leaflet"),
+  L: LeafletModule,
   points: LatLng[],
 ) {
   if (points.length === 0) return;
@@ -125,7 +127,7 @@ function fitMapToChinaPoints(
 
 function addCircleMarker(
   map: LeafletMap,
-  L: typeof import("leaflet"),
+  L: LeafletModule,
   point: LatLng,
   color: string,
   radius = 10,

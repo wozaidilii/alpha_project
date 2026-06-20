@@ -16,6 +16,11 @@ import { sendEmailVerificationCode } from "~/server/email/verification-code";
 import { sql } from "~/server/db/client";
 import { normalizeCountryCode } from "~/lib/country";
 import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  normalizeAnimeGuessrDifficultyTier,
+  type AnimeGuessrDifficultyTier,
+} from "~/lib/anime-guessr";
+import {
   type BattleHistoryRecord,
   type BattleOutcome,
   type LeaderboardEntry,
@@ -126,6 +131,7 @@ interface RecordGameSessionInput {
   country: string;
   mode: string;
   rounds: number;
+  difficultyTier?: AnimeGuessrDifficultyTier;
 }
 
 interface RegistrationMeta {
@@ -496,6 +502,7 @@ export async function recordGameSession(
       country,
       mode,
       rounds,
+      difficulty_tier,
       played_at
     )
     values (
@@ -506,6 +513,9 @@ export async function recordGameSession(
       ${input.country.trim().slice(0, 80) || "global"},
       ${input.mode.trim().slice(0, 40) || "anime"},
       ${Math.max(0, Math.round(input.rounds))},
+      ${normalizeAnimeGuessrDifficultyTier(
+        input.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+      )},
       ${new Date()}
     )
   `;
@@ -520,6 +530,9 @@ export async function recordGameSession(
         country: input.country,
         mode: input.mode,
         rounds: Math.max(0, Math.round(input.rounds)),
+        difficultyTier: normalizeAnimeGuessrDifficultyTier(
+          input.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+        ),
       },
     });
   }
@@ -532,10 +545,14 @@ export async function getAnimeLeaderboard(
     token?: string;
     limit?: number;
     rounds?: number;
+    difficultyTier?: AnimeGuessrDifficultyTier;
   } = {},
 ): Promise<LeaderboardResult> {
   const limit = Math.min(Math.max(Math.round(input.limit ?? 20), 1), 50);
   const rounds = input.rounds === 10 ? 10 : 5;
+  const difficultyTier = normalizeAnimeGuessrDifficultyTier(
+    input.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  );
   const currentUser = input.token
     ? await requirePlayerByToken(input.token)
     : null;
@@ -556,6 +573,7 @@ export async function getAnimeLeaderboard(
       where gs.user_id is not null
         and gs.mode = 'anime'
         and gs.rounds = ${rounds}
+        and gs.difficulty_tier = ${difficultyTier}
     ),
     ranked as (
       select
@@ -602,6 +620,7 @@ export async function getAnimeLeaderboard(
         where gs.user_id is not null
           and gs.mode = 'anime'
           and gs.rounds = ${rounds}
+          and gs.difficulty_tier = ${difficultyTier}
       ),
       ranked as (
         select

@@ -15,6 +15,7 @@ import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
 import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
 import {
   ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  ANIME_GUESSR_DIFFICULTY_TIERS,
   getStoredAnimeGuessrDifficultyTier,
   getStoredAnimeGuessrRoundCount,
   saveAnimeGuessrDifficultyTier,
@@ -306,6 +307,8 @@ function avatarImageStyle(
 export default function Home() {
   const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [leaderboardRounds, setLeaderboardRounds] = useState<5 | 10>(5);
+  const [leaderboardDifficultyTier, setLeaderboardDifficultyTier] =
+    useState<AnimeGuessrDifficultyTier>(ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER);
   const [selectedRoundCount, setSelectedRoundCount] =
     useState<AnimeGuessrRoundCount>(5);
   const [difficultyTier, setDifficultyTier] = useState<AnimeGuessrDifficultyTier>(
@@ -334,7 +337,12 @@ export default function Home() {
     { enabled: Boolean(session?.token), retry: false },
   );
   const leaderboardQuery = api.player.leaderboard.useQuery(
-    { token: session?.token, limit: 8, rounds: leaderboardRounds },
+    {
+      token: session?.token,
+      limit: 8,
+      rounds: leaderboardRounds,
+      difficultyTier: leaderboardDifficultyTier,
+    },
     { retry: false },
   );
   const updateProfile = api.player.updateProfile.useMutation({
@@ -360,6 +368,7 @@ export default function Home() {
     setLocale(getStoredAnimeLocale());
     setSelectedRoundCount(getStoredAnimeGuessrRoundCount());
     setDifficultyTier(getStoredAnimeGuessrDifficultyTier());
+    setLeaderboardDifficultyTier(getStoredAnimeGuessrDifficultyTier());
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
     if (storedSession) identifyPostHogUser(storedSession.user);
@@ -767,23 +776,41 @@ export default function Home() {
 
           <aside className="lg:pt-8">
             <section className="anime-panel p-4">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-black text-white">
-                  {copy.leaderboardTitle}
-                </h2>
-                <div className="flex overflow-hidden rounded-full border border-white/10">
-                  {([5, 10] as const).map((rounds) => (
+              <div className="mb-4 flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-lg font-black text-white">
+                    {copy.leaderboardTitle}
+                  </h2>
+                  <div className="flex overflow-hidden rounded-full border border-white/10">
+                    {([5, 10] as const).map((rounds) => (
+                      <button
+                        key={rounds}
+                        type="button"
+                        onClick={() => setLeaderboardRounds(rounds)}
+                        className={`px-3 py-1 text-xs font-black transition ${
+                          leaderboardRounds === rounds
+                            ? "bg-cyan-200/20 text-cyan-50"
+                            : "bg-white/5 text-pink-50/70 hover:bg-white/10"
+                        }`}
+                      >
+                        {copy.leaderboardRounds(rounds)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap overflow-hidden rounded-full border border-white/10">
+                  {ANIME_GUESSR_DIFFICULTY_TIERS.map((tier) => (
                     <button
-                      key={rounds}
+                      key={tier}
                       type="button"
-                      onClick={() => setLeaderboardRounds(rounds)}
-                      className={`px-3 py-1 text-xs font-black transition ${
-                        leaderboardRounds === rounds
-                          ? "bg-cyan-200/20 text-cyan-50"
+                      onClick={() => setLeaderboardDifficultyTier(tier)}
+                      className={`px-2.5 py-1 text-[11px] font-black transition sm:px-3 sm:text-xs ${
+                        leaderboardDifficultyTier === tier
+                          ? "bg-pink-300/20 text-pink-50"
                           : "bg-white/5 text-pink-50/70 hover:bg-white/10"
                       }`}
                     >
-                      {copy.leaderboardRounds(rounds)}
+                      {copy.difficultyOption(tier)}
                     </button>
                   ))}
                 </div>

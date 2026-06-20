@@ -118,8 +118,20 @@ create table if not exists game_sessions (
   country text not null,
   mode text not null default 'anime',
   rounds integer not null default 0 check (rounds >= 0),
+  difficulty_tier text not null default 'beginner'
+    check (difficulty_tier in ('beginner', 'intermediate', 'master', 'miracle')),
   played_at timestamptz not null default now()
 );
+
+alter table game_sessions
+  add column if not exists difficulty_tier text not null default 'beginner';
+
+alter table game_sessions
+  drop constraint if exists game_sessions_difficulty_tier_check;
+
+alter table game_sessions
+  add constraint game_sessions_difficulty_tier_check
+  check (difficulty_tier in ('beginner', 'intermediate', 'master', 'miracle'));
 
 create index if not exists game_sessions_user_played_at_idx
   on game_sessions(user_id, played_at desc);
@@ -129,6 +141,9 @@ create index if not exists game_sessions_guest_played_at_idx
 
 create index if not exists game_sessions_mode_played_at_idx
   on game_sessions(mode, played_at desc);
+
+create index if not exists game_sessions_anime_leaderboard_idx
+  on game_sessions(mode, rounds, difficulty_tier, score desc);
 
 create table if not exists battle_history_records (
   id text primary key,
