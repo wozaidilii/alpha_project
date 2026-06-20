@@ -235,3 +235,10 @@
 - 根因：`StreetViewPanorama` widget 构造成功不代表该坐标或 pano 有可渲染街景；没有先调用 `StreetViewService.getPanorama` 确认 `OK`，因此 `ZERO_RESULTS`、无效 pano 或服务超时会被误判成 ready。
 - 修复：抽出 `confirmGoogleStreetViewLocation`，渲染前用 Street View service 带超时预检，只有拿到可用 pano/latLng 才创建 panorama；失败时触发 `onUnavailable`，个人模式复用已有跳题逻辑。
 - 预防：所有浏览器街景组件都要把 provider service 预检作为 ready 前置条件，并用测试覆盖 OK、ZERO_RESULTS 和 timeout；生成阶段确认过的点位也不能替代渲染阶段的可用性检查。
+
+## 分难度排行榜不能混入旧 beginner 成绩
+
+- 问题：排行榜切换到 intermediate、master、miracle 时仍显示同一批 beginner 真实用户成绩。
+- 根因：`getAnimeLeaderboard` 为兼容旧数据，在非 beginner 查询中把 cutoff 前的 `difficulty_tier = 'beginner'` 成绩并入了结果；迁移后旧成绩默认都是 beginner，导致所有难度榜看起来一样。
+- 修复：排行榜查询改为 `rounds` 和 `difficulty_tier` 都精确匹配当前筛选项；线上验证 5 局 intermediate/master/miracle 返回空，beginner 保留真实成绩。
+- 预防：分桶排行榜不能用历史 fallback 跨桶填充数据；迁移默认值只代表旧记录所属桶，不代表可展示到所有新桶。

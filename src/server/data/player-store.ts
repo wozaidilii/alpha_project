@@ -17,7 +17,6 @@ import { sql } from "~/server/db/client";
 import { normalizeCountryCode } from "~/lib/country";
 import {
   ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
-  ANIME_GUESSR_LEGACY_DIFFICULTY_CUTOFF,
   normalizeAnimeGuessrDifficultyTier,
   type AnimeGuessrDifficultyTier,
 } from "~/lib/anime-guessr";
@@ -554,10 +553,7 @@ export async function getAnimeLeaderboard(
   const difficultyTier = normalizeAnimeGuessrDifficultyTier(
     input.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   );
-  const legacyDifficultyCutoff = new Date(ANIME_GUESSR_LEGACY_DIFFICULTY_CUTOFF);
-  const currentUser = input.token
-    ? await getPlayerByToken(input.token)
-    : null;
+  const currentUser = input.token ? await getPlayerByToken(input.token) : null;
   const currentUserId = currentUser?.id;
 
   const rows = await sql<LeaderboardRow[]>`
@@ -575,14 +571,7 @@ export async function getAnimeLeaderboard(
       where gs.user_id is not null
         and gs.mode = 'anime'
         and gs.rounds = ${rounds}
-        and (
-          gs.difficulty_tier = ${difficultyTier}
-          or (
-            ${difficultyTier} <> 'beginner'
-            and gs.difficulty_tier = 'beginner'
-            and gs.played_at < ${legacyDifficultyCutoff}
-          )
-        )
+        and gs.difficulty_tier = ${difficultyTier}
     ),
     ranked as (
       select
@@ -629,14 +618,7 @@ export async function getAnimeLeaderboard(
         where gs.user_id is not null
           and gs.mode = 'anime'
           and gs.rounds = ${rounds}
-          and (
-            gs.difficulty_tier = ${difficultyTier}
-            or (
-              ${difficultyTier} <> 'beginner'
-              and gs.difficulty_tier = 'beginner'
-              and gs.played_at < ${legacyDifficultyCutoff}
-            )
-          )
+          and gs.difficulty_tier = ${difficultyTier}
       ),
       ranked as (
         select

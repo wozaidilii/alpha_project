@@ -20,6 +20,7 @@ import {
 import {
   BATTLE_MAX_PLAYERS,
   type BattlePlayer,
+  type BattleQuestion,
   type BattleRoundResult,
   type BattleSettings,
 } from "~/types/battle";
@@ -29,6 +30,32 @@ const settings: BattleSettings = {
   rounds: 3,
   questionType: "foreign",
 };
+
+function foreignQuestion(id: string): BattleQuestion {
+  return {
+    id: `foreign:${id}`,
+    type: "foreign" as const,
+    title: `${id} 街景`,
+    location: {
+      id,
+      title: `${id} 街景`,
+      province: "日本",
+      city: id,
+      lat: 35.6762,
+      lng: 139.6503,
+      heading: 0,
+      pitch: 0,
+      hint: "测试街景",
+      source: "google-random",
+    },
+  };
+}
+
+const questionDeck = [
+  foreignQuestion("tokyo"),
+  foreignQuestion("osaka"),
+  foreignQuestion("kyoto"),
+];
 
 function player(id: string, isHost = false): BattlePlayer {
   return {
@@ -87,25 +114,7 @@ describe("battle-room-store", () => {
       roomId: "ROOM03",
       settings,
       players,
-      questions: [
-        {
-          id: "foreign:tokyo",
-          type: "foreign",
-          title: "东京街景",
-          location: {
-            id: "tokyo",
-            title: "东京街景",
-            province: "日本",
-            city: "东京",
-            lat: 35.6762,
-            lng: 139.6503,
-            heading: 0,
-            pitch: 0,
-            hint: "测试街景",
-            source: "google-random",
-          },
-        },
-      ],
+      questions: questionDeck,
       roundIndex: 0,
       startTime: 12345,
     });
@@ -146,25 +155,7 @@ describe("battle-room-store", () => {
         host: player("host", true),
         guest: player("guest"),
       },
-      questions: [
-        {
-          id: "foreign:tokyo",
-          type: "foreign",
-          title: "东京街景",
-          location: {
-            id: "tokyo",
-            title: "东京街景",
-            province: "日本",
-            city: "东京",
-            lat: 35.6762,
-            lng: 139.6503,
-            heading: 0,
-            pitch: 0,
-            hint: "测试街景",
-            source: "google-random",
-          },
-        },
-      ],
+      questions: questionDeck,
       roundIndex: 0,
       startTime: 12345,
     });

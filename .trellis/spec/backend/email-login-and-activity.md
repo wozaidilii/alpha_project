@@ -67,7 +67,7 @@
 - Password reset may use email verification codes, but the UI must present it as a separate "forgot password" flow and not as the default login path. Reset-code requests should send to any existing `players.email` account, including legacy rows without `password_hash`; if the email is unknown, return the same generic success shape without creating a usable code.
 - Game clients may record player behavior only with a valid session token. Invalid tokens must return unauthorized errors and must not write activity rows.
 - Event payloads must remain shallow JSON primitives to keep analytics queries predictable.
-- Anime leaderboard entries are derived from each authenticated user's best `game_sessions` row where `mode = 'anime'`, sorted by score descending and played time ascending as the tie-breaker. Guest sessions may be stored for analytics but must not appear as named leaderboard entries.
+- Anime leaderboard entries are derived from each authenticated user's best `game_sessions` row where `mode = 'anime'`, `rounds` matches the selected tab, and `difficulty_tier` exactly matches the selected difficulty tab. Sort by score descending and played time ascending as the tie-breaker. Guest sessions may be stored for analytics but must not appear as named leaderboard entries.
 
 ### 4. Validation & Error Matrix
 
@@ -91,7 +91,7 @@
 - Good: a new user registers with email, unique username, and password; `players.name` is used later in battle mode display and `players.password_hash` contains only a salted hash.
 - Good: a legacy email-code-only player registers with the same email, unique username, and password; the existing player row is upgraded instead of creating a duplicate or blocking the user.
 - Good: a Google login creates a player with `provider = 'google'`, optional `avatar_url`, inferred `country_code` when a trusted edge header is present, and later lets the user change username and country from profile.
-- Good: a logged-in player completes an anime game; the leaderboard shows their best score, stored display name, and country flag from `players.country_code`.
+- Good: a logged-in player completes a beginner anime game; only the beginner leaderboard shows that score, with their stored display name and country flag from `players.country_code`.
 - Good: production has Resend credentials and a strong verification secret; a user requests a password reset code, enters it once, receives a session, and later gameplay records are linked by `player_id`.
 - Base: development lacks email credentials; the request returns `delivery: "debug"` and `debugCode`, allowing local testing without bypassing the verification-code path.
 - Bad: a tRPC procedure that accepts only an email and returns a `PlayerSession`; this bypasses code verification.
