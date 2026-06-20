@@ -16,23 +16,23 @@ export const metadata: Metadata = {
   icons: [
     {
       rel: "icon",
-      url: "/icon-192.png?v=20260619",
+      url: "/icon-192.png?v=20260620",
       type: "image/png",
       sizes: "192x192",
     },
     {
       rel: "icon",
-      url: "/icon-512.png?v=20260619",
+      url: "/icon-512.png?v=20260620",
       type: "image/png",
       sizes: "512x512",
     },
     {
       rel: "apple-touch-icon",
-      url: "/apple-touch-icon.png?v=20260619",
+      url: "/apple-touch-icon.png?v=20260620",
       type: "image/png",
       sizes: "180x180",
     },
-    { rel: "shortcut icon", url: "/favicon.ico?v=20260619" },
+    { rel: "shortcut icon", url: "/favicon.ico?v=20260620" },
   ],
 };
 
