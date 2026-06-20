@@ -59,10 +59,14 @@ interface GoogleStreetViewPanoramaData {
   location?: GoogleStreetViewLocation;
 }
 
-interface GoogleStreetViewRequest {
-  location: LatLng;
-  radius: number;
-}
+type GoogleStreetViewRequest =
+  | {
+      location: LatLng;
+      radius: number;
+    }
+  | {
+      pano: string;
+    };
 
 interface GoogleStreetViewService {
   getPanorama: (
@@ -161,6 +165,9 @@ export interface GoogleStreetViewLookupResult {
   point: LatLng;
   panoId?: string;
 }
+
+export const GOOGLE_STREET_VIEW_RENDER_RADIUS_METERS = 150;
+export const GOOGLE_STREET_VIEW_RENDER_TIMEOUT_MS = 3200;
 
 interface CandidatePoint {
   point: LatLng;
@@ -321,11 +328,11 @@ function extractStreetViewResult(
   };
 }
 
-function getStreetViewNear(
-  api: GoogleMapsApi,
-  country: ForeignCountryConfig,
-  candidate: LatLng,
-): Promise<GoogleStreetViewLookupResult | null> {
+function requestGoogleStreetViewPanorama(
+  api: Pick<GoogleMapsApi, "StreetViewService" | "StreetViewStatus">,
+  request: GoogleStreetViewRequest,
+  timeoutMs: number,
+): Promise<GoogleStreetViewPanoramaData | null> {
   return new Promise((resolve) => {
     let service: GoogleStreetViewService;
     try {
@@ -336,36 +343,79 @@ function getStreetViewNear(
     }
 
     let settled = false;
-    const timer = window.setTimeout(() => {
+    const settle = (data: GoogleStreetViewPanoramaData | null) => {
       if (settled) return;
       settled = true;
-      resolve(null);
-    }, 2400);
+      globalThis.clearTimeout(timer);
+      resolve(data);
+    };
+
+    const timer = globalThis.setTimeout(() => settle(null), timeoutMs);
 
     try {
-      service.getPanorama(
-        {
-          location: candidate,
-          radius: country.streetViewSearchRadiusMeters,
-        },
-        (data, status) => {
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timer);
-          if (status !== api.StreetViewStatus.OK) {
-            resolve(null);
-            return;
-          }
-          resolve(extractStreetViewResult(data, country));
-        },
-      );
+      service.getPanorama(request, (data, status) => {
+        if (status !== api.StreetViewStatus.OK) {
+          settle(null);
+          return;
+        }
+        settle(data);
+      });
     } catch {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      resolve(null);
+      settle(null);
     }
   });
+}
+
+function getStreetViewNear(
+  api: GoogleMapsApi,
+  country: ForeignCountryConfig,
+  candidate: LatLng,
+): Promise<GoogleStreetViewLookupResult | null> {
+  return requestGoogleStreetViewPanorama(
+    api,
+    {
+      location: candidate,
+      radius: country.streetViewSearchRadiusMeters,
+    },
+    2400,
+  ).then((data) => extractStreetViewResult(data, country));
+}
+
+export async function confirmGoogleStreetViewLocation(
+  api: Pick<GoogleMapsApi, "StreetViewService" | "StreetViewStatus">,
+  location: Pick<TuxunLocation, "lat" | "lng" | "panoId">,
+  options: { radiusMeters?: number; timeoutMs?: number } = {},
+): Promise<GoogleStreetViewLookupResult | null> {
+  const data = await requestGoogleStreetViewPanorama(
+    api,
+    location.panoId
+      ? { pano: location.panoId }
+      : {
+          location: { lat: location.lat, lng: location.lng },
+          radius:
+            options.radiusMeters ?? GOOGLE_STREET_VIEW_RENDER_RADIUS_METERS,
+        },
+    options.timeoutMs ?? GOOGLE_STREET_VIEW_RENDER_TIMEOUT_MS,
+  );
+
+  if (!data) return null;
+
+  const latLng = data.location?.latLng;
+  const panoId = data.location?.pano ?? location.panoId;
+  if (!latLng && !panoId) return null;
+
+  return {
+    point: latLng
+      ? {
+          lat: latLng.lat(),
+          lng: latLng.lng(),
+        }
+      : {
+          lat: location.lat,
+          lng: location.lng,
+        },
+    ...(panoId ? { panoId } : {}),
+  };
 }
 
 function randomPointAroundCenter(center: LatLng, radiusKm: number): LatLng {
