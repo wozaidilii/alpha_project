@@ -38,6 +38,7 @@ import {
 } from "~/lib/anime-guessr";
 import {
   getBattleAnswerPoint,
+  getBattleQuestionDeckKey,
   isAnimeBattleQuestion,
   isAnimeTuxunBattleQuestion,
   isForeignBattleQuestion,
@@ -512,6 +513,8 @@ export function BattleGame({
   const phaseRef = useRef(phase);
   const hasJoinedLobbyRef = useRef(false);
   const pusherPendingPlayersRef = useRef<Record<string, number>>({});
+  const questionsLockedRef = useRef(false);
+  const syncedQuestionDeckKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -653,12 +656,63 @@ export function BattleGame({
     players: Record<string, BattlePlayer>,
     questions: BattleQuestion[],
   ) {
+    const deckKey = getBattleQuestionDeckKey(questions);
+    if (
+      questionsLockedRef.current &&
+      syncedQuestionDeckKeyRef.current !== deckKey
+    ) {
+      return;
+    }
+
+    questionsLockedRef.current = true;
+    syncedQuestionDeckKeyRef.current = deckKey;
     setSettings(settings);
-    setQuestions(questions);
-    setPlayers(players);
     settingsRef.current = settings;
+    setQuestions(questions);
     questionsRef.current = questions;
+    setPlayers(players);
     playersRef.current = players;
+  }
+
+  function isCompleteBattleQuestionDeck(
+    questions: BattleQuestion[] | undefined,
+    rounds: number,
+  ) {
+    return Boolean(questions?.length && questions.length >= rounds);
+  }
+
+  async function syncQuestionDeckFromServer(
+    roundIndex: number,
+    startTime: number,
+  ): Promise<boolean> {
+    const snapshot = await fetchBattleRoomSnapshot(roomId);
+    if (snapshot?.phase !== "playing") {
+      return false;
+    }
+    if (
+      !isCompleteBattleQuestionDeck(
+        snapshot.questions,
+        snapshot.settings.rounds,
+      )
+    ) {
+      return false;
+    }
+
+    const serverQuestions = snapshot.questions!;
+    const deckKey = getBattleQuestionDeckKey(serverQuestions);
+    if (
+      questionsLockedRef.current &&
+      syncedQuestionDeckKeyRef.current === deckKey
+    ) {
+      return true;
+    }
+    if (questionsLockedRef.current) {
+      return false;
+    }
+
+    applyGameStarted(snapshot.settings, snapshot.players, serverQuestions);
+    beginRound(roundIndex, startTime);
+    return true;
   }
 
   function syncSubmittedPlayers(
@@ -752,16 +806,18 @@ export function BattleGame({
   }
 
   async function handleRemoteGameStarted(data: PusherGameStarted) {
+    if (questionsLockedRef.current) return;
+
     setLobbyError("");
     setGameSyncing(true);
     try {
-      if (data.questions?.length) {
-        applyGameStarted(data.settings, data.players, data.questions);
-        beginRound(data.roundIndex, data.startTime);
-        return;
+      const synced = await syncQuestionDeckFromServer(
+        data.roundIndex,
+        data.startTime,
+      );
+      if (!synced) {
+        setLobbyError(copy.syncQuestionFailedRestart);
       }
-
-      setLobbyError(copy.syncQuestionFailedRestart);
     } catch {
       setLobbyError(copy.syncQuestionFailedNetwork);
     } finally {
@@ -787,15 +843,11 @@ export function BattleGame({
       return;
     }
 
-    if (questionsRef.current.length === 0) {
-      await handleRemoteGameStarted({
-        settings: snapshot.settings,
-        players: snapshot.players,
-        questionIds: snapshot.questionIds,
-        questions: snapshot.questions,
-        roundIndex: snapshot.roundIndex,
-        startTime: snapshot.startTime,
-      });
+    if (!questionsLockedRef.current && questionsRef.current.length === 0) {
+      await syncQuestionDeckFromServer(
+        snapshot.roundIndex,
+        snapshot.startTime,
+      );
     }
 
     syncRoomPlayState(snapshot);
@@ -1122,9 +1174,7 @@ export function BattleGame({
     });
 
     ch.bind("game-started", (data: PusherGameStarted) => {
-      // 房主已在本地开局，忽略 Pusher 回传
       if (isHost) return;
-      if (phaseRef.current !== "lobby") return;
       void handleRemoteGameStarted(data);
     });
 
@@ -1358,7 +1408,12 @@ export function BattleGame({
       ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   ): Promise<BattleQuestionLoadResult> {
     const questions = await fetchAnimeGuessrQuestions();
-    const picked = pickAnimeGuessrQuestions(questions, count, difficultyTier);
+    const picked = pickAnimeGuessrQuestions(
+      questions,
+      count,
+      difficultyTier,
+      `${roomId}:${difficultyTier}:${count}`,
+    );
 
     if (picked.length < count) {
       return {
@@ -1512,7 +1567,8 @@ export function BattleGame({
       }
 
       const startTime = Date.now();
-      const payload = {
+      const questionDeckKey = getBattleQuestionDeckKey(loaded.questions);
+      const startedPayload = {
         settings: nextSettings,
         players: initialPlayers,
         questions: loaded.questions,
@@ -1520,14 +1576,31 @@ export function BattleGame({
         startTime,
       } satisfies PusherGameStarted;
 
-      await postBattleRoomAction(roomId, {
+      const startedSnapshot = await postBattleRoomAction(roomId, {
         action: "started",
-        ...payload,
+        ...startedPayload,
       });
-      await sendPusherEvent(channel, "game-started", payload).catch(
-        () => undefined,
-      );
-      applyGameStarted(nextSettings, initialPlayers, loaded.questions);
+      const serverQuestions = startedSnapshot?.questions;
+      if (
+        !isCompleteBattleQuestionDeck(serverQuestions, nextSettings.rounds)
+      ) {
+        setLobbyError(copy.syncQuestionFailedRestart);
+        setGameSyncing(false);
+        setIsStarting(false);
+        await postBattleRoomAction(roomId, { action: "cancel-start" }).catch(
+          () => undefined,
+        );
+        return;
+      }
+
+      await sendPusherEvent(channel, "game-started", {
+        settings: nextSettings,
+        players: initialPlayers,
+        roundIndex: 0,
+        startTime,
+        questionDeckKey,
+      } satisfies PusherGameStarted).catch(() => undefined);
+      applyGameStarted(nextSettings, initialPlayers, serverQuestions!);
       beginRound(0, startTime);
     } catch (error) {
       setGameSyncing(false);

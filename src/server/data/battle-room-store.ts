@@ -49,7 +49,11 @@ function cloneSnapshot(snapshot: BattleRoomSnapshot): BattleRoomSnapshot {
     settings: { ...snapshot.settings },
     players: clonePlayers(snapshot.players),
     questionIds: snapshot.questionIds ? [...snapshot.questionIds] : undefined,
-    questions: snapshot.questions ? [...snapshot.questions] : undefined,
+    questions: snapshot.questions
+      ? snapshot.questions.map((question) =>
+          structuredClone(question),
+        )
+      : undefined,
     guesses: snapshot.guesses ? { ...snapshot.guesses } : undefined,
     results: snapshot.results ? cloneResults(snapshot.results) : undefined,
     roundReady: snapshot.roundReady ? { ...snapshot.roundReady } : undefined,
@@ -204,6 +208,13 @@ export function startBattleRoom(input: {
   startTime: number;
 }): BattleRoomSnapshot {
   const snapshot = getOrCreateRoom(input.roomId, input.settings);
+  if (
+    !input.questions?.length ||
+    input.questions.length < input.settings.rounds
+  ) {
+    throw new Error("Battle question deck is incomplete");
+  }
+
   snapshot.phase = "playing";
   snapshot.settings = input.settings;
   snapshot.players = clonePlayers(input.players);

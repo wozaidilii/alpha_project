@@ -166,8 +166,10 @@ export interface PusherGameStarted {
   players: Record<string, BattlePlayer>;
   /** 普通题库模式仅同步 ID，加入方本地拉取完整题目，避免 Pusher 消息过大 */
   questionIds?: string[];
-  /** 随机街景题需要同步完整题目，保证所有玩家看到同一处全景 */
+  /** 房主开局时由服务端保存的完整题组；Pusher 仅作信号，客户端以 HTTP 快照为准 */
   questions?: BattleQuestion[];
+  /** 题组指纹，供客户端校验是否与服务端一致 */
+  questionDeckKey?: string;
   roundIndex: number;
   startTime: number;
 }

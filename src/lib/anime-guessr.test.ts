@@ -211,6 +211,21 @@ describe("anime-guessr", () => {
         ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
       ),
     ).toEqual([easy]);
+    expect(
+      pickAnimeGuessrQuestions(
+        [easy, medium, hard],
+        2,
+        "master",
+        "room-seed",
+      ).map((question) => question.id),
+    ).toEqual(
+      pickAnimeGuessrQuestions(
+        [easy, medium, hard],
+        2,
+        "master",
+        "room-seed",
+      ).map((question) => question.id),
+    );
   });
 
   it("accepts questions without a year", () => {

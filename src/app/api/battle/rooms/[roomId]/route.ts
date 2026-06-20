@@ -313,6 +313,12 @@ export async function POST(request: Request, context: RouteContext) {
     if (error instanceof Error && error.message === "房间已满") {
       return jsonError(error.message, 409);
     }
+    if (
+      error instanceof Error &&
+      error.message === "Battle question deck is incomplete"
+    ) {
+      return jsonError(error.message, 400);
+    }
     throw error;
   }
 }

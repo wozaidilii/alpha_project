@@ -172,6 +172,31 @@ function shuffle<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
+function hashSeed(seed: string): number {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+  return hash || 1;
+}
+
+function seededShuffle<T>(items: T[], seed: string): T[] {
+  const result = [...items];
+  let state = hashSeed(seed);
+
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    state = (state * 1_664_525 + 1_013_904_223) >>> 0;
+    const swapIndex = state % (index + 1);
+    const current = result[index];
+    const swapValue = result[swapIndex];
+    if (current === undefined || swapValue === undefined) continue;
+    result[index] = swapValue;
+    result[swapIndex] = current;
+  }
+
+  return result;
+}
+
 export function getAnimeGuessrQuestionDifficulty(
   question: AnimeGuessrQuestion,
 ): number {
@@ -207,9 +232,11 @@ export function pickAnimeGuessrQuestions(
   questions: AnimeGuessrQuestion[],
   count = ANIME_GUESSR_ROUNDS,
   tier: AnimeGuessrDifficultyTier = ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  seed?: string,
 ): AnimeGuessrQuestion[] {
   const pool = filterAnimeGuessrQuestionsByTier(questions, tier);
-  return shuffle(pool).slice(0, Math.min(count, pool.length));
+  const shuffled = seed ? seededShuffle(pool, seed) : shuffle(pool);
+  return shuffled.slice(0, Math.min(count, pool.length));
 }
 
 export async function fetchAnimeGuessrQuestions(

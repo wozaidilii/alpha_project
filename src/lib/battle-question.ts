@@ -102,6 +102,10 @@ export function getBattleQuestionSubtitle(question: BattleQuestion): string {
   return getQuestionResultSubtitle(question);
 }
 
+export function getBattleQuestionDeckKey(questions: BattleQuestion[]): string {
+  return questions.map((question) => question.id).join("|");
+}
+
 export function getBattleAnswerPoint(question: BattleQuestion): {
   lat: number;
   lng: number;
