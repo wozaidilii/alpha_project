@@ -113,6 +113,8 @@ export interface PlayerGuess {
   elapsedSeconds?: number;
   submitted?: boolean;
   isCorrect?: boolean;
+  /** 单人 anime 计分：100 秒内距离 ≥90 且总分突破常规满分上限（>100） */
+  scoreBreakthrough?: boolean;
 }
 
 export interface BattleRoundResult {

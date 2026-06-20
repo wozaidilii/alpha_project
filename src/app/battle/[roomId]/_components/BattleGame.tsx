@@ -296,6 +296,7 @@ function calcLocationOnlyPlayerGuess(
     total: score.total,
     distanceKm,
     submitted: true,
+    ...(score.scoreBreakthrough ? { scoreBreakthrough: true } : {}),
   };
 }
 
@@ -971,10 +972,17 @@ export function BattleGame({
       const topScore = Math.max(
         ...playerIds.map((id) => guesses[id]?.total ?? 0),
       );
+      const topBreakthrough = playerIds.some(
+        (id) =>
+          (guesses[id]?.total ?? 0) >= topScore &&
+          guesses[id]?.scoreBreakthrough === true,
+      );
       for (const id of playerIds) {
         const score = guesses[id]?.total ?? 0;
         if (score >= topScore) continue;
-        const dmg = calcBattleDamage(topScore, score);
+        const dmg = calcBattleDamage(topScore, score, {
+          breakthrough: topBreakthrough,
+        });
         damage[id] = dmg;
         hpAfter[id] = Math.max(0, (hpAfter[id] ?? 0) - dmg);
       }

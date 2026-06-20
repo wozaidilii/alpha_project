@@ -272,9 +272,18 @@ export function BattleRoundResultView({
                   <div className="text-xs text-pink-100/50">
                     {copy.roundTotalScore}
                   </div>
-                  <div className="text-3xl font-extrabold text-white">
+                  <div
+                    className={`text-3xl font-extrabold ${
+                      guess?.scoreBreakthrough ? "text-cyan-200" : "text-white"
+                    }`}
+                  >
                     {guess?.total.toLocaleString() ?? 0}
                   </div>
+                  {guess?.scoreBreakthrough && (
+                    <div className="mt-1 inline-flex items-center rounded-full bg-cyan-400/15 px-2 py-0.5 text-[11px] font-bold text-cyan-100">
+                      {copy.scoreBreakthroughBadge}
+                    </div>
+                  )}
                   {guess && renderScoreBreakdown(guess)}
                   <div className="mt-3 flex items-center gap-2">
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
@@ -318,6 +327,11 @@ export function BattleRoundResultView({
             const damagedPlayers = playerIds.filter(
               (pid) => (result.damage[pid] ?? 0) > 0,
             );
+            const hasBreakthrough = playerIds.some(
+              (pid) =>
+                (result.guesses[pid]?.total ?? 0) >= topScore &&
+                result.guesses[pid]?.scoreBreakthrough === true,
+            );
             if (damagedPlayers.length === 0) {
               return (
                 <p className="mb-4 text-center text-sm text-pink-100/60">
@@ -326,16 +340,23 @@ export function BattleRoundResultView({
               );
             }
             return (
-              <div className="anime-panel mb-4 flex flex-wrap justify-center gap-2 px-4 py-3 text-sm text-pink-100/70">
-                <span>{copy.topScore(topScore.toLocaleString())}</span>
-                {damagedPlayers.map((pid) => (
-                  <span
-                    key={pid}
-                    className="rounded-full bg-red-400/12 px-3 py-1 text-red-100"
-                  >
-                    {players[pid]?.name} -{result.damage[pid] ?? 0} HP
-                  </span>
-                ))}
+              <div className="mb-4 space-y-2">
+                <div className="anime-panel flex flex-wrap justify-center gap-2 px-4 py-3 text-sm text-pink-100/70">
+                  <span>{copy.topScore(topScore.toLocaleString())}</span>
+                  {damagedPlayers.map((pid) => (
+                    <span
+                      key={pid}
+                      className="rounded-full bg-red-400/12 px-3 py-1 text-red-100"
+                    >
+                      {players[pid]?.name} -{result.damage[pid] ?? 0} HP
+                    </span>
+                  ))}
+                </div>
+                {hasBreakthrough && (
+                  <p className="rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-4 py-3 text-center text-sm font-medium text-cyan-100">
+                    {copy.breakthroughDamageHint}
+                  </p>
+                )}
               </div>
             );
           })()}

@@ -95,6 +95,8 @@ export type BattleCopy = {
   roundTotalScore: string;
   noDamage: string;
   topScore: (score: string) => string;
+  scoreBreakthroughBadge: string;
+  breakthroughDamageHint: string;
   ready: string;
   notReady: string;
   readyWaiting: string;
@@ -211,6 +213,9 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     roundTotalScore: "本轮总分",
     noDamage: "本轮无人扣血",
     topScore: (score) => `本轮最高分 ${score}`,
+    scoreBreakthroughBadge: "⚡ 超神一击 · 突破满分",
+    breakthroughDamageHint:
+      "这一击精准到令人窒息——突破满分的锋芒撕裂防线，对手承受了远超寻常的伤害！",
     ready: "已准备",
     notReady: "未准备",
     readyWaiting: "✓ 已准备，等待其他玩家...",
@@ -330,6 +335,9 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     roundTotalScore: "ラウンド得点",
     noDamage: "このラウンドはダメージなし",
     topScore: (score) => `最高得点 ${score}`,
+    scoreBreakthroughBadge: "⚡ 神がかりの一撃 · 満点突破",
+    breakthroughDamageHint:
+      "息を呑むほどの精度――満点を超えた輝きが防御を貫き、相手に通常を遥かに超えるダメージを刻みました！",
     ready: "準備完了",
     notReady: "未準備",
     readyWaiting: "✓ 準備完了、他のプレイヤーを待機中...",
@@ -451,6 +459,9 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     roundTotalScore: "Round score",
     noDamage: "No damage this round",
     topScore: (score) => `Top score ${score}`,
+    scoreBreakthroughBadge: "⚡ Transcendent hit · Above the cap",
+    breakthroughDamageHint:
+      "A breathtakingly precise strike — breaking past the cap tore through their defense and dealt far heavier damage than usual!",
     ready: "ready",
     notReady: "not ready",
     readyWaiting: "✓ Ready. Waiting for other players...",
