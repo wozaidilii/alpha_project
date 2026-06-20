@@ -47,10 +47,12 @@
 - `starting` means the host has clicked start and may be generating third-party street-view questions; non-host clients should show a waiting state and keep polling.
 - `playing` must include either `questionIds` for DB-backed standard questions or full `questions` for generated street-view modes.
 - The room snapshot is authoritative for in-game recovery. It must persist current `roundIndex`, `startTime`, `guesses`, `results`, `roundReady`, and `finalHp` as those states appear.
+- Active battle clients must apply same-round recovery snapshots monotonically: stale snapshots may add submitted guesses or ready players, but must not remove locally confirmed guesses/ready state, and must not increase an in-progress player's HP. New rounds reset guesses and ready state through the `round-started` / `beginRound` path.
 - Generated street-view battle modes, including `anime-tuxun`, must share full generated `BattleQuestion[]` through room state so both players see the same panorama and timed clue state.
 - `anime-tuxun` battle questions use Google Street View, reveal anime clues over time, and score by distance to the real-world anime location center.
+- `anime` battle questions must reuse the same location score contract as `/game/anime`: `locationRoundScore` with `soloAnimeScoring: true`, including the solo anime speed cap, overtime cap, and score breakthrough behavior.
 - Pusher events are fast notifications, not the only source of truth. Clients must be able to recover start, guess submission, round result, ready state, next round, and game-over state from `GET /api/battle/rooms/[roomId]`.
-- In multiplayer rounds, every player whose score is below the top score takes damage based on the gap to the top score. Tied top scorers take no damage.
+- In multiplayer rounds, every player whose score is below the top score loses HP equal to the exact score gap from the top score. Tied top scorers take no damage.
 - When all players leave, `leaveBattleRoom` deletes the room and returns `closed: true`.
 - The current room store is in-process. `globalThis` may stabilize same-process reloads, but multi-instance production deployments need a durable store such as Redis or a database-backed room table if desync remains visible.
 

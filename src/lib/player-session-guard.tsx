@@ -47,10 +47,10 @@ export function useCompletedPlayerSession(): GuardState {
   return state;
 }
 
-export function AuthLoading() {
+export function AuthLoading({ label = "Loading..." }: { label?: string }) {
   return (
     <main className="anime-shell flex min-h-screen items-center justify-center text-pink-50/70">
-      加载中...
+      {label}
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import {
   type BattleAnimeTuxunQuestion,
+  type BattleAnimeQuestion,
   type BattleForeignQuestion,
   type BattleHistoryTuxunQuestion,
   type BattleQuestion,
@@ -47,18 +48,26 @@ export function isAnimeTuxunBattleQuestion(
   return question.type === "anime-tuxun";
 }
 
+export function isAnimeBattleQuestion(
+  question: BattleQuestion,
+): question is BattleAnimeQuestion {
+  return question.type === "anime";
+}
+
 export function isLocationOnlyBattleQuestion(
   question: BattleQuestion,
 ): question is
   | BattleTuxunQuestion
   | BattleForeignQuestion
   | BattleHistoryTuxunQuestion
-  | BattleAnimeTuxunQuestion {
+  | BattleAnimeTuxunQuestion
+  | BattleAnimeQuestion {
   return (
     isTuxunBattleQuestion(question) ||
     isForeignBattleQuestion(question) ||
     isHistoryTuxunBattleQuestion(question) ||
-    isAnimeTuxunBattleQuestion(question)
+    isAnimeTuxunBattleQuestion(question) ||
+    isAnimeBattleQuestion(question)
   );
 }
 
@@ -70,6 +79,7 @@ export function getBattleQuestionTitle(question: BattleQuestion): string {
   }
   if (isAnimeTuxunBattleQuestion(question))
     return question.playState.answerName;
+  if (isAnimeBattleQuestion(question)) return question.question.answerName;
   return question.title;
 }
 
@@ -85,6 +95,9 @@ export function getBattleQuestionSubtitle(question: BattleQuestion): string {
   }
   if (isAnimeTuxunBattleQuestion(question)) {
     return question.playState.answerContext;
+  }
+  if (isAnimeBattleQuestion(question)) {
+    return question.question.animeTitle;
   }
   return getQuestionResultSubtitle(question);
 }
@@ -120,6 +133,13 @@ export function getBattleAnswerPoint(question: BattleQuestion): {
       lat: question.playState.centerLat,
       lng: question.playState.centerLng,
       label: question.playState.answerName,
+    };
+  }
+  if (isAnimeBattleQuestion(question)) {
+    return {
+      lat: question.question.lat,
+      lng: question.question.lng,
+      label: question.question.answerName,
     };
   }
   if (isStandardBattleQuestion(question) && isHistoricalQuestion(question)) {

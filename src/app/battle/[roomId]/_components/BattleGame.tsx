@@ -12,24 +12,14 @@ import { getTimelineBounds } from "~/lib/question-utils";
 import {
   calcSpeedMultiplier,
   haversineDistance,
-  locationRoundScore,
   scoreRound,
 } from "~/lib/scoring";
-import { generateRandomTuxunLocations } from "~/lib/baidu-panorama";
 import { generateRandomForeignLocations } from "~/lib/google-street-view";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import {
-  isBaiduStreetViewTuxunLocation,
   isGoogleStreetViewTuxunLocation,
   type TuxunLocation,
 } from "~/lib/tuxun-locations";
-import {
-  buildHistoryTuxunPlayState,
-  findHistoryTuxunScene,
-  getCachedHistoryTuxunScene,
-  HISTORY_TUXUN_CLUE_INTERVAL_SECONDS,
-  type HistoryTuxunPlayState,
-} from "~/lib/history-tuxun-puzzle";
 import {
   ANIME_TUXUN_CLUE_INTERVAL_SECONDS,
   buildAnimeTuxunPlayState,
@@ -38,25 +28,34 @@ import {
   type AnimeTuxunPlayState,
 } from "~/lib/anime-tuxun-puzzle";
 import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
+  buildAnimeGuessrImageUrl,
+  fetchAnimeGuessrQuestions,
+  getAnimeGuessrQuestionText,
+  pickAnimeGuessrQuestions,
+  toAnimeStreetViewLocation,
+  type AnimeGuessrQuestion,
+} from "~/lib/anime-guessr";
+import {
   getBattleAnswerPoint,
+  isAnimeBattleQuestion,
   isAnimeTuxunBattleQuestion,
   isForeignBattleQuestion,
-  isHistoryTuxunBattleQuestion,
   isLocationOnlyBattleQuestion,
   isStandardBattleQuestion,
-  isTuxunBattleQuestion,
 } from "~/lib/battle-question";
 import {
   BATTLE_MAX_PLAYERS,
   type BattlePhase,
+  type BattleRoundStatus,
+  type BattleAnimeQuestion,
   type BattleForeignQuestion,
   type BattleAnimeTuxunQuestion,
   type BattlePlayer,
   type BattleQuestion,
   type BattleRoomSnapshot,
   type BattleSettings,
-  type BattleTuxunQuestion,
-  type BattleHistoryTuxunQuestion,
   type PlayerGuess,
   type BattleRoundResult,
   type PusherPlayerJoined,
@@ -81,8 +80,6 @@ import { EventCard } from "~/app/game/_components/EventCard";
 import { TimelineSlider } from "~/app/game/_components/TimelineSlider";
 import { QuizPanel } from "~/app/game/_components/QuizPanel";
 import { FloatingGuessMap } from "~/app/game/_components/FloatingGuessMap";
-import { BaiduPanorama } from "~/app/game/tuxun/_components/BaiduPanorama";
-import { BaiduPanoramaView } from "~/app/game/_components/BaiduPanoramaView";
 import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
 import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
 import { type PlayerAvatar } from "~/types/player";
@@ -92,19 +89,28 @@ import { playCountdownTick } from "~/lib/countdown-audio";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
 import { GameOverView } from "./GameOver";
+import { type AnimeLocale, withAnimeLocale } from "~/lib/anime-locale";
+import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
+import {
+  getBattleSubmittedPlayers,
+  mergeBattleRoundReady,
+  mergeBattleSubmittedGuesses,
+} from "~/lib/battle-room-sync";
+import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
+import { getGoogleMapsLanguage } from "~/lib/google-maps-language";
+import {
+  calcBattleDamage,
+  calcBattleLocationScore,
+} from "~/lib/battle-scoring";
+import {
+  applyBattleHpSnapshotPreservingLowerHp,
+  areBattlePlayersReady,
+  isBattleFinalRound,
+  mergeBattlePlayersPreservingLowerHp,
+  shouldFinishBattleFromResult,
+} from "~/lib/battle-flow";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
-
-function buildBattleTuxunQuestion(
-  location: TuxunLocation,
-): BattleTuxunQuestion {
-  return {
-    id: `tuxun:${location.id}`,
-    type: "tuxun",
-    title: location.title,
-    location,
-  };
-}
 
 function buildBattleForeignQuestion(
   location: TuxunLocation,
@@ -117,17 +123,6 @@ function buildBattleForeignQuestion(
   };
 }
 
-function buildBattleHistoryTuxunQuestion(
-  playState: HistoryTuxunPlayState,
-): BattleHistoryTuxunQuestion {
-  return {
-    id: `history-tuxun:${playState.puzzleId}`,
-    type: "history-tuxun",
-    title: playState.answerName,
-    playState,
-  };
-}
-
 function buildBattleAnimeTuxunQuestion(
   playState: AnimeTuxunPlayState,
 ): BattleAnimeTuxunQuestion {
@@ -136,6 +131,17 @@ function buildBattleAnimeTuxunQuestion(
     type: "anime-tuxun",
     title: playState.answerName,
     playState,
+  };
+}
+
+function buildBattleAnimeQuestion(
+  question: AnimeGuessrQuestion,
+): BattleAnimeQuestion {
+  return {
+    id: `anime:${question.id}`,
+    type: "anime",
+    title: question.answerName,
+    question,
   };
 }
 
@@ -156,6 +162,35 @@ function toAnimeTuxunBattleStreetViewLocation(
     source: "google-random",
     hint: playState.answerContext,
   };
+}
+
+function BattleAnimeClueImage({
+  question,
+  alt,
+}: {
+  question: AnimeGuessrQuestion;
+  alt: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const imageUrl = buildAnimeGuessrImageUrl(question.imagePath);
+  const displayImageUrl =
+    !imageUrl || failed ? ANIME_GUESSR_PLACEHOLDER_IMAGE_URL : imageUrl;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [question.id]);
+
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-black/40">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={displayImageUrl}
+        alt={alt}
+        className="h-full w-full object-cover"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
 }
 
 function calcStandardPlayerGuess(
@@ -240,10 +275,11 @@ function calcLocationOnlyPlayerGuess(
     raw.lat,
     raw.lng,
   );
-  const score = locationRoundScore({
+  const score = calcBattleLocationScore({
+    question,
     distanceKm,
     elapsedSeconds,
-    speedCompensationWindowSeconds: timePerRound,
+    timePerRound,
   });
 
   return {
@@ -296,20 +332,6 @@ function calcBattlePlayerGuess(
   );
 }
 
-function calcDamage(
-  scoreA: number,
-  scoreB: number,
-  modeType: BattleSettings["questionType"],
-): number {
-  const diff = Math.abs(scoreA - scoreB);
-  return modeType === "tuxun" ||
-    modeType === "foreign" ||
-    modeType === "history-tuxun" ||
-    modeType === "anime-tuxun"
-    ? Math.floor(diff / 5)
-    : Math.floor(diff / 500);
-}
-
 // ─── component ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -320,11 +342,16 @@ interface Props {
   playerAvatar: PlayerAvatar;
   playerCharacter?: CharacterConfig;
   hostSettings: BattleSettings | null;
+  locale: AnimeLocale;
 }
 
 const MY_ID_KEY = "histoguessr_player_id";
-const HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 8;
 const ANIME_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 12;
+const ROUND_STATUS_ORDER: Record<BattleRoundStatus, number> = {
+  playing: 1,
+  "round-result": 2,
+  "game-over": 3,
+};
 
 interface BattleQuestionLoadResult {
   questions: BattleQuestion[];
@@ -355,7 +382,9 @@ async function postBattleRoomAction(
     | { closed?: boolean; snapshot?: BattleRoomSnapshot | null };
   if (!response.ok) {
     const message =
-      "error" in payload && payload.error ? payload.error : "房间状态同步失败";
+      "error" in payload && payload.error
+        ? payload.error
+        : getBattleCopy("en").roomSyncFailed;
     throw new Error(message);
   }
   if ("room" in payload) return payload.room ?? null;
@@ -368,7 +397,7 @@ async function fetchBattleRoomSnapshot(
 ): Promise<BattleRoomSnapshot | null> {
   const response = await fetch(battleRoomUrl(roomId), { cache: "no-store" });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error("房间状态同步失败");
+  if (!response.ok) throw new Error(getBattleCopy("en").roomSyncFailed);
   const payload = (await response.json()) as BattleRoomApiResponse;
   return payload.room ?? null;
 }
@@ -391,12 +420,9 @@ export function BattleGame({
   playerAvatar,
   playerCharacter,
   hostSettings,
+  locale,
 }: Props) {
   const utils = api.useUtils();
-  const { mutateAsync: saveStreetViewScene } =
-    api.locationTuxun.saveStreetViewScene.useMutation();
-  const { mutateAsync: markStreetViewUnavailable } =
-    api.locationTuxun.markStreetViewUnavailable.useMutation();
   const { mutateAsync: saveAnimeStreetViewScene } =
     api.animeTuxun.saveStreetViewScene.useMutation();
   const { mutateAsync: markAnimeStreetViewUnavailable } =
@@ -421,7 +447,7 @@ export function BattleGame({
       rounds: 5,
       timePerRound: 120,
       startingHp: 100,
-      questionType: "anime-tuxun",
+      questionType: "anime",
     },
   );
   const [questions, setQuestions] = useState<BattleQuestion[]>([]);
@@ -474,6 +500,7 @@ export function BattleGame({
   const collectedGuesses = useRef<Record<string, PusherGuessSubmitted>>({});
   const resultsRef = useRef<BattleRoundResult[]>([]);
   const resolvedRef = useRef(false);
+  const gameOverRequestedRef = useRef(false);
   const lastCountdownTickRef = useRef<number | null>(null);
   const roundReadyRef = useRef<Record<string, boolean>>({});
   const phaseRef = useRef(phase);
@@ -486,7 +513,12 @@ export function BattleGame({
     resultsRef.current = results;
   }, [results]);
 
+  const copy = getBattleCopy(locale);
+  const googleMapLabels = getGoogleGuessMapLabels(locale);
+  const googleMapsLanguage = getGoogleMapsLanguage(locale);
   const gameMode = getGameMode(settings.questionType);
+  const gameModeText = gameMode ? getBattleModeText(gameMode, locale) : null;
+  const battleLobbyUrl = withAnimeLocale("/battle", locale);
   const currentQuestion = questions[currentRound];
   // 与个人模式一致：整局题型由房间设置决定，而非单题字段
   const needsMap = settings.questionType === "historical";
@@ -596,12 +628,14 @@ export function BattleGame({
   function syncSubmittedPlayers(
     guesses: Record<string, PusherGuessSubmitted> | undefined,
   ) {
-    const submittedMap = Object.fromEntries(
-      Object.keys(guesses ?? {}).map((playerId) => [playerId, true]),
+    const mergedGuesses = mergeBattleSubmittedGuesses(
+      collectedGuesses.current,
+      guesses,
+      currentRoundRef.current,
     );
-    collectedGuesses.current = guesses ? { ...guesses } : {};
-    setSubmittedPlayers(submittedMap);
-    setSubmitted(Boolean(guesses?.[myId.current]));
+    collectedGuesses.current = mergedGuesses;
+    setSubmittedPlayers(getBattleSubmittedPlayers(mergedGuesses));
+    setSubmitted(Boolean(mergedGuesses[myId.current]));
   }
 
   function replaceResults(nextResults: BattleRoundResult[] | undefined) {
@@ -627,24 +661,56 @@ export function BattleGame({
   function syncRoomPlayState(snapshot: BattleRoomSnapshot) {
     setSettings(snapshot.settings);
     settingsRef.current = snapshot.settings;
-    setPlayers(snapshot.players);
-    playersRef.current = snapshot.players;
+    const nextPlayers = mergeBattlePlayersPreservingLowerHp(
+      playersRef.current,
+      snapshot.players,
+    );
+    setPlayers(nextPlayers);
+    playersRef.current = nextPlayers;
     replaceResults(snapshot.results);
-    roundReadyRef.current = snapshot.roundReady ?? {};
+    roundReadyRef.current =
+      snapshot.roundStatus === "round-result" &&
+      snapshot.roundIndex === currentRoundRef.current
+        ? mergeBattleRoundReady(roundReadyRef.current, snapshot.roundReady)
+        : (snapshot.roundReady ?? {});
     setRoundReady({ ...roundReadyRef.current });
     syncSubmittedPlayers(snapshot.guesses);
 
     if (snapshot.finalHp) {
       setPlayers((prev) => {
-        const next = { ...prev };
-        for (const [pid, hp] of Object.entries(snapshot.finalHp ?? {})) {
-          const existing = next[pid];
-          if (existing) next[pid] = { ...existing, hp };
-        }
+        const next = applyBattleHpSnapshotPreservingLowerHp(
+          prev,
+          snapshot.finalHp ?? {},
+        );
         playersRef.current = next;
         return next;
       });
     }
+  }
+
+  function getLocalRoundStatus(): BattleRoundStatus | null {
+    if (phaseRef.current === "playing") return "playing";
+    if (phaseRef.current === "round-result") return "round-result";
+    if (phaseRef.current === "game-over") return "game-over";
+    return null;
+  }
+
+  function isStaleRoomSnapshot(snapshot: BattleRoomSnapshot) {
+    if (snapshot.phase !== "playing" || snapshot.roundIndex == null) {
+      return false;
+    }
+    if (phaseRef.current === "lobby" && questionsRef.current.length === 0) {
+      return false;
+    }
+
+    const currentRoundIndex = currentRoundRef.current;
+    if (snapshot.roundIndex < currentRoundIndex) return true;
+    if (snapshot.roundIndex > currentRoundIndex) return false;
+
+    const localStatus = getLocalRoundStatus();
+    if (!localStatus) return false;
+    const snapshotStatus = snapshot.roundStatus ?? "playing";
+    return ROUND_STATUS_ORDER[snapshotStatus] < ROUND_STATUS_ORDER[localStatus];
   }
 
   async function handleRemoteGameStarted(data: PusherGameStarted) {
@@ -658,7 +724,7 @@ export function BattleGame({
       }
 
       if (!isQuestionType(data.settings.questionType) || !data.questionIds) {
-        setLobbyError("同步题目失败，请让房主重新开始");
+        setLobbyError(copy.syncQuestionFailedRestart);
         return;
       }
 
@@ -671,14 +737,14 @@ export function BattleGame({
         },
       );
       if (loaded.error || loaded.questions.length < data.questionIds.length) {
-        setLobbyError(loaded.error ?? "同步题目失败，请让房主重新开始");
+        setLobbyError(loaded.error ?? copy.syncQuestionFailedRestart);
         return;
       }
 
       applyGameStarted(data.settings, data.players, loaded.questions);
       beginRound(data.roundIndex, data.startTime);
     } catch {
-      setLobbyError("同步题目失败，请检查网络连接");
+      setLobbyError(copy.syncQuestionFailedNetwork);
     } finally {
       setGameSyncing(false);
     }
@@ -686,6 +752,7 @@ export function BattleGame({
 
   async function applyRoomSnapshot(snapshot: BattleRoomSnapshot) {
     if (snapshot.phase === "closed") return;
+    if (isStaleRoomSnapshot(snapshot)) return;
 
     if (snapshot.phase === "lobby" || snapshot.phase === "starting") {
       applyRoomLobbyState(snapshot);
@@ -697,7 +764,7 @@ export function BattleGame({
     if (snapshot.phase !== "playing") return;
 
     if (snapshot.roundIndex == null || snapshot.startTime == null) {
-      setLobbyError("房间已开局，但题目状态不完整，请重新创建房间");
+      setLobbyError(copy.incompleteRoomState);
       return;
     }
 
@@ -715,6 +782,7 @@ export function BattleGame({
     syncRoomPlayState(snapshot);
 
     if (snapshot.roundStatus === "game-over") {
+      gameOverRequestedRef.current = true;
       setPhase("game-over");
       return;
     }
@@ -726,7 +794,7 @@ export function BattleGame({
       if (result) {
         upsertLocalRoundResult(result);
         setPhase("round-result");
-        if (isHost) checkAllReadyAndProceed();
+        checkAllReadyAndProceed();
       }
       return;
     }
@@ -746,6 +814,7 @@ export function BattleGame({
 
   function beginRound(roundIndex: number, startTime: number) {
     resolvedRef.current = false;
+    gameOverRequestedRef.current = false;
     collectedGuesses.current = {};
     setCurrentRound(roundIndex);
     currentRoundRef.current = roundIndex;
@@ -791,42 +860,54 @@ export function BattleGame({
     } satisfies PusherRoundStarted);
   }
 
-  function checkAllReadyAndProceed() {
-    if (!isHost) return;
+  function requestGameOver() {
+    if (gameOverRequestedRef.current) return;
+    gameOverRequestedRef.current = true;
 
     const ids = Object.keys(playersRef.current);
-    if (ids.length < 2) return;
-    if (!ids.every((id) => roundReadyRef.current[id])) return;
+    const finalHp: Record<string, number> = {};
+    for (const id of ids) {
+      finalHp[id] = playersRef.current[id]?.hp ?? 0;
+    }
+
+    const finalResults = resultsRef.current;
+    void postBattleRoomAction(roomId, {
+      action: "game-over",
+      results: finalResults,
+      finalHp,
+    })
+      .then((snapshot) => {
+        if (snapshot) void applyRoomSnapshot(snapshot);
+      })
+      .catch(() => undefined);
+    void sendPusherEvent(channel, "game-over", {
+      results: finalResults,
+      finalHp,
+    } satisfies PusherGameOver);
+    setPhase("game-over");
+  }
+
+  function checkAllReadyAndProceed() {
+    if (
+      shouldFinishBattleFromResult({
+        roundIndex: currentRoundRef.current,
+        settings: settingsRef.current,
+        players: playersRef.current,
+        roundReady: roundReadyRef.current,
+      })
+    ) {
+      requestGameOver();
+      return;
+    }
+
+    if (!areBattlePlayersReady(playersRef.current, roundReadyRef.current)) {
+      return;
+    }
+
+    if (!isHost) return;
 
     roundReadyRef.current = {};
     setRoundReady({});
-
-    const roundIdx = currentRoundRef.current;
-    const isLastRound =
-      roundIdx >= settingsRef.current.rounds - 1 ||
-      ids.some((id) => (playersRef.current[id]?.hp ?? 0) <= 0);
-
-    if (isLastRound) {
-      const finalHp: Record<string, number> = {};
-      for (const id of ids) {
-        finalHp[id] = playersRef.current[id]?.hp ?? 0;
-      }
-      void postBattleRoomAction(roomId, {
-        action: "game-over",
-        results: resultsRef.current,
-        finalHp,
-      })
-        .then((snapshot) => {
-          if (snapshot) void applyRoomSnapshot(snapshot);
-        })
-        .catch(() => undefined);
-      void sendPusherEvent(channel, "game-over", {
-        results: resultsRef.current,
-        finalHp,
-      } satisfies PusherGameOver);
-      setPhase("game-over");
-      return;
-    }
 
     void handleNextRoundInternal();
   }
@@ -851,7 +932,7 @@ export function BattleGame({
       roundIndex: roundIdx,
     } satisfies PusherRoundReady);
 
-    if (isHost) checkAllReadyAndProceed();
+    checkAllReadyAndProceed();
   }
 
   function resolveRound() {
@@ -893,7 +974,7 @@ export function BattleGame({
       for (const id of playerIds) {
         const score = guesses[id]?.total ?? 0;
         if (score >= topScore) continue;
-        const dmg = calcDamage(topScore, score, modeType);
+        const dmg = calcBattleDamage(topScore, score);
         damage[id] = dmg;
         hpAfter[id] = Math.max(0, (hpAfter[id] ?? 0) - dmg);
       }
@@ -907,6 +988,7 @@ export function BattleGame({
       damage,
     };
     applyRoundResult(result);
+    checkAllReadyAndProceed();
     void postBattleRoomAction(roomId, {
       action: "round-result",
       result,
@@ -922,15 +1004,13 @@ export function BattleGame({
 
   function applyRoundResult(result: BattleRoundResult) {
     upsertLocalRoundResult(result);
-    setPlayers((prev) => {
-      const next = { ...prev };
-      for (const [pid, hp] of Object.entries(result.hpAfter)) {
-        const existing = next[pid];
-        if (existing) next[pid] = { ...existing, hp };
-      }
-      playersRef.current = next;
-      return next;
-    });
+    const nextPlayers = { ...playersRef.current };
+    for (const [pid, hp] of Object.entries(result.hpAfter)) {
+      const existing = nextPlayers[pid];
+      if (existing) nextPlayers[pid] = { ...existing, hp };
+    }
+    playersRef.current = nextPlayers;
+    setPlayers(nextPlayers);
     roundReadyRef.current = {};
     setRoundReady({});
     setPhase("round-result");
@@ -975,11 +1055,14 @@ export function BattleGame({
     ch.bind("game-started", (data: PusherGameStarted) => {
       // 房主已在本地开局，忽略 Pusher 回传
       if (isHost) return;
+      if (phaseRef.current !== "lobby") return;
       void handleRemoteGameStarted(data);
     });
 
     ch.bind("round-started", (data: PusherRoundStarted) => {
       if (questionsRef.current.length === 0) return;
+      const currentRoundIndex = currentRoundRef.current;
+      if (data.roundIndex <= currentRoundIndex) return;
       beginRound(data.roundIndex, data.startTime);
     });
 
@@ -998,33 +1081,35 @@ export function BattleGame({
 
     ch.bind("round-results", (data: PusherRoundResults) => {
       if (isHost) return;
+      if (data.result.roundIndex !== currentRoundRef.current) return;
+      if (phaseRef.current !== "playing") return;
       const localQuestion =
         questionsRef.current[data.result.roundIndex] ?? data.result.question;
       applyRoundResult({
         ...data.result,
         question: localQuestion,
       });
+      checkAllReadyAndProceed();
     });
 
     ch.bind("round-ready", (data: PusherRoundReady) => {
       if (data.roundIndex !== currentRoundRef.current) return;
-      roundReadyRef.current[data.playerId] = true;
+      roundReadyRef.current = mergeBattleRoundReady(roundReadyRef.current, {
+        [data.playerId]: true,
+      });
       setRoundReady({ ...roundReadyRef.current });
-      if (isHost) checkAllReadyAndProceed();
+      checkAllReadyAndProceed();
     });
 
     ch.bind("game-over", (data: PusherGameOver) => {
+      gameOverRequestedRef.current = true;
       if (data.results.length > 0) replaceResults(data.results);
       setPlayers((prev) => {
-        const next = { ...prev };
-        for (const [pid, hp] of Object.entries(data.finalHp)) {
-          const existing = next[pid];
-          if (existing) next[pid] = { ...existing, hp };
-        }
+        const next = applyBattleHpSnapshotPreservingLowerHp(prev, data.finalHp);
         playersRef.current = next;
         return next;
       });
-      if (!isHost) setPhase("game-over");
+      setPhase("game-over");
     });
 
     return () => {
@@ -1048,7 +1133,7 @@ export function BattleGame({
       } catch (error) {
         if (!active) return;
         setLobbyError(
-          error instanceof Error ? error.message : "加入房间状态同步失败",
+          error instanceof Error ? error.message : copy.joinRoomSyncFailed,
         );
       }
     }
@@ -1111,7 +1196,6 @@ export function BattleGame({
     window.addEventListener("pagehide", leaveRoom);
     return () => {
       window.removeEventListener("pagehide", leaveRoom);
-      leaveRoom();
     };
   }, [roomId]);
 
@@ -1169,30 +1253,6 @@ export function BattleGame({
     playCountdownTick(timeLeft);
   }, [phase, timeLeft]);
 
-  async function loadTuxunBattleQuestions(
-    count: number,
-  ): Promise<BattleQuestionLoadResult> {
-    const result = await generateRandomTuxunLocations(count);
-    const streetViewLocations = result.locations.filter(
-      isBaiduStreetViewTuxunLocation,
-    );
-
-    if (streetViewLocations.length < count) {
-      return {
-        questions: [],
-        error:
-          result.message ??
-          `只匹配到 ${streetViewLocations.length} / ${count} 个百度 JS 街景点，未开始本局；请重新生成。`,
-      };
-    }
-
-    return {
-      questions: streetViewLocations
-        .slice(0, count)
-        .map(buildBattleTuxunQuestion),
-    };
-  }
-
   async function loadForeignBattleQuestions(
     count: number,
   ): Promise<BattleQuestionLoadResult> {
@@ -1209,7 +1269,7 @@ export function BattleGame({
         questions: [],
         error:
           result.message ??
-          `只匹配到 ${streetViewLocations.length} / ${count} 个 Google 日本街景点，未开始本局；请重新生成。`,
+          copy.insufficientGoogleScenes(streetViewLocations.length, count),
       };
     }
 
@@ -1220,64 +1280,26 @@ export function BattleGame({
     };
   }
 
-  async function loadHistoryTuxunBattleQuestions(
+  async function loadAnimeBattleQuestions(
     count: number,
   ): Promise<BattleQuestionLoadResult> {
-    const questions: BattleHistoryTuxunQuestion[] = [];
-    const usedLocations = new Set<string>();
-    let excludeLocation: string | undefined;
-    const maxAttempts = Math.max(
-      count * HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND,
-      HISTORY_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND,
+    const questions = await fetchAnimeGuessrQuestions();
+    const picked = pickAnimeGuessrQuestions(
+      questions,
+      count,
+      ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
     );
 
-    for (
-      let attempts = 0;
-      attempts < maxAttempts && questions.length < count;
-      attempts += 1
-    ) {
-      const puzzle = await utils.locationTuxun.random.fetch({
-        excludeLocation,
-      });
-      if (!puzzle) break;
-
-      excludeLocation = puzzle.location;
-      if (usedLocations.has(puzzle.location)) continue;
-
-      const cachedScene = getCachedHistoryTuxunScene(puzzle);
-      const scene = cachedScene ?? (await findHistoryTuxunScene(puzzle));
-      if (!scene) {
-        await markStreetViewUnavailable({ location: puzzle.location }).catch(
-          () => undefined,
-        );
-        continue;
-      }
-
-      if (!cachedScene) {
-        await saveStreetViewScene({
-          location: puzzle.location,
-          lat: scene.lat,
-          lng: scene.lng,
-          ...(scene.panoId ? { panoId: scene.panoId } : {}),
-        }).catch(() => undefined);
-      }
-
-      usedLocations.add(puzzle.location);
-      questions.push(
-        buildBattleHistoryTuxunQuestion(
-          buildHistoryTuxunPlayState(puzzle, scene),
-        ),
-      );
-    }
-
-    if (questions.length < count) {
+    if (picked.length < count) {
       return {
         questions: [],
-        error: `只匹配到 ${questions.length} / ${count} 道有百度街景的历史图寻题，未开始本局；请重新开始。`,
+        error: copy.insufficientQuestions,
       };
     }
 
-    return { questions };
+    return {
+      questions: picked.map(buildBattleAnimeQuestion),
+    };
   }
 
   async function loadAnimeTuxunBattleQuestions(
@@ -1331,7 +1353,7 @@ export function BattleGame({
     if (questions.length < count) {
       return {
         questions: [],
-        error: `只匹配到 ${questions.length} / ${count} 道有 Google 街景的动漫题，未开始本局；请重新开始。`,
+        error: copy.insufficientAnimeScenes(questions.length, count),
       };
     }
 
@@ -1341,16 +1363,12 @@ export function BattleGame({
   async function loadBattleQuestions(
     nextSettings: BattleSettings,
   ): Promise<BattleQuestionLoadResult> {
-    if (nextSettings.questionType === "tuxun") {
-      return loadTuxunBattleQuestions(nextSettings.rounds);
+    if (nextSettings.questionType === "anime") {
+      return loadAnimeBattleQuestions(nextSettings.rounds);
     }
 
     if (nextSettings.questionType === "foreign") {
       return loadForeignBattleQuestions(nextSettings.rounds);
-    }
-
-    if (nextSettings.questionType === "history-tuxun") {
-      return loadHistoryTuxunBattleQuestions(nextSettings.rounds);
     }
 
     if (nextSettings.questionType === "anime-tuxun") {
@@ -1358,7 +1376,7 @@ export function BattleGame({
     }
 
     if (!isQuestionType(nextSettings.questionType)) {
-      return { questions: [], error: "暂不支持该对战模式" };
+      return { questions: [], error: copy.unsupportedMode };
     }
 
     const loaded = await fetchQuestionsByType(
@@ -1403,7 +1421,7 @@ export function BattleGame({
 
       const loaded = await loadBattleQuestions(nextSettings);
       if (loaded.error || loaded.questions.length < nextSettings.rounds) {
-        setLobbyError(loaded.error ?? "题库题目不足");
+        setLobbyError(loaded.error ?? copy.insufficientQuestions);
         setGameSyncing(false);
         setIsStarting(false);
         await postBattleRoomAction(roomId, { action: "cancel-start" }).catch(
@@ -1438,9 +1456,7 @@ export function BattleGame({
         () => undefined,
       );
       setLobbyError(
-        error instanceof Error
-          ? error.message
-          : "题库加载失败，请检查数据库连接",
+        error instanceof Error ? error.message : copy.questionLoadFailed,
       );
     }
   }
@@ -1489,7 +1505,10 @@ export function BattleGame({
   const lastResult = results[results.length - 1];
   const playerList = Object.values(players);
   const submittedCount = Object.keys(submittedPlayers).length;
-  const submittedSummary = `${submittedCount} / ${playerList.length} 已提交`;
+  const submittedSummary = copy.submittedSummary(
+    submittedCount,
+    playerList.length,
+  );
 
   const speedPreview =
     roundStartTime && phase === "playing"
@@ -1506,14 +1525,14 @@ export function BattleGame({
       : true;
 
   const submitLabel = submitted
-    ? "✓ 已提交，等待结算…"
+    ? `✓ ${copy.submitted}`
     : needsQuiz
       ? guessIndex === null
-        ? "请先选择答案"
-        : "提交答案"
+        ? copy.selectAnswerFirst
+        : copy.submitAnswer
       : (needsMap || needsLocationOnlyGuess) && guessLat === null
-        ? "先在地图上选地点"
-        : "提交猜测";
+        ? copy.selectMapFirst
+        : copy.submitGuess;
 
   function renderBattleHeader() {
     return (
@@ -1521,10 +1540,11 @@ export function BattleGame({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#0d081a]/90 px-4 py-3 backdrop-blur">
           <div>
             <div className="text-sm font-bold text-pink-100">
-              对战 · {gameMode?.emoji} {gameMode?.title}
+              {copy.battlePrefix} · {gameMode?.emoji} {gameModeText?.title}
             </div>
             <div className="text-xs text-pink-100/55">
-              第 {currentRound + 1} / {settings.rounds} 轮 · {submittedSummary}
+              {copy.roundCount(currentRound + 1, settings.rounds)} ·{" "}
+              {submittedSummary}
             </div>
           </div>
           <div className="flex max-w-full flex-wrap justify-end gap-2">
@@ -1555,13 +1575,13 @@ export function BattleGame({
       <div className="anime-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-white">
         <div className="w-full max-w-2xl">
           <Link
-            href="/battle"
+            href={battleLobbyUrl}
             className="mb-6 inline-block text-sm text-pink-100/70 hover:text-pink-50"
           >
-            ← 返回大厅
+            ← {copy.backLobby}
           </Link>
           <div className="anime-panel mb-6 p-6 text-center">
-            <div className="mb-1 text-sm text-pink-100/60">房间号</div>
+            <div className="mb-1 text-sm text-pink-100/60">{copy.roomCode}</div>
             <div className="mb-3 font-mono text-5xl font-extrabold tracking-widest text-cyan-100">
               {roomId}
             </div>
@@ -1569,13 +1589,13 @@ export function BattleGame({
               onClick={() => void navigator.clipboard.writeText(roomId)}
               className="text-xs text-pink-100/55 hover:text-pink-50"
             >
-              点击复制
+              {copy.copyRoom}
             </button>
           </div>
 
           <div className="mb-6 space-y-2">
             <div className="flex items-center justify-between text-sm text-pink-100/65">
-              <span>房间人数</span>
+              <span>{copy.players}</span>
               <span>
                 {playerList.length} / {BATTLE_MAX_PLAYERS}
               </span>
@@ -1593,13 +1613,15 @@ export function BattleGame({
                     {p.avatar.icon}
                   </span>
                   <span className="font-medium text-pink-50">{p.name}</span>
-                  {p.isHost && <span className="anime-chip ml-auto">房主</span>}
+                  {p.isHost && (
+                    <span className="anime-chip ml-auto">{copy.host}</span>
+                  )}
                 </div>
               ))}
             </div>
             {playerList.length < 2 && (
               <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-4 py-3 text-center text-sm text-pink-100/55">
-                至少 2 人即可开局；更多玩家可继续加入同一房间。
+                {copy.minPlayersHint}
               </div>
             )}
           </div>
@@ -1607,21 +1629,22 @@ export function BattleGame({
           {(isHost || lobbySynced) && (
             <div className="anime-panel mb-4 space-y-1 p-4 text-sm text-pink-100/65">
               <div className="flex justify-between">
-                <span>游戏类型</span>
+                <span>{copy.gameType}</span>
                 <span className="text-pink-50">
-                  {gameMode?.emoji} {gameMode?.title ?? settings.questionType}
+                  {gameMode?.emoji}{" "}
+                  {gameModeText?.title ?? settings.questionType}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span>轮数</span>
+                <span>{copy.rounds}</span>
                 <span className="text-pink-50">{settings.rounds}</span>
               </div>
               <div className="flex justify-between">
-                <span>每轮时间</span>
+                <span>{copy.timePerRound}</span>
                 <span className="text-pink-50">{settings.timePerRound}s</span>
               </div>
               <div className="flex justify-between">
-                <span>初始血量</span>
+                <span>{copy.startingHp}</span>
                 <span className="text-pink-50">{settings.startingHp}</span>
               </div>
             </div>
@@ -1629,7 +1652,7 @@ export function BattleGame({
 
           {!isHost && !lobbySynced && (
             <div className="anime-panel mb-4 p-4 text-center text-sm text-pink-100/65">
-              正在同步房间设置…
+              {copy.syncingSettings}
             </div>
           )}
 
@@ -1640,14 +1663,14 @@ export function BattleGame({
               className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {playerList.length < 2
-                ? "等待玩家…"
+                ? copy.waitPlayers
                 : isStarting
-                  ? "正在生成题目…"
-                  : "开始对战"}
+                  ? copy.generatingQuestions
+                  : copy.startBattle}
             </button>
           ) : (
             <p className="text-center text-pink-100/65">
-              {gameSyncing ? "房主正在生成题目，请稍候…" : "等待房主开始游戏…"}
+              {gameSyncing ? copy.hostGenerating : copy.waitHostStart}
             </p>
           )}
           {lobbyError && (
@@ -1661,9 +1684,11 @@ export function BattleGame({
   }
 
   if (phase === "round-result" && lastResult) {
-    const isLastRound =
-      lastResult.roundIndex >= settings.rounds - 1 ||
-      Object.values(lastResult.hpAfter).some((hp) => hp <= 0);
+    const isLastRound = isBattleFinalRound(
+      lastResult.roundIndex,
+      settings,
+      players,
+    );
     return (
       <BattleRoundResultView
         result={lastResult}
@@ -1672,6 +1697,7 @@ export function BattleGame({
         questionType={settings.questionType}
         roundReady={roundReady}
         isLastRound={isLastRound}
+        locale={locale}
         onReady={handleRoundReady}
       />
     );
@@ -1684,6 +1710,7 @@ export function BattleGame({
         players={players}
         results={results}
         myId={myId.current}
+        locale={locale}
       />
     );
   }
@@ -1702,83 +1729,84 @@ export function BattleGame({
     currentQuestion &&
     isLocationOnlyBattleQuestion(currentQuestion)
   ) {
-    const isHistoryQuestion = isHistoryTuxunBattleQuestion(currentQuestion);
-    const isAnimeQuestion = isAnimeTuxunBattleQuestion(currentQuestion);
-    const timedClueInterval = isAnimeQuestion
-      ? ANIME_TUXUN_CLUE_INTERVAL_SECONDS
-      : HISTORY_TUXUN_CLUE_INTERVAL_SECONDS;
-    const timedClues =
-      isHistoryQuestion || isAnimeQuestion
-        ? currentQuestion.playState.clues.slice(
-            0,
-            Math.min(
-              currentQuestion.playState.clues.length,
-              Math.floor(roundElapsedSeconds / timedClueInterval) + 1,
-            ),
-          )
-        : [];
+    const isAnimeQuestion = isAnimeBattleQuestion(currentQuestion);
+    const isLegacyAnimeQuestion = isAnimeTuxunBattleQuestion(currentQuestion);
+    const timedClues = isLegacyAnimeQuestion
+      ? currentQuestion.playState.clues.slice(
+          0,
+          Math.min(
+            currentQuestion.playState.clues.length,
+            Math.floor(
+              roundElapsedSeconds / ANIME_TUXUN_CLUE_INTERVAL_SECONDS,
+            ) + 1,
+          ),
+        )
+      : [];
     const nextClueIn =
-      (isHistoryQuestion || isAnimeQuestion) &&
+      isLegacyAnimeQuestion &&
       timedClues.length < currentQuestion.playState.clues.length
-        ? timedClueInterval - (roundElapsedSeconds % timedClueInterval)
+        ? ANIME_TUXUN_CLUE_INTERVAL_SECONDS -
+          (roundElapsedSeconds % ANIME_TUXUN_CLUE_INTERVAL_SECONDS)
         : null;
     const isForeignQuestion = isForeignBattleQuestion(currentQuestion);
+    const animeQuestionText = isAnimeQuestion
+      ? getAnimeGuessrQuestionText(currentQuestion.question, locale)
+      : null;
 
     return (
       <div className="flex h-screen flex-col bg-[#0a0612] text-white">
         {renderBattleHeader()}
 
         <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
-          {isTuxunBattleQuestion(currentQuestion) ? (
-            <BaiduPanorama
-              key={currentQuestion.id}
-              location={currentQuestion.location}
-              onUnavailable={() =>
-                setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
-              }
-            />
-          ) : isForeignQuestion ? (
+          {isForeignQuestion ? (
             <GoogleStreetView
               key={currentQuestion.id}
               location={currentQuestion.location}
+              googleMapsLanguage={googleMapsLanguage}
               onUnavailable={() =>
-                setStreetViewError(
-                  "当前 Google 街景渲染失败，请返回大厅重新开局。",
-                )
+                setStreetViewError(copy.googleStreetViewFailed)
               }
             />
           ) : isAnimeQuestion ? (
             <GoogleStreetView
               key={currentQuestion.id}
-              location={toAnimeTuxunBattleStreetViewLocation(currentQuestion)}
+              location={toAnimeStreetViewLocation(
+                currentQuestion.question,
+                locale,
+              )}
+              googleMapsLanguage={googleMapsLanguage}
               onUnavailable={() =>
-                setStreetViewError(
-                  "当前 Google 街景渲染失败，请返回大厅重新开局。",
-                )
+                setStreetViewError(copy.googleStreetViewFailed)
+              }
+            />
+          ) : isLegacyAnimeQuestion ? (
+            <GoogleStreetView
+              key={currentQuestion.id}
+              location={toAnimeTuxunBattleStreetViewLocation(currentQuestion)}
+              googleMapsLanguage={googleMapsLanguage}
+              onUnavailable={() =>
+                setStreetViewError(copy.googleStreetViewFailed)
               }
             />
           ) : (
-            <BaiduPanoramaView
-              key={currentQuestion.id}
-              point={{
-                lat: currentQuestion.playState.sceneLat,
-                lng: currentQuestion.playState.sceneLng,
-              }}
-              panoId={currentQuestion.playState.scenePanoId}
-              heading={currentQuestion.playState.heading}
-              pitch={currentQuestion.playState.pitch}
-              onUnavailable={() =>
-                setStreetViewError("当前百度全景渲染失败，请返回大厅重新开局。")
-              }
-            />
+            <div className="grid h-full place-items-center bg-stone-950 px-6 text-center">
+              <div>
+                <div className="text-lg font-bold text-pink-100">
+                  {copy.unsupportedMode}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-pink-100/60">
+                  {copy.googleStreetViewFailed}
+                </p>
+              </div>
+            </div>
           )}
 
           <aside className="anime-panel absolute top-4 left-4 z-20 flex w-[min(calc(100vw-2rem),380px)] flex-col gap-3 p-4">
             <div className="flex items-center justify-between rounded-lg bg-white/8 px-3 py-2">
               <div>
-                <div className="text-xs text-pink-100/50">剩余时间</div>
+                <div className="text-xs text-pink-100/50">{copy.timeLeft}</div>
                 <div className="text-sm text-cyan-100">
-                  提交越快，速度补偿越高
+                  {copy.speedCompensationHint}
                 </div>
               </div>
               <span
@@ -1791,7 +1819,9 @@ export function BattleGame({
             </div>
 
             <div className="flex items-center justify-between gap-2 rounded-lg bg-white/8 px-3 py-2">
-              <span className="text-sm text-pink-100/60">提交进度</span>
+              <span className="text-sm text-pink-100/60">
+                {copy.submitProgress}
+              </span>
               <span className="text-sm font-medium text-green-300">
                 {submittedSummary}
               </span>
@@ -1803,35 +1833,61 @@ export function BattleGame({
               </div>
             )}
 
-            {isTuxunBattleQuestion(currentQuestion) ? (
-              <div className="rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2">
-                <div className="text-sm font-semibold text-sky-200">
-                  观察全景，猜它在中国哪里
-                </div>
-                <p className="mt-1 text-sm leading-6 text-stone-300">
-                  从道路、建筑、招牌和地形里找线索，在右下角百度地图中点选位置。
-                </p>
-              </div>
-            ) : isForeignQuestion ? (
+            {isForeignQuestion ? (
               <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2">
                 <div className="text-sm font-semibold text-emerald-200">
-                  观察街景，猜它在日本哪里
+                  {copy.foreignInstructionTitle}
                 </div>
                 <p className="mt-1 text-sm leading-6 text-stone-300">
-                  从道路、建筑、招牌和地形里找线索，在右下角 Google
-                  地图中点选位置。
+                  {copy.foreignInstructionBody}
                 </p>
               </div>
-            ) : isAnimeQuestion ? (
+            ) : isAnimeQuestion && animeQuestionText ? (
+              <div className="rounded-lg border border-pink-400/30 bg-pink-400/10 px-3 py-2">
+                <BattleAnimeClueImage
+                  question={currentQuestion.question}
+                  alt={animeQuestionText.title}
+                />
+                <div className="mt-3 text-sm font-semibold text-pink-100">
+                  {copy.animeClue}
+                </div>
+                <div className="mt-1 text-xl font-black text-pink-50">
+                  {animeQuestionText.animeTitle}
+                </div>
+                {currentQuestion.question.year != null && (
+                  <div className="mt-1 text-xs text-pink-100/60">
+                    {currentQuestion.question.year}
+                  </div>
+                )}
+                <div className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm leading-6 text-pink-50">
+                  {redactAnswerTerms(animeQuestionText.description, [
+                    animeQuestionText.location,
+                    animeQuestionText.answerName,
+                    currentQuestion.question.location,
+                  ])}
+                </div>
+                {animeQuestionText.aspect && (
+                  <div className="mt-2 text-xs leading-5 text-pink-100/70">
+                    {redactAnswerTerms(animeQuestionText.aspect, [
+                      animeQuestionText.location,
+                      animeQuestionText.answerName,
+                      currentQuestion.question.location,
+                    ])}
+                  </div>
+                )}
+              </div>
+            ) : isLegacyAnimeQuestion ? (
               <div className="rounded-lg border border-pink-400/30 bg-pink-400/10 px-3 py-2">
                 <div className="flex items-center justify-between gap-3 text-sm font-semibold text-pink-100">
-                  <span>动漫线索</span>
+                  <span>{copy.animeClue}</span>
                   {nextClueIn ? (
                     <span className="text-xs text-pink-100/70">
-                      下一条 {nextClueIn}s
+                      {copy.nextClueIn(nextClueIn)}
                     </span>
                   ) : (
-                    <span className="text-xs text-pink-100/70">已全部给出</span>
+                    <span className="text-xs text-pink-100/70">
+                      {copy.allCluesShown}
+                    </span>
                   )}
                 </div>
                 <div className="mt-2 text-xs leading-5 text-pink-100/70">
@@ -1857,31 +1913,12 @@ export function BattleGame({
               </div>
             ) : (
               <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2">
-                <div className="flex items-center justify-between gap-3 text-sm font-semibold text-amber-200">
-                  <span>历史线索</span>
-                  {nextClueIn ? (
-                    <span className="text-xs text-amber-100/70">
-                      下一条 {nextClueIn}s
-                    </span>
-                  ) : (
-                    <span className="text-xs text-amber-100/70">
-                      已全部给出
-                    </span>
-                  )}
+                <div className="text-sm font-semibold text-amber-200">
+                  {copy.unsupportedMode}
                 </div>
-                <ol className="mt-3 space-y-2">
-                  {timedClues.map((clue, index) => (
-                    <li
-                      key={`${currentQuestion.id}-${index}`}
-                      className="text-sm leading-6 text-stone-200"
-                    >
-                      <span className="mr-2 font-mono text-amber-300">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      {clue}
-                    </li>
-                  ))}
-                </ol>
+                <p className="mt-1 text-sm leading-6 text-stone-300">
+                  {copy.googleStreetViewFailed}
+                </p>
               </div>
             )}
           </aside>
@@ -1899,26 +1936,26 @@ export function BattleGame({
             disabled={!canSubmit || submitted}
             submitLabel={submitLabel}
             title={
-              isTuxunBattleQuestion(currentQuestion)
-                ? "图寻猜点"
-                : isForeignQuestion
-                  ? "日本地图猜点"
-                  : isAnimeQuestion
-                    ? "动漫对战猜点"
-                    : "历史图寻猜点"
+              isForeignQuestion
+                ? copy.foreignGuessTitle
+                : isAnimeQuestion || isLegacyAnimeQuestion
+                  ? copy.animeGuessTitle
+                  : copy.historyGuessTitle
             }
-            mapProvider={
-              isForeignQuestion || isAnimeQuestion ? "google" : "baidu"
-            }
+            mapProvider="google"
             country={DEFAULT_FOREIGN_COUNTRY}
+            googleMapLabels={googleMapLabels}
+            googleMapsLanguage={googleMapsLanguage}
           />
 
           {submitted && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20">
               <div className="rounded-xl bg-green-800/85 px-6 py-3 text-center shadow-lg shadow-black/30 backdrop-blur-sm">
-                <div className="text-lg font-bold text-green-200">✓ 已锁定</div>
+                <div className="text-lg font-bold text-green-200">
+                  ✓ {copy.lockedTitle}
+                </div>
                 <div className="text-sm text-green-100/80">
-                  等待其他玩家或计时结束…
+                  {copy.lockedBody}
                 </div>
               </div>
             </div>
@@ -1946,10 +1983,10 @@ export function BattleGame({
         >
           <div className="anime-panel flex items-center justify-between rounded-lg px-4 py-2">
             <div>
-              <div className="text-sm text-pink-100/60">剩余时间</div>
+              <div className="text-sm text-pink-100/60">{copy.timeLeft}</div>
               {!submitted && speedPreview && (
                 <div className="text-xs text-cyan-100">
-                  现在提交 ×{speedPreview.toFixed(2)}
+                  {copy.submitNowMultiplier(speedPreview.toFixed(2))}
                 </div>
               )}
             </div>
@@ -1961,7 +1998,9 @@ export function BattleGame({
           </div>
 
           <div className="anime-panel flex items-center justify-between gap-2 rounded-lg px-4 py-2">
-            <span className="text-sm text-pink-100/60">提交进度</span>
+            <span className="text-sm text-pink-100/60">
+              {copy.submitProgress}
+            </span>
             <span className="text-sm font-medium text-green-300">
               {submittedSummary}
             </span>
@@ -2028,10 +2067,10 @@ export function BattleGame({
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
                 <div className="rounded-xl bg-green-800/80 px-6 py-3 text-center backdrop-blur-sm">
                   <div className="text-lg font-bold text-green-300">
-                    ✓ 已锁定
+                    ✓ {copy.lockedTitle}
                   </div>
                   <div className="text-sm text-green-400">
-                    等待其他玩家或计时结束…
+                    {copy.lockedBody}
                   </div>
                 </div>
               </div>

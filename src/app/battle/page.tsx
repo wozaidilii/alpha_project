@@ -14,6 +14,15 @@ import {
   type GameModeSlug,
 } from "~/lib/game-mode";
 import {
+  DEFAULT_ANIME_LOCALE,
+  getAnimeLocaleFromSearch,
+  getStoredAnimeLocale,
+  saveAnimeLocale,
+  type AnimeLocale,
+  withAnimeLocale,
+} from "~/lib/anime-locale";
+import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
+import {
   capturePostHogEvent,
   identifyPostHogUser,
   POSTHOG_EVENTS,
@@ -26,20 +35,32 @@ function generateRoomId(): string {
 export default function BattleLobby() {
   const router = useRouter();
   const { ready, session: authSession } = useCompletedPlayerSession();
+  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [tab, setTab] = useState<"create" | "join">("create");
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [rounds, setRounds] = useState(5);
-  const [timePerRound, setTimePerRound] = useState(120);
+  const [timePerRound] = useState(120);
   const [startingHp, setStartingHp] = useState(100);
   const firstBattleMode = useMemo(
-    () => BATTLE_GAME_MODE_LIST[0]?.type ?? "anime-tuxun",
+    () => BATTLE_GAME_MODE_LIST[0]?.type ?? "anime",
     [],
   );
   const [questionType, setQuestionType] =
     useState<GameModeSlug>(firstBattleMode);
   const [message, setMessage] = useState("");
   const recordedLobbyViewRef = useRef(false);
+  const copy = getBattleCopy(locale);
+  const homeUrl = withAnimeLocale("/", locale);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const nextLocale =
+      getAnimeLocaleFromSearch(window.location.search) ??
+      getStoredAnimeLocale();
+    setLocale(nextLocale);
+    saveAnimeLocale(nextLocale);
+  }, []);
 
   useEffect(() => {
     if (!ready || !authSession) return;
@@ -71,7 +92,7 @@ export default function BattleLobby() {
 
   function handleCreate() {
     if (BATTLE_GAME_MODE_LIST.length === 0) {
-      setMessage("当前没有可用的对战玩法");
+      setMessage(copy.noBattleModes);
       return;
     }
 
@@ -81,6 +102,7 @@ export default function BattleLobby() {
       const params = new URLSearchParams({
         host: "1",
         mode: questionType,
+        lang: locale,
         rounds: String(rounds),
         time: String(timePerRound),
         hp: String(startingHp),
@@ -98,7 +120,7 @@ export default function BattleLobby() {
       );
       void router.push(`/battle/${roomId}?${params.toString()}`);
     } catch {
-      setMessage("进入房间失败，请稍后再试");
+      setMessage(copy.createFailed);
     }
   }
 
@@ -108,7 +130,7 @@ export default function BattleLobby() {
     try {
       const activeSession = ensureSession();
       const code = joinCode.trim().toUpperCase();
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ lang: locale });
       appendProfileParams(params, activeSession);
       capturePostHogEvent(
         POSTHOG_EVENTS.battleRoomJoined,
@@ -117,31 +139,31 @@ export default function BattleLobby() {
       );
       void router.push(`/battle/${code}?${params.toString()}`);
     } catch {
-      setMessage("加入房间失败，请稍后再试");
+      setMessage(copy.joinFailed);
     }
   }
 
-  if (!ready || !session) return <AuthLoading />;
+  if (!ready || !session) return <AuthLoading label={copy.loading} />;
 
   return (
     <main className="anime-shell flex min-h-screen flex-col items-center justify-center px-4 py-10 text-white">
       <div className="w-full max-w-md">
         <Link
-          href="/"
+          href={homeUrl}
           className="mb-6 inline-flex items-center gap-1 text-sm text-pink-100/70 hover:text-pink-50"
         >
-          ← 返回首页
+          ← {copy.backHome}
         </Link>
 
         <div className="mb-6">
           <div className="text-sm font-semibold tracking-[0.24em] text-pink-200/70 uppercase">
-            Anime battle
+            {copy.animeBattleKicker}
           </div>
           <h1 className="mt-2 text-3xl font-extrabold text-pink-50">
-            对战模式
+            {copy.lobbyTitle}
           </h1>
           <p className="mt-2 text-sm leading-6 text-pink-100/70">
-            创建房间或输入房间号，与朋友同时观察街景、抢答动漫圣地位置。
+            {copy.lobbyDescription}
           </p>
         </div>
 
@@ -156,7 +178,7 @@ export default function BattleLobby() {
                   : "text-pink-100/70 hover:text-white"
               }`}
             >
-              {value === "create" ? "创建房间" : "加入房间"}
+              {value === "create" ? copy.createTab : copy.joinTab}
             </button>
           ))}
         </div>
@@ -164,47 +186,52 @@ export default function BattleLobby() {
         {tab === "create" ? (
           <>
             <div className="mb-4 space-y-4 rounded-2xl border border-white/10 bg-zinc-950/55 p-4 shadow-xl shadow-pink-950/20 backdrop-blur">
-              <h3 className="font-semibold text-pink-50">游戏设置</h3>
+              <h3 className="font-semibold text-pink-50">
+                {copy.settingsTitle}
+              </h3>
 
               <div>
                 <label className="mb-2 block text-sm text-pink-100/70">
-                  游戏类型
+                  {copy.gameType}
                 </label>
                 <div className="flex flex-col gap-2">
-                  {BATTLE_GAME_MODE_LIST.map((mode: GameModeConfig) => (
-                    <button
-                      key={mode.slug}
-                      type="button"
-                      onClick={() => setQuestionType(mode.type)}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
-                        questionType === mode.type
-                          ? "border-pink-400 bg-pink-500/15"
-                          : "border-white/10 bg-white/5 hover:border-pink-200/40"
-                      }`}
-                    >
-                      <span className="text-2xl">{mode.emoji}</span>
-                      <span>
-                        <span
-                          className={`block font-semibold ${
-                            questionType === mode.type
-                              ? "text-pink-100"
-                              : "text-pink-50"
-                          }`}
-                        >
-                          {mode.title}
+                  {BATTLE_GAME_MODE_LIST.map((mode: GameModeConfig) => {
+                    const modeCopy = getBattleModeText(mode, locale);
+                    return (
+                      <button
+                        key={mode.slug}
+                        type="button"
+                        onClick={() => setQuestionType(mode.type)}
+                        className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                          questionType === mode.type
+                            ? "border-pink-400 bg-pink-500/15"
+                            : "border-white/10 bg-white/5 hover:border-pink-200/40"
+                        }`}
+                      >
+                        <span className="text-2xl">{mode.emoji}</span>
+                        <span>
+                          <span
+                            className={`block font-semibold ${
+                              questionType === mode.type
+                                ? "text-pink-100"
+                                : "text-pink-50"
+                            }`}
+                          >
+                            {modeCopy.title}
+                          </span>
+                          <span className="block text-xs text-pink-100/55">
+                            {modeCopy.tagline}
+                          </span>
                         </span>
-                        <span className="block text-xs text-pink-100/55">
-                          {mode.tagline}
-                        </span>
-                      </span>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-sm text-pink-100/70">
-                  轮数：<span className="text-white">{rounds}</span>
+                  {copy.rounds}: <span className="text-white">{rounds}</span>
                 </label>
                 <input
                   type="range"
@@ -222,29 +249,20 @@ export default function BattleLobby() {
 
               <div>
                 <label className="mb-1 block text-sm text-pink-100/70">
-                  每轮时间：
-                  <span className="text-white">{timePerRound} 秒</span>
+                  {copy.timePerRound}:{" "}
+                  <span className="text-white">
+                    {copy.seconds(timePerRound)}
+                  </span>
                 </label>
-                <input
-                  type="range"
-                  min={60}
-                  max={180}
-                  step={10}
-                  value={timePerRound}
-                  onChange={(event) =>
-                    setTimePerRound(Number(event.target.value))
-                  }
-                  className="w-full accent-pink-500"
-                />
-                <div className="flex justify-between text-xs text-pink-100/45">
-                  <span>60s</span>
-                  <span>180s</span>
+                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-pink-100/60">
+                  {copy.speedCompensationHint}
                 </div>
               </div>
 
               <div>
                 <label className="mb-1 block text-sm text-pink-100/70">
-                  初始血量：<span className="text-white">{startingHp}</span>
+                  {copy.startingHp}:{" "}
+                  <span className="text-white">{startingHp}</span>
                 </label>
                 <div className="flex gap-2">
                   {[50, 100, 150, 200].map((value) => (
@@ -265,14 +283,14 @@ export default function BattleLobby() {
             </div>
 
             <button onClick={handleCreate} className="anime-button w-full">
-              创建房间 →
+              {copy.createRoom}
             </button>
           </>
         ) : (
           <>
             <div className="mb-4">
               <label className="mb-1 block text-sm text-pink-100/70">
-                房间号
+                {copy.roomCode}
               </label>
               <input
                 type="text"
@@ -281,7 +299,7 @@ export default function BattleLobby() {
                   setJoinCode(event.target.value.toUpperCase())
                 }
                 maxLength={6}
-                placeholder="6 位房间号"
+                placeholder={copy.roomCodePlaceholder}
                 className="w-full rounded-xl border border-white/10 bg-zinc-950/60 px-4 py-3 font-mono text-xl tracking-widest text-white placeholder-pink-100/35 outline-none focus:border-pink-300"
               />
             </div>
@@ -291,7 +309,7 @@ export default function BattleLobby() {
               disabled={joinCode.trim().length < 6}
               className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
-              加入房间 →
+              {copy.joinRoom}
             </button>
           </>
         )}

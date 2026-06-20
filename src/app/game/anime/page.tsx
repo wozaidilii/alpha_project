@@ -45,6 +45,8 @@ import {
   type AnimeRoundResult,
 } from "~/lib/anime-guessr-state";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
+import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
+import { getGoogleMapsLanguage } from "~/lib/google-maps-language";
 import { GOOGLE_MAP_AK } from "~/lib/google-street-view";
 import {
   haversineDistance,
@@ -638,6 +640,8 @@ export default function AnimeGuessrPage() {
   const recordActivity = api.player.recordActivity.useMutation();
   const recordGameSession = api.player.recordGameSession.useMutation();
   const copy = GAME_COPY[locale];
+  const googleMapLabels = getGoogleGuessMapLabels(locale);
+  const googleMapsLanguage = getGoogleMapsLanguage(locale);
   const gameNextUrl = useMemo(
     () => withAnimeLocale("/game/anime", locale),
     [locale],
@@ -1376,6 +1380,7 @@ export default function AnimeGuessrPage() {
             <GoogleStreetView
               key={currentStreetViewLocation.id}
               location={currentStreetViewLocation}
+              googleMapsLanguage={googleMapsLanguage}
               onUnavailable={handleCurrentStreetViewUnavailable}
             />
           )}
@@ -1551,6 +1556,11 @@ export default function AnimeGuessrPage() {
                 answerLabel={roundResultText?.answerName}
                 distanceKm={roundResult?.distanceKm}
                 disabled={Boolean(roundResult)}
+                labels={googleMapLabels}
+                googleMapsLanguage={googleMapsLanguage}
+                formatDistance={(distanceKm) =>
+                  formatDistance(distanceKm, locale)
+                }
                 minHeightClass="min-h-0"
                 onGuess={setGuess}
               />

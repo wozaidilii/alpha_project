@@ -200,3 +200,31 @@
 - 根因：题库里存的是 `anime/...` 相对 key，前端依赖 `NEXT_PUBLIC_ANIME_GUESSR_IMAGE_BASE_URL` 拼接；如果 base URL 填到 `/anime` 层会生成重复 `/anime/anime/...`，而开发环境还会默认强制走本地 rawdata proxy，导致已配置 R2 时仍不请求远程图片。
 - 修复：抽出共享图片 URL helper，统一规范 `anime-gussr/anime/...` 和 `anime/...` key，兼容 bucket root、bucket path 和已到 `/anime` 层的 public base；配置了 public base 时优先直接加载 R2，未配置时开发环境才走本地 proxy。
 - 预防：所有客户端题图 URL 都必须通过共享 helper 拼接，并用测试覆盖 bucket-root、path-prefix、`/anime` 结尾和 bucket-name pasted key；R2 base 必须是无需 Authorization 的 public URL，不要使用 catalog 地址。
+
+## 对战回合状态必须单调前进
+
+- 问题：多人对战完成后可能从第 4 题回到第 3 题，且对战动漫玩法仍在使用旧的 `anime-tuxun` 文本线索流程，没有和个人猜动漫模式对齐。
+- 根因：battle 同时依赖 Pusher 事件和 HTTP 轮询恢复状态，旧的 `round-result` 快照晚于新一轮 `round-started` 抵达时会覆盖本地新回合；服务端 `startBattleRoomRound` 也没有拒绝同轮或更低轮次请求。另一个根因是 battle mode 列表仍暴露旧动漫寻图模式，而不是个人模式使用的 Anime Guessr 静态题库。
+- 修复：battle 只启用 `anime` 模式，加载个人 Anime Guessr 题库并渲染同款街景 + 图片线索；服务端拒绝同轮/低轮次 round-started 和旧 round-result，客户端忽略低轮次或同轮低状态的迟到快照。
+- 预防：所有 battle round 状态必须按 `roundIndex` 和 `playing < round-result < game-over` 单调应用；更改 battle mode 列表时用测试锁住 `anime` enabled、`anime-tuxun` disabled，并覆盖 stale round 请求。
+
+## 对战客户端不能让旧事件缩减已提交状态
+
+- 问题：两名玩家都提交后，页面偶尔回到“无人提交”状态，或第二名玩家在游戏中从房间列表消失。
+- 根因：客户端轮询到的旧同轮快照会直接替换本地 `guesses`，把已经收到的提交状态清空；迟到的同轮 `round-started` 事件也会重新 `beginRound`。同时 React effect cleanup 会在组件临时卸载时发送 `leave`，把仍在游戏中的玩家从房间移除。
+- 修复：同轮提交状态改为只合并不缩减，Pusher `game-started` / `round-started` / `round-results` 都加阶段和轮次 guard；离房间请求只在真实 `pagehide` 时发送，不在 React cleanup 中发送。
+- 预防：实时对战客户端也要遵守单调状态规则：旧快照和旧事件不能清空本地已经确认的提交、结果或玩家状态；React cleanup 不等同于用户主动离开，不能直接触发服务端移除玩家。
+
+## 对战伤害等于分差，终局条件不要散在组件里
+
+- 问题：动漫对战有分差但没有扣血，最后一局或只剩一名存活玩家时，非房主可能停在回合结果页；结算地图也因为默认同色 marker 让答案点和猜测点不清楚。
+- 根因：扣血逻辑把分差按模式缩放，导致扣除 HP 不是两边本轮分差；终局推进只由房主路径处理，且“淘汰到只剩一人”仍被 ready gate 挡住；Google Maps 默认 marker 颜色没有和 UI 图例对应。
+- 修复：抽出 `calcBattleDamage`、`shouldFinishBattleFromResult` 和 ready/final helper，扣血直接等于本轮最高分与玩家分数的差值，淘汰终局不等待 ready，最终结算可由任一客户端幂等写入；Google 结算 marker 改为绿色答案和琥珀猜测图钉。
+- 预防：battle 的计分、伤害、ready 和终局规则必须集中在可测 helper 中；组件只编排事件和渲染，不能把模式名单、存活判断或最终结算条件散落在 JSX/handler 分支里。
+
+## 对战同轮快照只能单调合并
+
+- 问题：对战中玩家已准备会弹回未准备，血量有时从扣血后的值回到 100；battle anime 的计分也低于个人猜动漫模式。
+- 根因：客户端轮询和 Pusher 事件顺序不稳定，旧 `round-result` 快照会直接覆盖本地 `roundReady` 和 `players.hp`；battle 的位置题计分没有传 `soloAnimeScoring: true`，与个人 anime 模式产生规则漂移。
+- 修复：同一结果轮的 ready 状态只合并不缩减，active battle HP 只允许降低不允许被旧快照抬高；battle anime 位置题改用共享 `calcBattleLocationScore`，内部复用个人模式的 solo anime 计分参数。
+- 预防：battle 客户端应用恢复快照时要按字段判断单调性：guesses/ready 可追加不可删除，HP 可降不可升，新回合才清空；玩法计分规则必须放进可测 helper，不要在个人模式和 battle 组件里分别手写参数。

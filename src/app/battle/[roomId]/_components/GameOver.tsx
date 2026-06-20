@@ -13,15 +13,19 @@ import {
 import { getStoredPlayerSession } from "~/lib/player-session";
 import { api } from "~/trpc/react";
 import { CharacterPortrait } from "~/components/CharacterPortrait";
+import { type AnimeLocale, withAnimeLocale } from "~/lib/anime-locale";
+import { getBattleCopy } from "~/lib/battle-copy";
 
 interface Props {
   roomId: string;
   players: Record<string, BattlePlayer>;
   results: BattleRoundResult[];
   myId: string;
+  locale: AnimeLocale;
 }
 
-export function GameOverView({ roomId, players, results, myId }: Props) {
+export function GameOverView({ roomId, players, results, myId, locale }: Props) {
+  const copy = getBattleCopy(locale);
   const recordBattle = api.player.recordBattle.useMutation();
   const recordedRef = useRef(false);
   const playerIds = Object.keys(players);
@@ -67,9 +71,9 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
   })();
   const winnerTitle = leaderIds.includes(myId)
     ? leaderIds.length === 1
-      ? "你赢了！"
-      : "并列第一！"
-    : `${winner.name} 获胜！`;
+      ? copy.youWin
+      : copy.tiedFirst
+    : copy.playerWins(winner.name);
 
   useEffect(() => {
     if (
@@ -114,7 +118,7 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
   return (
     <div className="anime-shell flex min-h-screen flex-col text-white">
       <div className="border-b border-white/10 bg-[#0d081a]/90 px-6 py-3 backdrop-blur">
-        <h1 className="font-bold text-pink-100">对战结束</h1>
+        <h1 className="font-bold text-pink-100">{copy.gameOverTitle}</h1>
       </div>
 
       <div className="mx-auto w-full max-w-3xl px-6 py-8">
@@ -137,11 +141,15 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
           <div className="text-2xl font-extrabold text-pink-100">
             {winnerTitle}
           </div>
-          <div className="mt-1 text-pink-100/60">剩余血量 {winner.hp} HP</div>
+          <div className="mt-1 text-pink-100/60">
+            {copy.remainingHp(winner.hp)}
+          </div>
         </div>
 
         {/* Player final scores */}
-        <h3 className="mb-3 font-semibold text-pink-100">最终结果</h3>
+        <h3 className="mb-3 font-semibold text-pink-100">
+          {copy.finalResults}
+        </h3>
         <div className="mb-6 space-y-3">
           {sortedPlayers.map((p, i) => (
             <div
@@ -175,35 +183,45 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
                   <div className="font-bold">
                     {p.name}
                     {p.id === myId && (
-                      <span className="ml-1 text-xs text-amber-400">(你)</span>
+                      <span className="ml-1 text-xs text-amber-400">
+                        ({copy.me})
+                      </span>
                     )}
                   </div>
-                  <div className="text-sm text-pink-100/55">剩余 {p.hp} HP</div>
+                  <div className="text-sm text-pink-100/55">
+                    {copy.remaining(p.hp)}
+                  </div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xl font-bold text-white">
                   {(totalScores[p.id] ?? 0).toLocaleString()}
                 </div>
-                <div className="text-xs text-pink-100/45">总得分</div>
+                <div className="text-xs text-pink-100/45">
+                  {copy.totalScore}
+                </div>
               </div>
             </div>
           ))}
         </div>
 
         {recordBattle.isSuccess && (
-          <p className="mb-6 text-center text-sm text-green-300">战绩已记录</p>
+          <p className="mb-6 text-center text-sm text-green-300">
+            {copy.battleRecorded}
+          </p>
         )}
         {recordBattle.isError && (
           <p className="mb-6 text-center text-sm text-red-200">
-            战绩记录失败，请返回大厅重新登录后再试
+            {copy.battleRecordFailed}
           </p>
         )}
 
         {/* Round-by-round */}
         {results.length > 0 && (
           <>
-            <h3 className="mb-3 font-semibold text-pink-100">各轮回顾</h3>
+            <h3 className="mb-3 font-semibold text-pink-100">
+              {copy.roundReview}
+            </h3>
             <div className="mb-6 space-y-2">
               {results.map((r, i) => {
                 const winner = playerIds.reduce(
@@ -253,11 +271,17 @@ export function GameOverView({ roomId, players, results, myId }: Props) {
         )}
 
         <div className="flex gap-3">
-          <Link href="/battle" className="anime-button flex-1">
-            再来一局
+          <Link
+            href={withAnimeLocale("/battle", locale)}
+            className="anime-button flex-1"
+          >
+            {copy.playAgain}
           </Link>
-          <Link href="/" className="anime-button-secondary flex-1">
-            返回首页
+          <Link
+            href={withAnimeLocale("/", locale)}
+            className="anime-button-secondary flex-1"
+          >
+            {copy.backHome}
           </Link>
         </div>
       </div>

@@ -11,10 +11,17 @@ import {
   getGoogleMapsApi,
   googleBoundsForCountry,
   loadGoogleMapsScript,
+  type GoogleMapsLanguage,
   type GoogleMapInstance,
   type GoogleMarkerInstance,
   type GooglePolylineInstance,
 } from "~/lib/google-street-view";
+import {
+  GOOGLE_GUESS_MAP_LABELS,
+  type GoogleGuessMapLabels,
+} from "~/lib/google-guess-map-labels";
+
+export type { GoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
 
 interface Props {
   country: ForeignCountryConfig;
@@ -23,16 +30,39 @@ interface Props {
   answerLabel?: string;
   distanceKm?: number;
   disabled?: boolean;
+  labels?: GoogleGuessMapLabels;
+  googleMapsLanguage?: GoogleMapsLanguage;
   minHeightClass?: string;
   restrictToCountry?: boolean;
+  formatDistance?: (distanceKm: number) => string;
   onGuess: (point: { lat: number; lng: number }) => void;
 }
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
-function formatDistance(distanceKm: number) {
+const DEFAULT_LABELS = GOOGLE_GUESS_MAP_LABELS.zh;
+
+function formatDistanceZh(distanceKm: number) {
   if (distanceKm < 1) return `${Math.round(distanceKm * 1000)} 米`;
   return `${Math.round(distanceKm).toLocaleString()} 公里`;
+}
+
+function buildMarkerIcon({
+  color,
+  label,
+  size,
+}: {
+  color: string;
+  label: string;
+  size: number;
+}) {
+  const text = label.slice(0, 2);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 10}" viewBox="0 0 ${size} ${size + 10}">
+  <path d="M${size / 2} ${size + 8} C${size / 2} ${size + 8} ${size * 0.2} ${size * 0.55} ${size * 0.2} ${size * 0.35} C${size * 0.2} ${size * 0.13} ${size * 0.33} 2 ${size / 2} 2 C${size * 0.67} 2 ${size * 0.8} ${size * 0.13} ${size * 0.8} ${size * 0.35} C${size * 0.8} ${size * 0.55} ${size / 2} ${size + 8} ${size / 2} ${size + 8} Z" fill="${color}" stroke="white" stroke-width="3"/>
+  <circle cx="${size / 2}" cy="${size * 0.35}" r="${size * 0.2}" fill="rgba(15,23,42,0.22)"/>
+  <text x="${size / 2}" y="${size * 0.42}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${size * 0.28}" font-weight="800" fill="white">${text}</text>
+</svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 export function GoogleGuessMap({
@@ -42,8 +72,11 @@ export function GoogleGuessMap({
   answerLabel,
   distanceKm,
   disabled,
+  labels = DEFAULT_LABELS,
+  googleMapsLanguage,
   minHeightClass = "min-h-[360px]",
   restrictToCountry = true,
+  formatDistance = formatDistanceZh,
   onGuess,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,8 +119,15 @@ export function GoogleGuessMap({
         new api.Marker({
           position: answer,
           map,
-          title: answerLabel ? `答案：${answerLabel}` : "答案",
-          label: "答",
+          title: answerLabel
+            ? `${labels.answerTitle}: ${answerLabel}`
+            : labels.answerTitle,
+          icon: buildMarkerIcon({
+            color: "#22c55e",
+            label: labels.answerMarkerLabel,
+            size: 44,
+          }),
+          zIndex: 10,
         }),
       );
     }
@@ -97,8 +137,13 @@ export function GoogleGuessMap({
         new api.Marker({
           position: guess,
           map,
-          title: "你的猜测",
-          label: "猜",
+          title: labels.guessTitle,
+          icon: buildMarkerIcon({
+            color: "#f59e0b",
+            label: labels.guessMarkerLabel,
+            size: 36,
+          }),
+          zIndex: 20,
         }),
       );
     }
@@ -121,7 +166,18 @@ export function GoogleGuessMap({
       guess,
       answer,
     });
-  }, [answer, answerLabel, clearOverlays, country, guess, restrictToCountry]);
+  }, [
+    answer,
+    answerLabel,
+    clearOverlays,
+    country,
+    guess,
+    labels.answerMarkerLabel,
+    labels.answerTitle,
+    labels.guessMarkerLabel,
+    labels.guessTitle,
+    restrictToCountry,
+  ]);
 
   useEffect(() => {
     if (!GOOGLE_MAP_AK || !containerRef.current || mapRef.current) return;
@@ -129,7 +185,7 @@ export function GoogleGuessMap({
     let active = true;
     setState("loading");
 
-    void loadGoogleMapsScript(GOOGLE_MAP_AK)
+    void loadGoogleMapsScript(GOOGLE_MAP_AK, { language: googleMapsLanguage })
       .then(() => {
         if (!active || !containerRef.current) return;
         const api = getGoogleMapsApi();
@@ -181,7 +237,7 @@ export function GoogleGuessMap({
       }
       mapRef.current = null;
     };
-  }, [clearOverlays, country, restrictToCountry]);
+  }, [clearOverlays, country, googleMapsLanguage, restrictToCountry]);
 
   useEffect(() => {
     if (state === "ready") syncMarkers();
@@ -197,14 +253,10 @@ export function GoogleGuessMap({
         <div className="absolute inset-0 grid place-items-center bg-stone-950 px-5 text-center">
           <div>
             <div className="text-base font-semibold text-stone-100">
-              {GOOGLE_MAP_AK
-                ? "正在加载 Google Maps"
-                : "需要配置 Google Maps AK"}
+              {GOOGLE_MAP_AK ? labels.loadingTitle : labels.missingKeyTitle}
             </div>
             <p className="mt-2 text-sm leading-6 text-stone-400">
-              {GOOGLE_MAP_AK
-                ? "地图加载失败时，请确认 Google Maps JavaScript API 和 Street View 已开通。"
-                : "在 .env.local 配置 NEXT_PUBLIC_GOOGLE_MAP_AK 后重启开发服务。"}
+              {GOOGLE_MAP_AK ? labels.loadingBody : labels.missingKeyBody}
             </p>
           </div>
         </div>
@@ -214,15 +266,15 @@ export function GoogleGuessMap({
         <div className="pointer-events-none absolute top-3 right-3 rounded-md border border-stone-700 bg-stone-950/90 px-3 py-2 text-xs text-stone-200 shadow-lg shadow-black/30">
           <div className="flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
-            你的猜测
+            {labels.guessTitle}
           </div>
           <div className="mt-1 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
-            正确答案
+            {labels.answerTitle}
           </div>
           {distanceKm != null ? (
             <div className="mt-2 border-t border-stone-700 pt-2 font-semibold text-amber-200">
-              偏差 {formatDistance(distanceKm)}
+              {labels.distancePrefix} {formatDistance(distanceKm)}
             </div>
           ) : null}
         </div>

@@ -14,9 +14,9 @@ const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 
 export const DEFAULT_BATTLE_SETTINGS: BattleSettings = {
   rounds: 5,
-  timePerRound: 60,
+  timePerRound: 120,
   startingHp: 100,
-  questionType: "historical",
+  questionType: "anime",
 };
 
 const globalForBattleRooms = globalThis as typeof globalThis & {
@@ -245,6 +245,12 @@ export function recordBattleRoomRoundResult(input: {
   const snapshot = rooms.get(input.roomId);
   if (snapshot?.phase !== "playing") return null;
   if (snapshot.roundStatus === "game-over") return cloneSnapshot(snapshot);
+  if (
+    snapshot.roundIndex != null &&
+    input.result.roundIndex < snapshot.roundIndex
+  ) {
+    return cloneSnapshot(snapshot);
+  }
   if (snapshot.roundIndex !== input.result.roundIndex) {
     return cloneSnapshot(snapshot);
   }
@@ -291,6 +297,13 @@ export function startBattleRoomRound(input: {
   const snapshot = rooms.get(input.roomId);
   if (snapshot?.phase !== "playing") return null;
   if (snapshot.roundStatus === "game-over") return cloneSnapshot(snapshot);
+  if (
+    snapshot.roundIndex != null &&
+    input.roundIndex <= snapshot.roundIndex
+  ) {
+    return cloneSnapshot(snapshot);
+  }
+  if (snapshot.roundStatus !== "round-result") return cloneSnapshot(snapshot);
 
   snapshot.roundStatus = "playing";
   snapshot.roundIndex = input.roundIndex;
