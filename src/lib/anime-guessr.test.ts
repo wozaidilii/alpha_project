@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  ANIME_GUESSR_DIFFICULTY_STORAGE_KEY,
+  ANIME_GUESSR_LEGACY_MAX_DIFFICULTY_STORAGE_KEY,
   ANIME_GUESSR_PLACEHOLDER_IMAGE_URL,
   buildAnimeGuessrImageUrl,
   buildGoogleMapsStreetViewUrl,
   filterAnimeGuessrQuestionsByTier,
   getAnimeGuessrQuestionDifficulty,
   getAnimeGuessrQuestionText,
+  getStoredAnimeGuessrDifficultyTier,
   isAnimeGuessrQuestion,
+  normalizeAnimeGuessrDifficultyTier,
   pickAnimeGuessrQuestions,
   toAnimeStreetViewLocation,
   type AnimeGuessrQuestion,
@@ -225,6 +229,35 @@ describe("anime-guessr", () => {
         "master",
         "room-seed",
       ).map((question) => question.id),
+    );
+  });
+
+  it("normalizes legacy numeric difficulty values to tiers", () => {
+    expect(normalizeAnimeGuessrDifficultyTier("3")).toBe("master");
+    expect(normalizeAnimeGuessrDifficultyTier(2)).toBe("intermediate");
+    expect(normalizeAnimeGuessrDifficultyTier("miracle")).toBe("miracle");
+  });
+
+  it("migrates legacy max difficulty storage to tier storage", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storage.set(key, value);
+        },
+        removeItem: (key: string) => {
+          storage.delete(key);
+        },
+      },
+    });
+
+    storage.set(ANIME_GUESSR_LEGACY_MAX_DIFFICULTY_STORAGE_KEY, "3");
+
+    expect(getStoredAnimeGuessrDifficultyTier()).toBe("master");
+    expect(storage.get(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY)).toBe("master");
+    expect(storage.has(ANIME_GUESSR_LEGACY_MAX_DIFFICULTY_STORAGE_KEY)).toBe(
+      false,
     );
   });
 

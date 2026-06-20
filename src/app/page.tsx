@@ -16,6 +16,8 @@ import { AnimeRoundCountSelector } from "~/components/AnimeRoundCountSelector";
 import {
   ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
   ANIME_GUESSR_DIFFICULTY_TIERS,
+  getAnimeGuessrDifficultyTierFromSearch,
+  getAnimeGuessrRoundCountFromSearch,
   getStoredAnimeGuessrDifficultyTier,
   getStoredAnimeGuessrRoundCount,
   saveAnimeGuessrDifficultyTier,
@@ -366,9 +368,27 @@ export default function Home() {
 
   useEffect(() => {
     setLocale(getStoredAnimeLocale());
-    setSelectedRoundCount(getStoredAnimeGuessrRoundCount());
-    setDifficultyTier(getStoredAnimeGuessrDifficultyTier());
-    setLeaderboardDifficultyTier(getStoredAnimeGuessrDifficultyTier());
+    const roundsFromSearch = getAnimeGuessrRoundCountFromSearch(
+      window.location.search,
+    );
+    const difficultyFromSearch = getAnimeGuessrDifficultyTierFromSearch(
+      window.location.search,
+    );
+    const storedRoundCount = getStoredAnimeGuessrRoundCount();
+    const storedDifficultyTier = getStoredAnimeGuessrDifficultyTier();
+    const nextRoundCount = roundsFromSearch ?? storedRoundCount;
+    const nextDifficultyTier = difficultyFromSearch ?? storedDifficultyTier;
+
+    setSelectedRoundCount(nextRoundCount);
+    setLeaderboardRounds(nextRoundCount);
+    setDifficultyTier(nextDifficultyTier);
+    setLeaderboardDifficultyTier(nextDifficultyTier);
+    if (difficultyFromSearch) {
+      saveAnimeGuessrDifficultyTier(nextDifficultyTier);
+    }
+    if (roundsFromSearch) {
+      saveAnimeGuessrRoundCount(nextRoundCount);
+    }
     const storedSession = getStoredPlayerSession();
     setSession(storedSession);
     if (storedSession) identifyPostHogUser(storedSession.user);
@@ -395,6 +415,15 @@ export default function Home() {
   }
 
   function handleDifficultyTierChange(nextDifficultyTier: AnimeGuessrDifficultyTier) {
+    setDifficultyTier(nextDifficultyTier);
+    setLeaderboardDifficultyTier(nextDifficultyTier);
+    saveAnimeGuessrDifficultyTier(nextDifficultyTier);
+  }
+
+  function handleLeaderboardDifficultyTierChange(
+    nextDifficultyTier: AnimeGuessrDifficultyTier,
+  ) {
+    setLeaderboardDifficultyTier(nextDifficultyTier);
     setDifficultyTier(nextDifficultyTier);
     saveAnimeGuessrDifficultyTier(nextDifficultyTier);
   }
@@ -803,7 +832,7 @@ export default function Home() {
                     <button
                       key={tier}
                       type="button"
-                      onClick={() => setLeaderboardDifficultyTier(tier)}
+                      onClick={() => handleLeaderboardDifficultyTierChange(tier)}
                       className={`px-2.5 py-1 text-[11px] font-black transition sm:px-3 sm:text-xs ${
                         leaderboardDifficultyTier === tier
                           ? "bg-pink-300/20 text-pink-50"

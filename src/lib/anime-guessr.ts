@@ -24,6 +24,11 @@ export const ANIME_GUESSR_DIFFICULTY_TIERS = [
 export type AnimeGuessrDifficultyTier =
   (typeof ANIME_GUESSR_DIFFICULTY_TIERS)[number];
 export const ANIME_GUESSR_DIFFICULTY_STORAGE_KEY = "aniguessr_difficulty_tier";
+/** @deprecated migrated to ANIME_GUESSR_DIFFICULTY_STORAGE_KEY */
+export const ANIME_GUESSR_LEGACY_MAX_DIFFICULTY_STORAGE_KEY =
+  "aniguessr_max_difficulty";
+/** Sessions before difficulty tier was persisted are stored as `beginner`. */
+export const ANIME_GUESSR_LEGACY_DIFFICULTY_CUTOFF = "2026-06-20T09:29:28.000Z";
 export const ANIME_GUESSR_UNKNOWN_DIFFICULTY = 5;
 
 export const ANIME_GUESSR_TIER_MAX_DIFFICULTY: Record<
@@ -408,21 +413,41 @@ export function normalizeAnimeGuessrDifficultyTier(
   return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
 }
 
+function readStoredDifficultyTierValue(
+  storageKey: string,
+): AnimeGuessrDifficultyTier | null {
+  if (typeof window === "undefined") return null;
+
+  const raw = window.localStorage.getItem(storageKey);
+  if (!raw) return null;
+
+  try {
+    return normalizeAnimeGuessrDifficultyTier(JSON.parse(raw));
+  } catch {
+    return normalizeAnimeGuessrDifficultyTier(raw);
+  }
+}
+
 export function getStoredAnimeGuessrDifficultyTier(): AnimeGuessrDifficultyTier {
   if (typeof window === "undefined") {
     return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
   }
-  try {
-    const raw = window.localStorage.getItem(
-      ANIME_GUESSR_DIFFICULTY_STORAGE_KEY,
-    );
-    if (!raw) return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
-    return normalizeAnimeGuessrDifficultyTier(JSON.parse(raw));
-  } catch {
-    return normalizeAnimeGuessrDifficultyTier(
-      window.localStorage.getItem(ANIME_GUESSR_DIFFICULTY_STORAGE_KEY),
-    );
+
+  const storedTier = readStoredDifficultyTierValue(
+    ANIME_GUESSR_DIFFICULTY_STORAGE_KEY,
+  );
+  if (storedTier) return storedTier;
+
+  const legacyTier = readStoredDifficultyTierValue(
+    ANIME_GUESSR_LEGACY_MAX_DIFFICULTY_STORAGE_KEY,
+  );
+  if (legacyTier) {
+    saveAnimeGuessrDifficultyTier(legacyTier);
+    window.localStorage.removeItem(ANIME_GUESSR_LEGACY_MAX_DIFFICULTY_STORAGE_KEY);
+    return legacyTier;
   }
+
+  return ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER;
 }
 
 export function saveAnimeGuessrDifficultyTier(tier: AnimeGuessrDifficultyTier) {

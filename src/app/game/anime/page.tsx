@@ -752,6 +752,7 @@ export default function AnimeGuessrPage() {
   const roundStartedAtRef = useRef(Date.now());
   const recordedStartKeyRef = useRef<string | null>(null);
   const recordedCompletionKeyRef = useRef<string | null>(null);
+  const recordGameSessionPromiseRef = useRef<Promise<unknown> | null>(null);
   const recordActivity = api.player.recordActivity.useMutation();
   const recordGameSession = api.player.recordGameSession.useMutation();
   const copy = GAME_COPY[locale];
@@ -1089,13 +1090,32 @@ export default function AnimeGuessrPage() {
     }
   }
 
+  async function handleOpenLeaderboard() {
+    if (!session) {
+      setAuthPromptReason("leaderboard");
+      return;
+    }
+
+    try {
+      await recordGameSessionPromiseRef.current;
+    } catch {
+      // Ignore write failures and still open the leaderboard view.
+    }
+
+    setShareMessage(copy.leaderboardSaved);
+    window.location.href = withAnimeLocale(
+      `/?difficulty=${difficultyTier}&rounds=${roundCount}`,
+      locale,
+    );
+  }
+
   useEffect(() => {
     if (phase !== "final") return;
     const questionKey =
       results.length > 0
         ? results.map((result) => result.question.id).join(",")
         : questions.map((question) => question.id).join(",");
-    const key = `${reloadKey}:${roundCount}:${questionKey}:${totalScore}:complete`;
+    const key = `${reloadKey}:${roundCount}:${difficultyTier}:${questionKey}:${totalScore}:complete`;
     if (recordedCompletionKeyRef.current === key) return;
     recordedCompletionKeyRef.current = key;
 
@@ -1108,6 +1128,14 @@ export default function AnimeGuessrPage() {
       playedAt: new Date().toISOString(),
     };
 
+    const sessionInput = {
+      score: totalScore,
+      country: "japan",
+      mode: "anime",
+      rounds: roundCount,
+      difficultyTier,
+    } as const;
+
     if (session) {
       recordActivity.mutate({
         token: session.token,
@@ -1116,17 +1144,16 @@ export default function AnimeGuessrPage() {
           rounds: roundCount,
           totalScore,
           totalElapsedSeconds,
+          difficultyTier,
         },
         route: "/game/anime",
       });
-      recordGameSession.mutate({
-        token: session.token,
-        score: totalScore,
-        country: "japan",
-        mode: "anime",
-        rounds: roundCount,
-        difficultyTier,
-      });
+      recordGameSessionPromiseRef.current = recordGameSession
+        .mutateAsync({
+          token: session.token,
+          ...sessionInput,
+        })
+        .catch(() => undefined);
       capturePostHogEvent(
         POSTHOG_EVENTS.animeGameCompleted,
         {
@@ -1134,6 +1161,7 @@ export default function AnimeGuessrPage() {
           rounds: roundCount,
           total_elapsed_seconds: totalElapsedSeconds,
           auth_state: "logged_in",
+          difficulty: difficultyTier,
         },
         session.user.id,
       );
@@ -1144,20 +1172,19 @@ export default function AnimeGuessrPage() {
     const saved = saveGuestGameResult(currentProgress, summary);
     storeGuestProgress(saved.progress);
     setGuestProgress(saved.progress);
-    recordGameSession.mutate({
-      guestId: saved.progress.guestId,
-      score: totalScore,
-      country: "japan",
-      mode: "anime",
-      rounds: roundCount,
-      difficultyTier,
-    });
+    recordGameSessionPromiseRef.current = recordGameSession
+      .mutateAsync({
+        guestId: saved.progress.guestId,
+        ...sessionInput,
+      })
+      .catch(() => undefined);
     capturePostHogEvent(POSTHOG_EVENTS.animeGameCompleted, {
       score: totalScore,
       rounds: roundCount,
       total_elapsed_seconds: totalElapsedSeconds,
       auth_state: "guest",
       is_new_best: saved.isNewBest,
+      difficulty: difficultyTier,
     });
 
     if (saved.isNewBest) {
@@ -1429,14 +1456,7 @@ export default function AnimeGuessrPage() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (session) {
-                  setShareMessage(copy.leaderboardSaved);
-                  window.location.href = withAnimeLocale("/", locale);
-                  return;
-                }
-                setAuthPromptReason("leaderboard");
-              }}
+              onClick={() => void handleOpenLeaderboard()}
               className="anime-button-secondary"
             >
               {copy.leaderboard}
