@@ -1,9 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  ANIME_LOCALES,
+  DEFAULT_ANIME_LOCALE,
+  getAnimeLocaleFromSearch,
+  getStoredAnimeLocale,
+  saveAnimeLocale,
+  withAnimeLocale,
+  type AnimeLocale,
+} from "~/lib/anime-locale";
 import { normalizeEmailLoginCode } from "~/lib/email-login-code";
+import {
+  getGoogleLoginErrorMessage,
+  getLoginCopy,
+  translateAuthErrorMessage,
+  type AuthMode,
+} from "~/lib/login-copy";
 import { savePlayerSession } from "~/lib/player-session";
 import {
   capturePostHogEvent,
@@ -12,32 +27,7 @@ import {
 } from "~/lib/posthog";
 import { api } from "~/trpc/react";
 
-type AuthMode = "password" | "register" | "reset";
 type ResetStep = "email" | "code";
-
-const MODE_LABELS: Record<AuthMode, string> = {
-  password: "Log in",
-  register: "Register",
-  reset: "Reset password",
-};
-
-const DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE =
-  "Google login failed. Try again later or use email login.";
-
-const GOOGLE_LOGIN_ERROR_MESSAGES: Record<string, string> = {
-  google: DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
-  google_unknown: DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
-  google_state:
-    "The Google login state expired. Start Google login again from this page, and make sure this site can use cookies in private browsing.",
-  google_config:
-    "Google login is missing server configuration. Check GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in Vercel.",
-  google_token:
-    "Google authorization code exchange failed. Make sure the Vercel GOOGLE_CLIENT_SECRET matches the current Google Cloud OAuth client secret.",
-  google_profile:
-    "Google authorization succeeded, but profile lookup failed. Try again later or use email login.",
-  google_database:
-    "Google authorization succeeded, but user data could not be saved. Confirm the production database migration includes the Google login fields.",
-};
 
 function getNextUrl() {
   if (typeof window === "undefined") return "/";
@@ -52,6 +42,7 @@ function getGoogleLoginUrl() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [mode, setMode] = useState<AuthMode>("password");
   const [resetStep, setResetStep] = useState<ResetStep>("email");
   const [identifier, setIdentifier] = useState("");
@@ -67,11 +58,61 @@ export default function LoginPage() {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [debugCode, setDebugCode] = useState<string | null>(null);
+  const rawServerErrorRef = useRef<string | null>(null);
+  const localeRef = useRef<AnimeLocale>(locale);
+  localeRef.current = locale;
+  const copy = getLoginCopy(locale);
+  const homeUrl = withAnimeLocale("/", locale);
+
+  function setLocalizedServerError(errorMessage: string) {
+    rawServerErrorRef.current = errorMessage;
+    setMessage(translateAuthErrorMessage(errorMessage, localeRef.current));
+  }
+
+  function clearMessages() {
+    rawServerErrorRef.current = null;
+    setMessage("");
+  }
 
   const normalizedResetCode = useMemo(
     () => normalizeEmailLoginCode(resetCode),
     [resetCode],
   );
+
+  useEffect(() => {
+    const localeFromSearch = getAnimeLocaleFromSearch(window.location.search);
+    const nextLocale = localeFromSearch ?? getStoredAnimeLocale();
+    setLocale(nextLocale);
+    if (localeFromSearch) {
+      saveAnimeLocale(nextLocale);
+    }
+
+    const error = new URLSearchParams(window.location.search).get("error");
+    if (error?.startsWith("google")) {
+      setMessage(getGoogleLoginErrorMessage(error, nextLocale));
+    }
+  }, []);
+
+  function selectLocale(nextLocale: AnimeLocale) {
+    setLocale(nextLocale);
+    saveAnimeLocale(nextLocale);
+
+    if (rawServerErrorRef.current) {
+      setMessage(
+        translateAuthErrorMessage(rawServerErrorRef.current, nextLocale),
+      );
+    }
+
+    const error = new URLSearchParams(window.location.search).get("error");
+    if (error?.startsWith("google")) {
+      setMessage(getGoogleLoginErrorMessage(error, nextLocale));
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    params.set("lang", nextLocale);
+    const nextPath = `${window.location.pathname}?${params.toString()}`;
+    router.replace(nextPath);
+  }
 
   const handleAuthSuccess = (
     session: Parameters<typeof savePlayerSession>[0],
@@ -97,7 +138,7 @@ export default function LoginPage() {
       handleAuthSuccess(session, POSTHOG_EVENTS.loginCompleted);
     },
     onError(error) {
-      setMessage(error.message);
+      setLocalizedServerError(error.message);
     },
   });
 
@@ -106,7 +147,7 @@ export default function LoginPage() {
       handleAuthSuccess(session, POSTHOG_EVENTS.registerCompleted);
     },
     onError(error) {
-      setMessage(error.message);
+      setLocalizedServerError(error.message);
     },
   });
 
@@ -114,15 +155,16 @@ export default function LoginPage() {
     api.player.requestPasswordResetCode.useMutation({
       onSuccess(result) {
         setResetStep("code");
+        rawServerErrorRef.current = null;
         setMessage(
           result.delivery === "debug"
-            ? "Email delivery is not configured in development. Use the debug code below to reset your password."
-            : "If this email is registered, a reset code will be sent to it.",
+            ? copy.resetCodeSentDebug
+            : copy.resetCodeSent,
         );
         setDebugCode(result.debugCode ?? null);
       },
       onError(error) {
-        setMessage(error.message);
+        setLocalizedServerError(error.message);
       },
     });
 
@@ -131,36 +173,25 @@ export default function LoginPage() {
       handleAuthSuccess(session, POSTHOG_EVENTS.passwordResetCompleted);
     },
     onError(error) {
-      setMessage(error.message);
+      setLocalizedServerError(error.message);
     },
   });
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const error = new URLSearchParams(window.location.search).get("error");
-    if (error?.startsWith("google")) {
-      setMessage(
-        GOOGLE_LOGIN_ERROR_MESSAGES[error] ??
-          DEFAULT_GOOGLE_LOGIN_ERROR_MESSAGE,
-      );
-    }
-  }, []);
-
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
-    setMessage("");
+    clearMessages();
     setDebugCode(null);
   }
 
   function handlePasswordLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    clearMessages();
     loginWithPassword.mutate({ identifier, password });
   }
 
   function handlePasswordRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    clearMessages();
     registerWithPassword.mutate({
       email: registerEmail,
       username: registerUsername,
@@ -170,14 +201,14 @@ export default function LoginPage() {
 
   function handleRequestPasswordResetCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    clearMessages();
     setDebugCode(null);
     requestPasswordResetCode.mutate({ email: resetEmail });
   }
 
   function handleResetPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    clearMessages();
     resetPasswordWithCode.mutate({
       email: resetEmail,
       code: normalizedResetCode,
@@ -188,30 +219,51 @@ export default function LoginPage() {
   return (
     <main className="anime-shell min-h-screen px-5 py-5 text-white sm:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-5xl flex-col">
-        <header className="flex items-center justify-between gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-4">
           <Link
-            href="/"
+            href={homeUrl}
             className="text-lg font-black tracking-[0.18em] text-pink-100 uppercase focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
           >
             AniGuessr
           </Link>
-          <Link
-            href="/"
-            className="text-sm font-bold text-cyan-100/70 transition hover:text-cyan-100 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
-          >
-            Back home
-          </Link>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div
+              className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/40 p-1 text-xs font-bold text-white/70"
+              aria-label={copy.languageLabel}
+            >
+              {ANIME_LOCALES.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => selectLocale(item)}
+                  className={`min-h-10 rounded-lg px-3 transition focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none ${
+                    locale === item
+                      ? "bg-pink-300 text-slate-950"
+                      : "hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  {getLoginCopy(item).lang}
+                </button>
+              ))}
+            </div>
+            <Link
+              href={homeUrl}
+              className="text-sm font-bold text-cyan-100/70 transition hover:text-cyan-100 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+            >
+              {copy.backHome}
+            </Link>
+          </div>
         </header>
 
         <section className="grid flex-1 items-center gap-8 py-10 lg:grid-cols-[0.95fr_1.05fr]">
           <div>
-            <div className="anime-chip mb-5 w-fit">{MODE_LABELS[mode]}</div>
+            <div className="anime-chip mb-5 w-fit">{copy.modeLabel[mode]}</div>
             <h1 className="text-5xl leading-none font-black text-white sm:text-6xl">
-              Enter the pilgrimage archive
+              {copy.heroTitle}
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-pink-50/70">
-              Log in with an email or username and password. Usernames are
-              unique and appear in battles, leaderboards, and saved history.
+              {copy.heroBody}
             </p>
           </div>
 
@@ -219,9 +271,9 @@ export default function LoginPage() {
             <div
               className="mb-5 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-black/25 p-1"
               role="tablist"
-              aria-label="Account actions"
+              aria-label={copy.accountActionsLabel}
             >
-              {(Object.keys(MODE_LABELS) as AuthMode[]).map((item) => (
+              {(Object.keys(copy.modeLabel) as AuthMode[]).map((item) => (
                 <button
                   key={item}
                   type="button"
@@ -234,7 +286,7 @@ export default function LoginPage() {
                       : "text-cyan-100/70 hover:bg-white/10 hover:text-cyan-50"
                   }`}
                 >
-                  {MODE_LABELS[item]}
+                  {copy.modeLabel[item]}
                 </button>
               ))}
             </div>
@@ -248,7 +300,7 @@ export default function LoginPage() {
               }
               className="mb-5 flex min-h-12 w-full items-center justify-center rounded-xl border border-white/15 bg-white px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
             >
-              Continue with Google
+              {copy.continueWithGoogle}
             </a>
 
             {mode === "password" && (
@@ -258,7 +310,7 @@ export default function LoginPage() {
                     htmlFor="identifier"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    Email or username
+                    {copy.emailOrUsername}
                   </label>
                   <input
                     id="identifier"
@@ -267,7 +319,7 @@ export default function LoginPage() {
                     autoComplete="username"
                     required
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="name@example.com / sakura"
+                    placeholder={copy.emailOrUsernamePlaceholder}
                   />
                 </div>
 
@@ -276,7 +328,7 @@ export default function LoginPage() {
                     htmlFor="password"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    Password
+                    {copy.password}
                   </label>
                   <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
                     <input
@@ -289,17 +341,17 @@ export default function LoginPage() {
                       minLength={8}
                       maxLength={128}
                       className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
-                      placeholder="At least 8 characters"
+                      placeholder={copy.passwordPlaceholder}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
                       className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                       aria-label={
-                        showPassword ? "Hide password" : "Show password"
+                        showPassword ? copy.hidePassword : copy.showPassword
                       }
                     >
-                      {showPassword ? "Hide" : "Show"}
+                      {showPassword ? copy.hide : copy.show}
                     </button>
                   </div>
                 </div>
@@ -319,14 +371,14 @@ export default function LoginPage() {
                     disabled={loginWithPassword.isPending}
                     className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {loginWithPassword.isPending ? "Logging in..." : "Log in"}
+                    {loginWithPassword.isPending ? copy.loggingIn : copy.logIn}
                   </button>
                   <button
                     type="button"
                     onClick={() => switchMode("reset")}
                     className="min-h-11 w-full rounded-xl text-sm font-bold text-cyan-100/70 transition hover:bg-white/10 hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                   >
-                    Forgot password?
+                    {copy.forgotPassword}
                   </button>
                 </div>
               </form>
@@ -339,7 +391,7 @@ export default function LoginPage() {
                     htmlFor="register-username"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    Username
+                    {copy.username}
                   </label>
                   <input
                     id="register-username"
@@ -351,10 +403,10 @@ export default function LoginPage() {
                     required
                     maxLength={12}
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="Display name for battles"
+                    placeholder={copy.usernamePlaceholder}
                   />
                   <p className="mt-2 text-xs leading-5 text-cyan-100/55">
-                    Up to 12 characters. Uniqueness is case-insensitive.
+                    {copy.usernameHint}
                   </p>
                 </div>
 
@@ -363,7 +415,7 @@ export default function LoginPage() {
                     htmlFor="register-email"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    Email
+                    {copy.email}
                   </label>
                   <input
                     id="register-email"
@@ -373,7 +425,7 @@ export default function LoginPage() {
                     autoComplete="email"
                     required
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="name@example.com"
+                    placeholder={copy.emailPlaceholder}
                   />
                 </div>
 
@@ -382,7 +434,7 @@ export default function LoginPage() {
                     htmlFor="register-password"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    Password
+                    {copy.password}
                   </label>
                   <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
                     <input
@@ -397,17 +449,19 @@ export default function LoginPage() {
                       minLength={8}
                       maxLength={128}
                       className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
-                      placeholder="At least 8 characters"
+                      placeholder={copy.passwordPlaceholder}
                     />
                     <button
                       type="button"
                       onClick={() => setShowRegisterPassword((value) => !value)}
                       className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                       aria-label={
-                        showRegisterPassword ? "Hide password" : "Show password"
+                        showRegisterPassword
+                          ? copy.hidePassword
+                          : copy.showPassword
                       }
                     >
-                      {showRegisterPassword ? "Hide" : "Show"}
+                      {showRegisterPassword ? copy.hide : copy.show}
                     </button>
                   </div>
                 </div>
@@ -430,8 +484,8 @@ export default function LoginPage() {
                   className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {registerWithPassword.isPending
-                    ? "Creating..."
-                    : "Create account"}
+                    ? copy.creating
+                    : copy.createAccount}
                 </button>
               </form>
             )}
@@ -446,7 +500,7 @@ export default function LoginPage() {
                     htmlFor="reset-email"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    Registered email
+                    {copy.registeredEmail}
                   </label>
                   <input
                     id="reset-email"
@@ -456,7 +510,7 @@ export default function LoginPage() {
                     autoComplete="email"
                     required
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-base text-white transition outline-none focus:border-cyan-200"
-                    placeholder="name@example.com"
+                    placeholder={copy.emailPlaceholder}
                   />
                 </div>
 
@@ -475,8 +529,8 @@ export default function LoginPage() {
                   className="anime-button w-full disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {requestPasswordResetCode.isPending
-                    ? "Sending..."
-                    : "Send reset code"}
+                    ? copy.sending
+                    : copy.sendResetCode}
                 </button>
               </form>
             )}
@@ -485,14 +539,13 @@ export default function LoginPage() {
               <form onSubmit={handleResetPassword} className="space-y-5">
                 <div>
                   <div className="text-sm font-bold text-cyan-100/80">
-                    Check this email for the code
+                    {copy.checkEmailForCode}
                   </div>
                   <div className="mt-1 text-lg font-black break-all text-pink-100">
                     {resetEmail}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-cyan-100/60">
-                    A reset code is sent only when this email belongs to an
-                    existing account.
+                    {copy.resetCodeHint}
                   </p>
                 </div>
 
@@ -501,7 +554,7 @@ export default function LoginPage() {
                     htmlFor="reset-code"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    6-digit code
+                    {copy.resetCodeLabel}
                   </label>
                   <input
                     id="reset-code"
@@ -515,7 +568,7 @@ export default function LoginPage() {
                     minLength={6}
                     maxLength={6}
                     className="mt-2 min-h-12 w-full rounded-xl border border-white/10 bg-black/35 px-4 text-center text-2xl font-black tracking-[0.35em] text-white transition outline-none focus:border-cyan-200"
-                    placeholder="000000"
+                    placeholder={copy.resetCodePlaceholder}
                   />
                 </div>
 
@@ -524,7 +577,7 @@ export default function LoginPage() {
                     htmlFor="reset-password"
                     className="text-sm font-bold text-cyan-100/80"
                   >
-                    New password
+                    {copy.newPassword}
                   </label>
                   <div className="mt-2 flex rounded-xl border border-white/10 bg-black/35 focus-within:border-cyan-200">
                     <input
@@ -537,24 +590,25 @@ export default function LoginPage() {
                       minLength={8}
                       maxLength={128}
                       className="min-h-12 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none"
-                      placeholder="At least 8 characters"
+                      placeholder={copy.passwordPlaceholder}
                     />
                     <button
                       type="button"
                       onClick={() => setShowResetPassword((value) => !value)}
                       className="min-h-12 px-4 text-sm font-bold text-cyan-100/80 transition hover:text-cyan-50 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
                       aria-label={
-                        showResetPassword ? "Hide password" : "Show password"
+                        showResetPassword ? copy.hidePassword : copy.showPassword
                       }
                     >
-                      {showResetPassword ? "Hide" : "Show"}
+                      {showResetPassword ? copy.hide : copy.show}
                     </button>
                   </div>
                 </div>
 
                 {debugCode && (
                   <div className="rounded-xl border border-cyan-200/20 bg-cyan-200/10 px-3 py-2 text-sm leading-6 text-cyan-50">
-                    Debug code: <span className="font-black">{debugCode}</span>
+                    {copy.debugCodeLabel}{" "}
+                    <span className="font-black">{debugCode}</span>
                   </div>
                 )}
 
@@ -575,11 +629,11 @@ export default function LoginPage() {
                       setResetCode("");
                       setResetPassword("");
                       setDebugCode(null);
-                      setMessage("");
+                      clearMessages();
                     }}
                     className="anime-button-secondary flex-1"
                   >
-                    Change email
+                    {copy.changeEmail}
                   </button>
                   <button
                     type="submit"
@@ -591,8 +645,8 @@ export default function LoginPage() {
                     className="anime-button flex-1 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {resetPasswordWithCode.isPending
-                      ? "Resetting..."
-                      : "Reset and log in"}
+                      ? copy.resetting
+                      : copy.resetAndLogIn}
                   </button>
                 </div>
               </form>

@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { type PlayerSession } from "~/types/player";
 import { getStoredPlayerSession } from "~/lib/player-session";
+import {
+  getStoredAnimeLocale,
+  withAnimeLocale,
+} from "~/lib/anime-locale";
 
 interface GuardState {
   ready: boolean;
@@ -40,7 +44,12 @@ export function useCompletedPlayerSession(): GuardState {
 
     if (!session) {
       const next = `${window.location.pathname}${window.location.search}`;
-      window.location.replace(`/login?next=${encodeURIComponent(next)}`);
+      window.location.replace(
+        withAnimeLocale(
+          `/login?next=${encodeURIComponent(next)}`,
+          getStoredAnimeLocale(),
+        ),
+      );
     }
   }, []);
 

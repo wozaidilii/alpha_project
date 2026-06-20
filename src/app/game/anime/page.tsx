@@ -567,7 +567,10 @@ function AuthPromptModal({
             {copy.googleContinue}
           </Link>
           <Link
-            href={`/login?next=${encodeURIComponent(next)}`}
+            href={withAnimeLocale(
+              `/login?next=${encodeURIComponent(next)}`,
+              locale,
+            )}
             onClick={onBeforeAuth}
             className="anime-button-secondary text-center"
           >
@@ -1263,7 +1266,10 @@ export default function AnimeGuessrPage() {
               {copy.googleContinue}
             </Link>
             <Link
-              href={`/login?next=${encodeURIComponent(gameNextUrl)}`}
+              href={withAnimeLocale(
+                `/login?next=${encodeURIComponent(gameNextUrl)}`,
+                locale,
+              )}
               className="anime-button-secondary"
             >
               {copy.emailContinue}
