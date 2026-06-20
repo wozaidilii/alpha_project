@@ -1,6 +1,10 @@
 import "server-only";
 
 import {
+  areBattlePlayersReady,
+  hasRoundEliminations,
+} from "~/lib/battle-flow";
+import {
   BATTLE_MAX_PLAYERS,
   type BattlePlayer,
   type BattleQuestion,
@@ -255,7 +259,9 @@ export function recordBattleRoomRoundResult(input: {
     return cloneSnapshot(snapshot);
   }
 
-  snapshot.roundStatus = "round-result";
+  snapshot.roundStatus = hasRoundEliminations(input.result)
+    ? "elimination"
+    : "round-result";
   snapshot.results = upsertRoundResult(snapshot.results, input.result);
   snapshot.roundReady = {};
   snapshot.guesses = snapshot.guesses ?? {};
@@ -264,6 +270,37 @@ export function recordBattleRoomRoundResult(input: {
     const existing = snapshot.players[pid];
     if (existing) snapshot.players[pid] = { ...existing, hp };
   }
+  snapshot.updatedAt = now();
+
+  return cloneSnapshot(snapshot);
+}
+
+export function markBattleRoomEliminationReady(input: {
+  roomId: string;
+  playerId: string;
+  roundIndex: number;
+}): BattleRoomSnapshot | null {
+  const snapshot = rooms.get(input.roomId);
+  if (snapshot?.phase !== "playing") return null;
+  if (snapshot.roundStatus !== "elimination") return cloneSnapshot(snapshot);
+  if (!snapshot.players[input.playerId]) return cloneSnapshot(snapshot);
+  if (snapshot.roundIndex !== input.roundIndex) return cloneSnapshot(snapshot);
+
+  snapshot.roundReady = {
+    ...(snapshot.roundReady ?? {}),
+    [input.playerId]: true,
+  };
+
+  if (
+    areBattlePlayersReady(
+      snapshot.players,
+      snapshot.roundReady ?? {},
+    )
+  ) {
+    snapshot.roundStatus = "round-result";
+    snapshot.roundReady = {};
+  }
+
   snapshot.updatedAt = now();
 
   return cloneSnapshot(snapshot);

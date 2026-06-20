@@ -6,6 +6,7 @@ import {
   getBattleAnswerPoint,
   getBattleQuestionSubtitle,
   getBattleQuestionTitle,
+  isAnimeBattleQuestion,
   isLocationOnlyBattleQuestion,
   isStandardBattleQuestion,
 } from "~/lib/battle-question";
@@ -19,10 +20,11 @@ import { FunfactPanel } from "~/app/game/_components/FunfactPanel";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
 import { DEFAULT_FOREIGN_COUNTRY } from "~/lib/foreign-map";
 import { type AnimeLocale } from "~/lib/anime-locale";
+import { getAnimeGuessrQuestionText } from "~/lib/anime-guessr";
 import { formatBattleDistance, getBattleCopy } from "~/lib/battle-copy";
 import { getGoogleGuessMapLabels } from "~/lib/google-guess-map-labels";
 import { getGoogleMapsLanguage } from "~/lib/google-maps-language";
-import { areBattlePlayersReady } from "~/lib/battle-flow";
+import { areBattlePlayersReady, isBattlePlayerAlive } from "~/lib/battle-flow";
 
 interface Props {
   result: BattleRoundResult;
@@ -70,6 +72,11 @@ export function BattleRoundResultView({
   const playerIds = Object.keys(players);
   const iAmReady = roundReady[myId] === true;
   const allReady = areBattlePlayersReady(players, roundReady);
+  const iAmAlive = isBattlePlayerAlive(players[myId]);
+  const animeQuestion = isAnimeBattleQuestion(question) ? question : null;
+  const animeQuestionText = animeQuestion
+    ? getAnimeGuessrQuestionText(animeQuestion.question, locale)
+    : null;
 
   function renderScoreBreakdown(guess: (typeof result.guesses)[string]) {
     if (standardQuestion && isFunfactQuestion(standardQuestion)) {
@@ -320,6 +327,10 @@ export function BattleRoundResultView({
               <FunfactPanel funfacts={standardQuestion.funfact} />
             )}
 
+          {animeQuestionText && animeQuestionText.funfact.length > 0 && (
+            <FunfactPanel funfacts={animeQuestionText.funfact} />
+          )}
+
           {(() => {
             const topScore = Math.max(
               ...playerIds.map((pid) => result.guesses[pid]?.total ?? 0),
@@ -379,18 +390,22 @@ export function BattleRoundResultView({
 
           <button
             onClick={onReady}
-            disabled={iAmReady || allReady}
+            disabled={!iAmAlive || iAmReady || allReady}
             className={`w-full rounded-xl py-3 font-bold transition ${
-              iAmReady
-                ? "cursor-default bg-green-500/20 text-green-200"
-                : "bg-pink-300 text-zinc-950 hover:bg-pink-200"
+              !iAmAlive
+                ? "cursor-default bg-white/8 text-pink-100/55"
+                : iAmReady
+                  ? "cursor-default bg-green-500/20 text-green-200"
+                  : "bg-pink-300 text-zinc-950 hover:bg-pink-200"
             }`}
           >
-            {iAmReady
-              ? copy.readyWaiting
-              : isLastRound
-                ? copy.readyFinal
-                : copy.readyNext}
+            {!iAmAlive
+              ? copy.spectatingBody
+              : iAmReady
+                ? copy.readyWaiting
+                : isLastRound
+                  ? copy.readyFinal
+                  : copy.readyNext}
           </button>
 
           {allReady && (

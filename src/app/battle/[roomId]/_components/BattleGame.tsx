@@ -88,6 +88,7 @@ import { api } from "~/trpc/react";
 import { playCountdownTick } from "~/lib/countdown-audio";
 import { HPBar } from "./HPBar";
 import { BattleRoundResultView } from "./BattleRoundResult";
+import { BattleEliminationView } from "./BattleEliminationView";
 import { GameOverView } from "./GameOver";
 import { type AnimeLocale, withAnimeLocale } from "~/lib/anime-locale";
 import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
@@ -105,7 +106,10 @@ import {
 import {
   applyBattleHpSnapshotPreservingLowerHp,
   areBattlePlayersReady,
+  getActiveBattlePlayerIds,
+  hasRoundEliminations,
   isBattleFinalRound,
+  isBattlePlayerAlive,
   mergeBattlePlayersPreservingLowerHp,
   shouldFinishBattleFromResult,
 } from "~/lib/battle-flow";
@@ -350,8 +354,9 @@ const MY_ID_KEY = "histoguessr_player_id";
 const ANIME_TUXUN_MAX_MATCH_ATTEMPTS_PER_ROUND = 12;
 const ROUND_STATUS_ORDER: Record<BattleRoundStatus, number> = {
   playing: 1,
-  "round-result": 2,
-  "game-over": 3,
+  elimination: 2,
+  "round-result": 3,
+  "game-over": 4,
 };
 
 interface BattleQuestionLoadResult {
@@ -670,7 +675,8 @@ export function BattleGame({
     playersRef.current = nextPlayers;
     replaceResults(snapshot.results);
     roundReadyRef.current =
-      snapshot.roundStatus === "round-result" &&
+      (snapshot.roundStatus === "round-result" ||
+        snapshot.roundStatus === "elimination") &&
       snapshot.roundIndex === currentRoundRef.current
         ? mergeBattleRoundReady(roundReadyRef.current, snapshot.roundReady)
         : (snapshot.roundReady ?? {});
@@ -691,6 +697,7 @@ export function BattleGame({
 
   function getLocalRoundStatus(): BattleRoundStatus | null {
     if (phaseRef.current === "playing") return "playing";
+    if (phaseRef.current === "elimination") return "elimination";
     if (phaseRef.current === "round-result") return "round-result";
     if (phaseRef.current === "game-over") return "game-over";
     return null;
@@ -785,6 +792,18 @@ export function BattleGame({
     if (snapshot.roundStatus === "game-over") {
       gameOverRequestedRef.current = true;
       setPhase("game-over");
+      return;
+    }
+
+    if (snapshot.roundStatus === "elimination") {
+      const result = snapshot.results?.find(
+        (entry) => entry.roundIndex === snapshot.roundIndex,
+      );
+      if (result) {
+        upsertLocalRoundResult(result);
+        setPhase("elimination");
+        checkAllReadyAfterElimination();
+      }
       return;
     }
 
@@ -888,6 +907,18 @@ export function BattleGame({
     setPhase("game-over");
   }
 
+  function checkAllReadyAfterElimination() {
+    if (
+      !areBattlePlayersReady(playersRef.current, roundReadyRef.current)
+    ) {
+      return;
+    }
+
+    roundReadyRef.current = {};
+    setRoundReady({});
+    setPhase("round-result");
+  }
+
   function checkAllReadyAndProceed() {
     if (
       shouldFinishBattleFromResult({
@@ -911,6 +942,25 @@ export function BattleGame({
     setRoundReady({});
 
     void handleNextRoundInternal();
+  }
+
+  function handleEliminationReady() {
+    const roundIdx = currentRoundRef.current;
+    if (roundReadyRef.current[myId.current]) return;
+
+    roundReadyRef.current[myId.current] = true;
+    setRoundReady({ ...roundReadyRef.current });
+    void postBattleRoomAction(roomId, {
+      action: "elimination-ready",
+      playerId: myId.current,
+      roundIndex: roundIdx,
+    })
+      .then((snapshot) => {
+        if (snapshot) void applyRoomSnapshot(snapshot);
+      })
+      .catch(() => undefined);
+
+    checkAllReadyAfterElimination();
   }
 
   function handleRoundReady() {
@@ -947,6 +997,7 @@ export function BattleGame({
     const currentPlayers = playersRef.current;
     const startTime = roundStartTimeRef.current ?? Date.now();
     const tpr = settingsRef.current.timePerRound;
+    const alivePlayerIds = getActiveBattlePlayerIds(currentPlayers);
 
     const guesses: Record<string, PlayerGuess> = {};
     const modeType = settingsRef.current.questionType;
@@ -960,24 +1011,23 @@ export function BattleGame({
       );
     }
 
-    const playerIds = Object.keys(currentPlayers);
     const hpAfter: Record<string, number> = {};
     const damage: Record<string, number> = {};
-    for (const id of playerIds) {
+    for (const id of Object.keys(currentPlayers)) {
       hpAfter[id] = currentPlayers[id]!.hp;
       damage[id] = 0;
     }
 
-    if (playerIds.length >= 2) {
+    if (alivePlayerIds.length >= 2) {
       const topScore = Math.max(
-        ...playerIds.map((id) => guesses[id]?.total ?? 0),
+        ...alivePlayerIds.map((id) => guesses[id]?.total ?? 0),
       );
-      const topBreakthrough = playerIds.some(
+      const topBreakthrough = alivePlayerIds.some(
         (id) =>
           (guesses[id]?.total ?? 0) >= topScore &&
           guesses[id]?.scoreBreakthrough === true,
       );
-      for (const id of playerIds) {
+      for (const id of alivePlayerIds) {
         const score = guesses[id]?.total ?? 0;
         if (score >= topScore) continue;
         const dmg = calcBattleDamage(topScore, score, {
@@ -1021,7 +1071,7 @@ export function BattleGame({
     setPlayers(nextPlayers);
     roundReadyRef.current = {};
     setRoundReady({});
-    setPhase("round-result");
+    setPhase(hasRoundEliminations(result) ? "elimination" : "round-result");
   }
 
   useEffect(() => {
@@ -1080,9 +1130,10 @@ export function BattleGame({
       collectedGuesses.current[data.playerId] = data;
 
       if (isHost) {
-        const allIn = Object.keys(playersRef.current).every(
-          (id) => collectedGuesses.current[id],
-        );
+        const aliveIds = getActiveBattlePlayerIds(playersRef.current);
+        const allIn =
+          aliveIds.length >= 2 &&
+          aliveIds.every((id) => collectedGuesses.current[id]);
         if (allIn) resolveRound();
       }
     });
@@ -1240,9 +1291,9 @@ export function BattleGame({
 
   useEffect(() => {
     if (!isHost || phase !== "playing") return;
-    const ids = Object.keys(playersRef.current);
-    if (ids.length < 2) return;
-    if (ids.every((id) => collectedGuesses.current[id])) resolveRound();
+    const aliveIds = getActiveBattlePlayerIds(playersRef.current);
+    if (aliveIds.length < 2) return;
+    if (aliveIds.every((id) => collectedGuesses.current[id])) resolveRound();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost, phase, submittedPlayers]);
 
@@ -1295,7 +1346,7 @@ export function BattleGame({
     const picked = pickAnimeGuessrQuestions(
       questions,
       count,
-      ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+      settingsRef.current.difficultyTier ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
     );
 
     if (picked.length < count) {
@@ -1471,6 +1522,7 @@ export function BattleGame({
 
   function handleSubmitGuess() {
     if (submitted) return;
+    if (!isBattlePlayerAlive(playersRef.current[myId.current])) return;
     if (
       (needsMap || needsLocationOnlyGuess) &&
       (guessLat === null || guessLng === null)
@@ -1503,20 +1555,25 @@ export function BattleGame({
     void sendPusherEvent(channel, "guess-submitted", guess);
 
     if (isHost) {
-      const allIn = Object.keys(playersRef.current).every(
-        (id) => collectedGuesses.current[id],
-      );
+      const aliveIds = getActiveBattlePlayerIds(playersRef.current);
+      const allIn =
+        aliveIds.length >= 2 &&
+        aliveIds.every((id) => collectedGuesses.current[id]);
       if (allIn) resolveRound();
     }
   }
 
   const lastResult = results[results.length - 1];
   const playerList = Object.values(players);
+  const activePlayerList = playerList.filter((player) =>
+    isBattlePlayerAlive(player),
+  );
   const submittedCount = Object.keys(submittedPlayers).length;
   const submittedSummary = copy.submittedSummary(
     submittedCount,
-    playerList.length,
+    activePlayerList.length,
   );
+  const iAmAlive = isBattlePlayerAlive(players[myId.current]);
 
   const speedPreview =
     roundStartTime && phase === "playing"
@@ -1655,6 +1712,14 @@ export function BattleGame({
                 <span>{copy.startingHp}</span>
                 <span className="text-pink-50">{settings.startingHp}</span>
               </div>
+              {settings.questionType === "anime" && settings.difficultyTier && (
+                <div className="flex justify-between">
+                  <span>{copy.difficultyLabel}</span>
+                  <span className="text-pink-50">
+                    {copy.difficultyOption(settings.difficultyTier)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -1688,6 +1753,19 @@ export function BattleGame({
           )}
         </div>
       </div>
+    );
+  }
+
+  if (phase === "elimination" && lastResult) {
+    return (
+      <BattleEliminationView
+        result={lastResult}
+        players={players}
+        myId={myId.current}
+        roundReady={roundReady}
+        locale={locale}
+        onReady={handleEliminationReady}
+      />
     );
   }
 
@@ -1731,6 +1809,28 @@ export function BattleGame({
         ? "bg-amber-500"
         : "bg-red-500";
   const roundElapsedSeconds = Math.max(0, settings.timePerRound - timeLeft);
+
+  if (phase === "playing" && !iAmAlive) {
+    return (
+      <div className="flex h-screen flex-col bg-[#0a0612] text-white">
+        {renderBattleHeader()}
+        <div className="grid flex-1 place-items-center px-6">
+          <div className="anime-panel max-w-md p-6 text-center">
+            <div className="text-4xl" aria-hidden="true">
+              👁
+            </div>
+            <h2 className="mt-4 text-2xl font-black text-pink-100">
+              {copy.spectatingTitle}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-pink-100/70">
+              {copy.spectatingBody}
+            </p>
+            <p className="mt-4 text-sm text-pink-100/55">{submittedSummary}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (
     phase === "playing" &&

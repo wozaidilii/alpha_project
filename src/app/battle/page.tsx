@@ -23,6 +23,13 @@ import {
 } from "~/lib/anime-locale";
 import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
 import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  getStoredAnimeGuessrDifficultyTier,
+  saveAnimeGuessrDifficultyTier,
+  type AnimeGuessrDifficultyTier,
+} from "~/lib/anime-guessr";
+import { AnimeDifficultySelector } from "~/components/AnimeDifficultySelector";
+import {
   capturePostHogEvent,
   identifyPostHogUser,
   POSTHOG_EVENTS,
@@ -42,6 +49,9 @@ export default function BattleLobby() {
   const [rounds, setRounds] = useState(5);
   const [timePerRound] = useState(120);
   const [startingHp, setStartingHp] = useState(100);
+  const [difficultyTier, setDifficultyTier] = useState<AnimeGuessrDifficultyTier>(
+    ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  );
   const firstBattleMode = useMemo(
     () => BATTLE_GAME_MODE_LIST[0]?.type ?? "anime",
     [],
@@ -60,6 +70,7 @@ export default function BattleLobby() {
       getStoredAnimeLocale();
     setLocale(nextLocale);
     saveAnimeLocale(nextLocale);
+    setDifficultyTier(getStoredAnimeGuessrDifficultyTier());
   }, []);
 
   useEffect(() => {
@@ -107,6 +118,9 @@ export default function BattleLobby() {
         time: String(timePerRound),
         hp: String(startingHp),
       });
+      if (questionType === "anime") {
+        params.set("difficulty", difficultyTier);
+      }
       appendProfileParams(params, activeSession);
       capturePostHogEvent(
         POSTHOG_EVENTS.battleRoomCreated,
@@ -115,6 +129,7 @@ export default function BattleLobby() {
           rounds,
           time_per_round: timePerRound,
           starting_hp: startingHp,
+          ...(questionType === "anime" ? { difficulty: difficultyTier } : {}),
         },
         activeSession.user.id,
       );
@@ -228,6 +243,17 @@ export default function BattleLobby() {
                   })}
                 </div>
               </div>
+
+              {questionType === "anime" && (
+                <AnimeDifficultySelector
+                  value={difficultyTier}
+                  copy={copy}
+                  onChange={(nextDifficultyTier) => {
+                    saveAnimeGuessrDifficultyTier(nextDifficultyTier);
+                    setDifficultyTier(nextDifficultyTier);
+                  }}
+                />
+              )}
 
               <div>
                 <label className="mb-1 block text-sm text-pink-100/70">

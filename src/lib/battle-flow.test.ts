@@ -79,6 +79,18 @@ describe("battle flow helpers", () => {
     ).toBe(true);
   });
 
+  it("only requires active players to be ready", () => {
+    expect(
+      areBattlePlayersReady(
+        {
+          host: player("host", 100),
+          guest: player("guest", 0),
+        },
+        { host: true },
+      ),
+    ).toBe(true);
+  });
+
   it("does not finish a final-round result before active players are ready", () => {
     expect(
       shouldFinishBattleFromResult({

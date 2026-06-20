@@ -604,8 +604,8 @@ export default function Home() {
           </div>
         </nav>
 
-        <div className="mx-auto grid min-h-[calc(100vh-92px)] w-full max-w-7xl items-start gap-6 py-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(300px,0.9fr)_minmax(260px,0.62fr)] xl:gap-8">
-          <div className="max-w-2xl">
+        <div className="mx-auto grid min-h-[calc(100vh-92px)] w-full max-w-7xl items-start gap-6 py-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(240px,0.68fr)_minmax(240px,0.58fr)] xl:gap-8">
+          <div className="relative z-10 max-w-2xl">
             <div className="anime-chip mb-5 w-fit">{copy.kicker}</div>
             <h1 className="text-[clamp(3.1rem,7vw,6rem)] leading-[0.9] font-black text-balance text-white">
               {copy.title}
@@ -683,9 +683,9 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:pt-8">
+          <div className="grid gap-4 lg:max-w-[320px] lg:justify-self-end lg:pt-8">
             <div className="relative">
-              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-black/30 sm:aspect-[16/11] lg:aspect-[4/5] xl:aspect-[5/6]">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-black/30 sm:aspect-[16/11] lg:aspect-[4/5]">
                 <div className="h-full w-full bg-[url('/images/anime-placeholder.jpg')] bg-cover bg-center" />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(8,5,16,0.36))]" />
               </div>

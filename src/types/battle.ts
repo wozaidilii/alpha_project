@@ -5,7 +5,10 @@ import { type GameModeSlug } from "~/lib/game-mode";
 import { type TuxunLocation } from "~/lib/tuxun-locations";
 import { type HistoryTuxunPlayState } from "~/lib/history-tuxun-puzzle";
 import { type AnimeTuxunPlayState } from "~/lib/anime-tuxun-puzzle";
-import { type AnimeGuessrQuestion } from "~/lib/anime-guessr";
+import {
+  type AnimeGuessrDifficultyTier,
+  type AnimeGuessrQuestion,
+} from "~/lib/anime-guessr";
 
 export const BATTLE_MAX_PLAYERS = 8;
 
@@ -53,11 +56,16 @@ export type BattleQuestion =
   | BattleAnimeQuestion;
 
 export type BattleRoomPhase = "lobby" | "starting" | "playing" | "closed";
-export type BattleRoundStatus = "playing" | "round-result" | "game-over";
+export type BattleRoundStatus =
+  | "playing"
+  | "elimination"
+  | "round-result"
+  | "game-over";
 
 export type BattlePhase =
   | "lobby" // waiting for 2nd player
   | "playing" // round in progress
+  | "elimination" // player eliminated this round
   | "round-result" // showing results
   | "game-over"; // game ended
 
@@ -77,6 +85,8 @@ export interface BattleSettings {
   startingHp: number;
   /** 与个人模式一致的模式 */
   questionType: GameModeSlug;
+  /** 动漫对战模式的难度档位，决定题库范围 */
+  difficultyTier?: AnimeGuessrDifficultyTier;
 }
 
 export interface BattleRoomSnapshot {

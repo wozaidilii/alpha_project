@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ANIME_GUESSR_DIFFICULTY_TIERS } from "~/lib/anime-guessr";
 import { z } from "zod";
 import { isBattleGameModeSlug } from "~/lib/game-mode";
 import {
@@ -7,6 +8,7 @@ import {
   getBattleRoomSnapshot,
   joinBattleRoom,
   leaveBattleRoom,
+  markBattleRoomEliminationReady,
   markBattleRoomRoundReady,
   markBattleRoomStarting,
   recordBattleRoomRoundResult,
@@ -46,6 +48,7 @@ const settingsSchema = z.object({
   questionType: z.string().refine(isBattleGameModeSlug, {
     message: "Unsupported battle mode",
   }),
+  difficultyTier: z.enum(ANIME_GUESSR_DIFFICULTY_TIERS).optional(),
 });
 
 const guessSchema = z.object({
@@ -125,6 +128,7 @@ export async function POST(request: Request, context: RouteContext) {
           "started",
           "submit-guess",
           "round-result",
+          "elimination-ready",
           "round-ready",
           "round-started",
           "game-over",
@@ -220,6 +224,23 @@ export async function POST(request: Request, context: RouteContext) {
       const room = recordBattleRoomRoundResult({
         roomId,
         result: parsed.result,
+      });
+      if (!room) return jsonError("Battle room not found", 404);
+      return NextResponse.json({ room });
+    }
+
+    if (action === "elimination-ready") {
+      const parsed = z
+        .object({
+          action: z.literal("elimination-ready"),
+          playerId: z.string().min(1),
+          roundIndex: z.number().int().min(0),
+        })
+        .parse(body);
+      const room = markBattleRoomEliminationReady({
+        roomId,
+        playerId: parsed.playerId,
+        roundIndex: parsed.roundIndex,
       });
       if (!room) return jsonError("Battle room not found", 404);
       return NextResponse.json({ room });

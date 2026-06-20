@@ -1,4 +1,5 @@
 import { type AnimeLocale } from "~/lib/anime-locale";
+import { type AnimeGuessrDifficultyTier } from "~/lib/anime-guessr";
 import { type GameModeConfig, type GameModeSlug } from "~/lib/game-mode";
 
 type BattleModeText = {
@@ -23,6 +24,9 @@ export type BattleCopy = {
   timePerRound: string;
   seconds: (value: number) => string;
   startingHp: string;
+  difficultyLabel: string;
+  difficultyOption: (tier: AnimeGuessrDifficultyTier) => string;
+  difficultyHint: (tier: AnimeGuessrDifficultyTier) => string;
   createRoom: string;
   joinRoom: string;
   roomCode: string;
@@ -79,6 +83,15 @@ export type BattleCopy = {
   incompleteRoomState: string;
   roundResultTitle: string;
   roundResultSubtitle: (round: number) => string;
+  eliminationTitle: string;
+  eliminationSubtitle: string;
+  youEliminated: string;
+  playerEliminated: (name: string) => string;
+  eliminationSpectateHint: string;
+  eliminationContinue: string;
+  eliminationWaiting: string;
+  spectatingTitle: string;
+  spectatingBody: string;
   actualLocation: string;
   actualYear: string;
   quizScore: string;
@@ -135,6 +148,18 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     timePerRound: "每轮时间",
     seconds: (value) => `${value} 秒`,
     startingHp: "初始血量",
+    difficultyLabel: "难度档位",
+    difficultyOption: (tier) =>
+      ({ beginner: "入门", intermediate: "进阶", master: "大师", miracle: "神迹" })[
+        tier
+      ],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "仅包含难度 1 的题目。",
+        intermediate: "包含难度 1 与 2 的题目。",
+        master: "包含难度 1、2、3 的题目。",
+        miracle: "包含全部难度题目。",
+      })[tier],
     createRoom: "创建房间 →",
     joinRoom: "加入房间 →",
     roomCode: "房间号",
@@ -196,6 +221,15 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     incompleteRoomState: "房间已开局，但题目状态不完整，请重新创建房间",
     roundResultTitle: "对战结算",
     roundResultSubtitle: (round) => `第 ${round} 轮结果`,
+    eliminationTitle: "玩家淘汰",
+    eliminationSubtitle: "以下玩家在本轮被击杀，血量归零。",
+    youEliminated: "你已被击杀，仍可观看后续对战。",
+    playerEliminated: (name) => `${name} 已被击杀`,
+    eliminationSpectateHint: "存活玩家确认后将进入本轮详细结算。",
+    eliminationContinue: "确认",
+    eliminationWaiting: "已确认，等待其他玩家...",
+    spectatingTitle: "观战中",
+    spectatingBody: "你已被淘汰，正在观看其他玩家继续对战。",
     actualLocation: "实际地点",
     actualYear: "实际",
     quizScore: "答题分",
@@ -252,6 +286,21 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     timePerRound: "制限時間",
     seconds: (value) => `${value} 秒`,
     startingHp: "初期HP",
+    difficultyLabel: "難易度",
+    difficultyOption: (tier) =>
+      ({
+        beginner: "入門",
+        intermediate: "中級",
+        master: "上級",
+        miracle: "神業",
+      })[tier],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "難易度 1 の問題のみ。",
+        intermediate: "難易度 1 と 2 の問題。",
+        master: "難易度 1、2、3 の問題。",
+        miracle: "全難易度の問題。",
+      })[tier],
     createRoom: "ルーム作成 →",
     joinRoom: "ルーム参加 →",
     roomCode: "ルームコード",
@@ -318,6 +367,15 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
       "ルームは開始済みですが問題状態が不完全です。作り直してください",
     roundResultTitle: "ラウンド結果",
     roundResultSubtitle: (round) => `第 ${round} ラウンド結果`,
+    eliminationTitle: "プレイヤー脱落",
+    eliminationSubtitle: "以下のプレイヤーはこのラウンドで撃破されました。",
+    youEliminated: "あなたは脱落しました。以降も観戦できます。",
+    playerEliminated: (name) => `${name} が撃破されました`,
+    eliminationSpectateHint: "生存プレイヤーが確認すると詳細結果へ進みます。",
+    eliminationContinue: "確認",
+    eliminationWaiting: "確認済み。他プレイヤーを待っています...",
+    spectatingTitle: "観戦中",
+    spectatingBody: "脱落しました。他プレイヤーの対戦を観戦しています。",
     actualLocation: "正解地点",
     actualYear: "正解",
     quizScore: "クイズ得点",
@@ -375,6 +433,21 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
     timePerRound: "Time per round",
     seconds: (value) => `${value}s`,
     startingHp: "Starting HP",
+    difficultyLabel: "Difficulty",
+    difficultyOption: (tier) =>
+      ({
+        beginner: "Beginner",
+        intermediate: "Intermediate",
+        master: "Master",
+        miracle: "Miracle",
+      })[tier],
+    difficultyHint: (tier) =>
+      ({
+        beginner: "Difficulty 1 questions only.",
+        intermediate: "Difficulty 1 and 2 questions.",
+        master: "Difficulty 1, 2, and 3 questions.",
+        miracle: "All difficulty levels.",
+      })[tier],
     createRoom: "Create room →",
     joinRoom: "Join room →",
     roomCode: "Room code",
@@ -442,6 +515,15 @@ export const BATTLE_COPY: Record<AnimeLocale, BattleCopy> = {
       "The room has started, but the question state is incomplete. Recreate the room.",
     roundResultTitle: "Battle results",
     roundResultSubtitle: (round) => `Round ${round} results`,
+    eliminationTitle: "Player eliminated",
+    eliminationSubtitle: "The following players were eliminated this round.",
+    youEliminated: "You were eliminated. You can still watch the rest.",
+    playerEliminated: (name) => `${name} was eliminated`,
+    eliminationSpectateHint: "Surviving players will continue to round details.",
+    eliminationContinue: "Continue",
+    eliminationWaiting: "Ready. Waiting for others...",
+    spectatingTitle: "Spectating",
+    spectatingBody: "You were eliminated and are watching the remaining battle.",
     actualLocation: "Actual location",
     actualYear: "Actual",
     quizScore: "Quiz score",

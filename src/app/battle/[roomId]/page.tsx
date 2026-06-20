@@ -7,6 +7,10 @@ import {
   isAnimeLocale,
   withAnimeLocale,
 } from "~/lib/anime-locale";
+import {
+  ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+  getAnimeGuessrDifficultyTierFromSearch,
+} from "~/lib/anime-guessr";
 
 interface Props {
   params: Promise<{ roomId: string }>;
@@ -55,6 +59,14 @@ export default async function BattleRoomPage({ params, searchParams }: Props) {
         timePerRound: clampNumber(sp.time, 120, { min: 60, max: 180 }),
         startingHp: clampNumber(sp.hp, 100, { min: 20, max: 300 }),
         questionType: gameMode?.type ?? "anime",
+        ...(gameMode?.type === "anime"
+          ? {
+              difficultyTier:
+                getAnimeGuessrDifficultyTierFromSearch(
+                  `?difficulty=${sp.difficulty ?? ""}`,
+                ) ?? ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER,
+            }
+          : {}),
       }
     : null;
 

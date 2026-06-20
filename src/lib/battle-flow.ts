@@ -1,11 +1,45 @@
-import { type BattlePlayer, type BattleSettings } from "~/types/battle";
+import {
+  type BattlePlayer,
+  type BattleRoundResult,
+  type BattleSettings,
+} from "~/types/battle";
+
+export function isBattlePlayerAlive(player: BattlePlayer | undefined) {
+  return (player?.hp ?? 0) > 0;
+}
+
+export function getActiveBattlePlayerIds(
+  players: Record<string, BattlePlayer>,
+) {
+  return Object.keys(players).filter((id) =>
+    isBattlePlayerAlive(players[id]),
+  );
+}
+
+export function hasRoundEliminations(result: BattleRoundResult) {
+  return Object.entries(result.damage).some(
+    ([playerId, damage]) =>
+      damage > 0 && (result.hpAfter[playerId] ?? 0) <= 0,
+  );
+}
+
+export function getRoundEliminatedPlayerIds(result: BattleRoundResult) {
+  return Object.keys(result.hpAfter).filter(
+    (playerId) =>
+      (result.damage[playerId] ?? 0) > 0 &&
+      (result.hpAfter[playerId] ?? 0) <= 0,
+  );
+}
 
 export function areBattlePlayersReady(
   players: Record<string, BattlePlayer>,
   roundReady: Record<string, boolean>,
 ) {
-  const ids = Object.keys(players);
-  return ids.length > 0 && ids.every((id) => roundReady[id] === true);
+  const activeIds = getActiveBattlePlayerIds(players);
+  return (
+    activeIds.length > 0 &&
+    activeIds.every((id) => roundReady[id] === true)
+  );
 }
 
 export function isBattleFinalRound(
