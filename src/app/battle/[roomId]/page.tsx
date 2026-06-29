@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { BattleGame } from "./_components/BattleGame";
 import { DEFAULT_AVATAR, normalizeAvatar } from "~/types/player";
 import { getGameMode, isBattleGameModeSlug } from "~/lib/game-mode";
@@ -33,7 +34,9 @@ function clampNumber(
 export default async function BattleRoomPage({ params, searchParams }: Props) {
   const { roomId } = await params;
   const sp = await searchParams;
-  const locale = isAnimeLocale(sp.lang) ? sp.lang : DEFAULT_ANIME_LOCALE;
+  const headerList = await headers();
+  const headerLocale = headerList.get("x-anime-locale");
+  const locale = isAnimeLocale(headerLocale) ? headerLocale : DEFAULT_ANIME_LOCALE;
 
   if (!sp.userId || !sp.name) {
     redirect(

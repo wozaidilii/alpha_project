@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAnimeLocale } from "~/hooks/use-anime-locale";
 import { GoogleGuessMap } from "~/app/game/foreign/_components/GoogleGuessMap";
 import { GoogleStreetView } from "~/app/game/foreign/_components/GoogleStreetView";
 import { redactAnswerTerms } from "~/lib/anime-clue-redaction";
@@ -31,9 +32,6 @@ import {
 } from "~/lib/anime-guessr";
 import {
   DEFAULT_ANIME_LOCALE,
-  getAnimeLocaleFromSearch,
-  getStoredAnimeLocale,
-  saveAnimeLocale,
   withAnimeLocale,
   type AnimeLocale,
 } from "~/lib/anime-locale";
@@ -728,7 +726,7 @@ function AnimeCluePanel({
 
 export default function AnimeGuessrPage() {
   const { ready, session } = useEmailSession();
-  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
+  const locale = useAnimeLocale();
   const [questions, setQuestions] = useState<AnimeGuessrQuestion[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadMessage, setLoadMessage] = useState(
@@ -765,6 +763,15 @@ export default function AnimeGuessrPage() {
   const gameNextUrl = useMemo(
     () => withAnimeLocale("/game/anime", locale),
     [locale],
+  );
+  const homeUrl = useMemo(() => withAnimeLocale("/", locale), [locale]);
+  const loginUrl = useMemo(
+    () =>
+      withAnimeLocale(
+        `/login?next=${encodeURIComponent(gameNextUrl)}`,
+        locale,
+      ),
+    [gameNextUrl, locale],
   );
 
   const current = questions[round];
@@ -816,11 +823,6 @@ export default function AnimeGuessrPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const nextLocale =
-      getAnimeLocaleFromSearch(window.location.search) ??
-      getStoredAnimeLocale();
-    setLocale(nextLocale);
-    saveAnimeLocale(nextLocale);
 
     const roundsFromSearch = getAnimeGuessrRoundCountFromSearch(
       window.location.search,
@@ -1266,15 +1268,12 @@ export default function AnimeGuessrPage() {
               {copy.googleContinue}
             </Link>
             <Link
-              href={withAnimeLocale(
-                `/login?next=${encodeURIComponent(gameNextUrl)}`,
-                locale,
-              )}
+              href={loginUrl}
               className="anime-button-secondary"
             >
               {copy.emailContinue}
             </Link>
-            <Link href="/" className="text-sm font-bold text-cyan-100/70">
+            <Link href={homeUrl} className="text-sm font-bold text-cyan-100/70">
               {copy.home}
             </Link>
           </div>
@@ -1323,7 +1322,7 @@ export default function AnimeGuessrPage() {
           >
             {copy.reload}
           </button>
-          <Link href="/" className="anime-button-secondary">
+          <Link href={homeUrl} className="anime-button-secondary">
             {copy.home}
           </Link>
         </div>
@@ -1355,7 +1354,7 @@ export default function AnimeGuessrPage() {
         <header className="flex items-center justify-between border-b border-white/10 bg-slate-950/60 px-6 py-3 backdrop-blur">
           <h1 className="text-xl font-black text-pink-200">AniGuessr</h1>
           <Link
-            href="/"
+            href={homeUrl}
             className="rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-sm font-bold text-pink-50 transition hover:bg-white/15 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
           >
             {copy.home}
@@ -1485,7 +1484,7 @@ export default function AnimeGuessrPage() {
             >
               {copy.playAgain}
             </button>
-            <Link href="/" className="anime-button-secondary sm:col-span-2">
+            <Link href={homeUrl} className="anime-button-secondary sm:col-span-2">
               {copy.home}
             </Link>
           </div>
@@ -1502,7 +1501,7 @@ export default function AnimeGuessrPage() {
             AniGuessr
           </h1>
           <Link
-            href="/"
+            href={homeUrl}
             className="text-xs font-bold text-cyan-100/60 transition hover:text-cyan-100 focus:ring-2 focus:ring-cyan-200 focus:outline-none"
           >
             {copy.home}

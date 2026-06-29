@@ -29,6 +29,9 @@ images.zip
 # 旧的本地静态配图（已由 Blob 替代）
 public/event-images
 
+# 构建时从 anime-guessr-questions.json 生成的 SEO 索引（体积较大）
+public/data/seo/index.json
+
 # production
 /build
 

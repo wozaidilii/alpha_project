@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
 import { COUNTRY_OPTIONS, countryCodeToFlagEmoji } from "~/lib/country";
+import { useAnimeLocale } from "~/hooks/use-anime-locale";
 import {
   ANIME_LOCALES,
-  DEFAULT_ANIME_LOCALE,
-  getStoredAnimeLocale,
   saveAnimeLocale,
+  stripLocalePrefix,
   withAnimeLocale,
   type AnimeLocale,
 } from "~/lib/anime-locale";
@@ -307,7 +308,9 @@ function avatarImageStyle(
 }
 
 export default function Home() {
-  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
+  const router = useRouter();
+  const pathname = usePathname();
+  const locale = useAnimeLocale();
   const [leaderboardRounds, setLeaderboardRounds] = useState<5 | 10>(5);
   const [leaderboardDifficultyTier, setLeaderboardDifficultyTier] =
     useState<AnimeGuessrDifficultyTier>(ANIME_GUESSR_DEFAULT_DIFFICULTY_TIER);
@@ -367,7 +370,6 @@ export default function Home() {
   });
 
   useEffect(() => {
-    setLocale(getStoredAnimeLocale());
     const roundsFromSearch = getAnimeGuessrRoundCountFromSearch(
       window.location.search,
     );
@@ -429,8 +431,11 @@ export default function Home() {
   }
 
   function selectLocale(nextLocale: AnimeLocale) {
-    setLocale(nextLocale);
     saveAnimeLocale(nextLocale);
+    const innerPath = stripLocalePrefix(pathname);
+    const search =
+      typeof window !== "undefined" ? window.location.search : "";
+    router.push(withAnimeLocale(`${innerPath}${search}`, nextLocale));
   }
 
   function handleSaveProfile() {
@@ -710,6 +715,28 @@ export default function Home() {
                 {copy.battle}
               </Link>
               </div>
+            </div>
+
+            <div className="mt-8 max-w-2xl rounded-2xl border border-cyan-200/20 bg-cyan-200/5 p-4">
+              <Link
+                href={withAnimeLocale("/pilgrimage", locale)}
+                className="block transition hover:border-pink-200/40 focus-visible:ring-2 focus-visible:ring-cyan-200 focus-visible:outline-none"
+              >
+                <span className="block text-xs font-bold tracking-[0.16em] text-cyan-100/70 uppercase">
+                  {locale === "zh"
+                    ? "圣地巡礼"
+                    : locale === "ja"
+                      ? "聖地巡礼"
+                      : "Pilgrimage"}
+                </span>
+                <span className="mt-1 block text-base font-black text-white">
+                  {locale === "zh"
+                    ? "浏览 2 万+ 动画取景地档案"
+                    : locale === "ja"
+                      ? "2万件以上のアニメロケ地アーカイブ"
+                      : "Browse 25,000+ anime filming locations"}
+                </span>
+              </Link>
             </div>
 
             <div className="mt-6 max-w-2xl rounded-2xl border border-white/10 bg-black/25 p-4">

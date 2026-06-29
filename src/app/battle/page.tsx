@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAnimeLocale } from "~/hooks/use-anime-locale";
 import { type PlayerSession } from "~/types/player";
 import {
   AuthLoading,
@@ -14,11 +15,6 @@ import {
   type GameModeSlug,
 } from "~/lib/game-mode";
 import {
-  DEFAULT_ANIME_LOCALE,
-  getAnimeLocaleFromSearch,
-  getStoredAnimeLocale,
-  saveAnimeLocale,
-  type AnimeLocale,
   withAnimeLocale,
 } from "~/lib/anime-locale";
 import { getBattleCopy, getBattleModeText } from "~/lib/battle-copy";
@@ -41,8 +37,8 @@ function generateRoomId(): string {
 
 export default function BattleLobby() {
   const router = useRouter();
+  const locale = useAnimeLocale();
   const { ready, session: authSession } = useCompletedPlayerSession();
-  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
   const [tab, setTab] = useState<"create" | "join">("create");
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [joinCode, setJoinCode] = useState("");
@@ -65,11 +61,6 @@ export default function BattleLobby() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const nextLocale =
-      getAnimeLocaleFromSearch(window.location.search) ??
-      getStoredAnimeLocale();
-    setLocale(nextLocale);
-    saveAnimeLocale(nextLocale);
     setDifficultyTier(getStoredAnimeGuessrDifficultyTier());
   }, []);
 
@@ -113,7 +104,6 @@ export default function BattleLobby() {
       const params = new URLSearchParams({
         host: "1",
         mode: questionType,
-        lang: locale,
         rounds: String(rounds),
         time: String(timePerRound),
         hp: String(startingHp),
@@ -133,7 +123,9 @@ export default function BattleLobby() {
         },
         activeSession.user.id,
       );
-      void router.push(`/battle/${roomId}?${params.toString()}`);
+      void router.push(
+        withAnimeLocale(`/battle/${roomId}?${params.toString()}`, locale),
+      );
     } catch {
       setMessage(copy.createFailed);
     }
@@ -145,14 +137,16 @@ export default function BattleLobby() {
     try {
       const activeSession = ensureSession();
       const code = joinCode.trim().toUpperCase();
-      const params = new URLSearchParams({ lang: locale });
+      const params = new URLSearchParams();
       appendProfileParams(params, activeSession);
       capturePostHogEvent(
         POSTHOG_EVENTS.battleRoomJoined,
         { code_length: code.length },
         activeSession.user.id,
       );
-      void router.push(`/battle/${code}?${params.toString()}`);
+      void router.push(
+        withAnimeLocale(`/battle/${code}?${params.toString()}`, locale),
+      );
     } catch {
       setMessage(copy.joinFailed);
     }

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "next build",
+    "build": "node scripts/build-pilgrimage-seo-data.mjs && next build",
     "check": "next lint && tsc --noEmit",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:seed": "node scripts/db-seed-events.mjs",
@@ -18,7 +18,7 @@
     "db:push-anime-remote": "node scripts/push-anime-questions-remote.mjs",
     "data:build-anime-guessr": "node scripts/build-anime-guessr-questions.mjs scripts/python/rawdata/deepseek_anitabi_points.json",
     "data:fetch-aniguessr": "node scripts/fetch-anime-guessr-online.mjs",
-    "data:anime-guessr-stats": "node scripts/analyze-anime-guessr-questions.mjs",
+    "data:build-pilgrimage-seo": "node scripts/build-pilgrimage-seo-data.mjs",
     "images:upload": "node scripts/upload-event-images.mjs",
     "images:upload-anime": "node scripts/upload-anime-guessr-image.mjs",
     "images:upload-anime-all": "node scripts/upload-anime-guessr-images.mjs",

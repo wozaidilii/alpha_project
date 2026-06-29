@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAnimeLocale } from "~/hooks/use-anime-locale";
 import {
   ANIME_LOCALES,
-  DEFAULT_ANIME_LOCALE,
-  getAnimeLocaleFromSearch,
-  getStoredAnimeLocale,
   saveAnimeLocale,
+  stripLocalePrefix,
   withAnimeLocale,
   type AnimeLocale,
 } from "~/lib/anime-locale";
@@ -42,7 +41,9 @@ function getGoogleLoginUrl() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [locale, setLocale] = useState<AnimeLocale>(DEFAULT_ANIME_LOCALE);
+  const pathname = usePathname();
+  const locale = useAnimeLocale();
+  const homeUrl = useMemo(() => withAnimeLocale("/", locale), [locale]);
   const [mode, setMode] = useState<AuthMode>("password");
   const [resetStep, setResetStep] = useState<ResetStep>("email");
   const [identifier, setIdentifier] = useState("");
@@ -62,7 +63,6 @@ export default function LoginPage() {
   const localeRef = useRef<AnimeLocale>(locale);
   localeRef.current = locale;
   const copy = getLoginCopy(locale);
-  const homeUrl = withAnimeLocale("/", locale);
 
   function setLocalizedServerError(errorMessage: string) {
     rawServerErrorRef.current = errorMessage;
@@ -80,21 +80,13 @@ export default function LoginPage() {
   );
 
   useEffect(() => {
-    const localeFromSearch = getAnimeLocaleFromSearch(window.location.search);
-    const nextLocale = localeFromSearch ?? getStoredAnimeLocale();
-    setLocale(nextLocale);
-    if (localeFromSearch) {
-      saveAnimeLocale(nextLocale);
-    }
-
     const error = new URLSearchParams(window.location.search).get("error");
     if (error?.startsWith("google")) {
-      setMessage(getGoogleLoginErrorMessage(error, nextLocale));
+      setMessage(getGoogleLoginErrorMessage(error, locale));
     }
-  }, []);
+  }, [locale]);
 
   function selectLocale(nextLocale: AnimeLocale) {
-    setLocale(nextLocale);
     saveAnimeLocale(nextLocale);
 
     if (rawServerErrorRef.current) {
@@ -108,10 +100,9 @@ export default function LoginPage() {
       setMessage(getGoogleLoginErrorMessage(error, nextLocale));
     }
 
-    const params = new URLSearchParams(window.location.search);
-    params.set("lang", nextLocale);
-    const nextPath = `${window.location.pathname}?${params.toString()}`;
-    router.replace(nextPath);
+    const innerPath = stripLocalePrefix(pathname);
+    const search = window.location.search;
+    router.push(withAnimeLocale(`${innerPath}${search}`, nextLocale));
   }
 
   const handleAuthSuccess = (
@@ -226,7 +217,6 @@ export default function LoginPage() {
           >
             AniGuessr
           </Link>
-
           <div className="flex flex-wrap items-center gap-3">
             <div
               className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/40 p-1 text-xs font-bold text-white/70"
